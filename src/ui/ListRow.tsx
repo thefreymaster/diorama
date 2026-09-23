@@ -37,6 +37,7 @@ export function ListRow({
   accessibilityHint,
 }: ListRowProps) {
   const showChevron = chevron ?? onPress !== undefined;
+  const rowStyle = [rowStyles.row, symbol ? null : rowStyles.textOnly];
 
   const content = (
     <>
@@ -61,7 +62,7 @@ export function ListRow({
 
   if (!onPress) {
     return (
-      <View style={rowStyles.row} accessible>
+      <View style={rowStyle} accessible>
         {content}
       </View>
     );
@@ -72,7 +73,7 @@ export function ListRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityHint={accessibilityHint}
-      style={({ pressed }) => [rowStyles.row, pressed && rowStyles.pressed]}
+      style={({ pressed }) => [rowStyle, pressed && rowStyles.pressed]}
     >
       {content}
     </Pressable>

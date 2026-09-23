@@ -3,6 +3,7 @@ import Animated from 'react-native-reanimated';
 
 import { colors, metrics, spacing, useScaledSize } from '@/theme';
 
+import { RowLeadingSlot } from './RowLeadingSlot';
 import { RowSeparator } from './RowSeparator';
 import { rowStyles } from './rowStyles';
 import { usePulse } from './usePulse';
@@ -22,8 +23,16 @@ export function SkeletonRow({ icon = true, subtitle = true }: SkeletonRowProps) 
   const subtitleHeight = useScaledSize(11);
 
   return (
-    <View style={rowStyles.row} accessible accessibilityLabel="Loading">
-      {icon ? <Animated.View style={[styles.tile, { width: tile, height: tile }, pulse]} /> : null}
+    <View
+      style={[rowStyles.row, icon ? null : rowStyles.textOnly]}
+      accessible
+      accessibilityLabel="Loading"
+    >
+      {icon ? (
+        <RowLeadingSlot>
+          <Animated.View style={[styles.tile, { width: tile, height: tile }, pulse]} />
+        </RowLeadingSlot>
+      ) : null}
       <View style={rowStyles.content}>
         <RowSeparator />
         <View style={[rowStyles.text, styles.bars]}>

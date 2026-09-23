@@ -26,10 +26,25 @@ describe('iosMajorVersion', () => {
 });
 
 describe('listMetrics', () => {
-  it('uses the roomier, rounder lists from iOS 26 on', () => {
-    expect(listMetrics(18)).toEqual({ rowMinHeight: 44, sectionRadius: 10 });
-    expect(listMetrics(26)).toEqual({ rowMinHeight: 52, sectionRadius: 26 });
-    expect(listMetrics(27)).toEqual(listMetrics(26));
+  const hairline = 1 / 3;
+
+  it('keeps classic full-width hairline lists before iOS 26', () => {
+    expect(listMetrics(18, hairline)).toEqual({
+      rowMinHeight: 44,
+      sectionRadius: 10,
+      separatorThickness: hairline,
+      separatorTrailingInset: 0,
+    });
+  });
+
+  it('matches the iOS 26 Settings app from iOS 26 on', () => {
+    expect(listMetrics(26, hairline)).toEqual({
+      rowMinHeight: 52,
+      sectionRadius: 26,
+      separatorThickness: 1,
+      separatorTrailingInset: 16,
+    });
+    expect(listMetrics(27, hairline)).toEqual(listMetrics(26, hairline));
   });
 });
 

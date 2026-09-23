@@ -7,8 +7,10 @@ export const rowStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  /** Rows without an icon: the text starts at the standard 16-pt inset. */
+  textOnly: {
     paddingLeft: spacing.lg,
-    gap: spacing.lg,
   },
   pressed: {
     backgroundColor: colors.rowHighlight,

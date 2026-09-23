@@ -30,13 +30,15 @@ Notes: SF Symbol wrapper is `SymbolIcon`: a component named `Symbol` shadows the
 
 
 ### T03 Providers: navigation stack, query client, stores
-Status: in-progress
+Status: done
 Depends: T01
 Files: app/_layout.tsx, app/index.tsx, app/city/[cityId].tsx, app/view/[cityId].tsx, app/settings.tsx, src/providers/, src/screens/, src/features/settings/store.ts, src/features/cities/recentsStore.ts
 Details: The root `Stack` in `app/_layout.tsx` is wrapped in providers from `src/providers/`: `GestureHandlerRootView`, and a `QueryClientProvider` (staleTime 5 min). Routes: `app/index.tsx` → CityPicker, `app/city/[cityId].tsx` → CityPreview, `app/view/[cityId].tsx` → Viewer (presentation `fullScreenModal`, no header), `app/settings.tsx` → Settings. Each route file only renders its screen from `src/screens/<Name>/`; use placeholder screens for now. Native stack options: large title on the picker, `orientation: 'portrait'` by default, and landscape only on the Viewer. Zustand stores persisted with `react-native-mmkv`: settings (eyeSeparation 1.0, trackingSensitivity 1.0, miniatureIntensity 0.6, mode 'stereo', debugLook false) and recents (max 8).
 Acceptance: `diorama://settings`, `diorama://city/paris` and `diorama://view/paris` each open their placeholder in the Simulator, and swipe-back works. A Jest test shows the settings store persists and rehydrates. `npm run typecheck && npm run lint && npm test` pass.
 
 ## Phase 1 — Native module (Swift)
+Notes: Deep links get the picker underneath (`unstable_settings.initialRouteName`). Viewer: `fullScreenModal`, landscape, `autoHideHomeIndicator`; hiding the status bar is left to T12 (red box while `UIViewControllerBasedStatusBarAppearance=false`). Settings store: `useSettings`, `useSetting`, setters clamp to `SETTING_RANGES` (trackingSensitivity 0.5–2, for T13 to confirm), `resetSettings`. Deep links, rotation, Done and swipe-back all checked in the Simulator. Follow-up being fixed: hairline under nav bar at rest; picker large title collapses after the Viewer closes when opened by deep link.
+
 
 ### T04 Expo Module skeleton + mono DioramaMapView
 Status: done

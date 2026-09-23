@@ -34,6 +34,7 @@ export function ViewerMap({ city, headTracking, onReady, onDegraded, ref }: View
       eyeSeparation={settings.eyeSeparation}
       headTracking={headTracking}
       trackingSensitivity={settings.trackingSensitivity}
+      miniatureIntensity={settings.miniatureIntensity}
       // Drag to look stands in for the gyro in the Simulator; never in release.
       debugLook={__DEV__ && settings.debugLook}
       onReady={onReady}

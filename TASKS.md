@@ -113,11 +113,12 @@ Acceptance: Full cycle on a device: enter, wear, look around, recenter, exit. No
 Notes: NEEDS DEVICE CHECK — full cycle: enter, wear, look around, double-tap recenter, hold 1 s to exit; the per-eye HUD copies fuse in the headset; an incoming call or the app switcher stops tracking and it recenters on return; VoiceOver "Exit"/activate actions. Tracking stays off during the 3-s countdown (which starts after `onReady`), then recenters and starts. The HUD is drawn once per eye in stereo. Exit uses `router.dismissTo` the preview (fixes the deep-link large-title collapse). Status bar hidden via expo-status-bar; `useKeepAwake`. No native pause: turning tracking off while inactive stops the per-frame work. Follow-up: `useReduceMotion` lives in CityPreview; move it to `@/ui` (T14).
 
 ### T13 Settings screen
-Status: in-progress
+Status: done
 Depends: T02, T03, T04, T09
 Files: src/screens/Settings/**
 Details: An inset-grouped list: "Model size" slider (eyeSeparation 0.3–3), "Tracking sensitivity", "Miniature effect", a "Stereo" toggle, and "Look around by dragging" (debugLook, shown in dev builds only). Add a live mini preview at the top (mono DioramaMapView) that reflects the miniature setting. Add "Reset to defaults".
 Acceptance: Changes persist across app reloads. The mini preview updates live (screenshots at miniature 0 and 1). The Viewer reads the same store, so changes apply there too (checked in T14).
+Notes: Preview card with the Miniature slider directly under it (like Display & Brightness), then Stereo, Model size, Tracking sensitivity, Developer (dev only), and a red "Reset to defaults" (instant, light haptic). Every slider runs 0–1 through a scale: Model size is reversed (wider eyes = smaller-looking model) and spaced by ratio, and 1× sits mid-track for both. trackingSensitivity stays 0.5–2. Preview city = last opened featured city, else New York. `miniatureIntensity` is also wired into the Viewer. Follow-ups for T14: shared hooks (`useMapReveal`, `usePreviewOrbit`, `useReduceMotion`) live in CityPreview; rows import `@/ui/RowSeparator`/`rowStyles` directly; check the `camera.macro` slider icons. Simulator visual check pending.
 
 ## Phase 3 — Polish and ship
 

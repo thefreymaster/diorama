@@ -1,0 +1,373 @@
+import * as Haptics from 'expo-haptics';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { AccessibilityInfo } from 'react-native';
+
+import type { DioramaMapViewProps } from '@diorama/native';
+import { addRecent, clearRecents, type RecentCity } from '@/features/cities/recentsStore';
+import {
+  DEFAULT_SETTINGS,
+  getSettings,
+  resetSettings,
+  setDebugLook,
+  setEyeSeparation,
+  setMiniatureIntensity,
+  setMode,
+  setTrackingSensitivity,
+} from '@/features/settings/store';
+import { queryClient } from '@/providers/queryClient';
+import { storage } from '@/providers/storage';
+
+import * as CityRoute from '../../../../app/city/[cityId]';
+import * as IndexRoute from '../../../../app/index';
+import * as RootLayout from '../../../../app/_layout';
+import * as SettingsRoute from '../../../../app/settings';
+import * as ViewerRoute from '../../../../app/view/[cityId]';
+import type { SliderSetting } from '../sliderSettings';
+
+// The native map becomes a plain view that keeps its props (so tests can read
+// them and play MapKit's part by calling `onReady`) and a ref for the Viewer.
+jest.mock('@diorama/native', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  function MockDioramaMapView({ ref, ...props }: DioramaMapViewProps) {
+    React.useImperativeHandle(ref, () => ({
+      recenter: () => Promise.resolve(),
+      setDebugLook: () => Promise.resolve(),
+    }));
+    return React.createElement(View, { testID: 'diorama-map', ...props });
+  }
+  return { ...jest.requireActual<object>('@diorama/native'), DioramaMapView: MockDioramaMapView };
+});
+
+jest.mock('expo-haptics', () => ({
+  ...jest.requireActual<object>('expo-haptics'),
+  impactAsync: jest.fn(() => Promise.resolve()),
+}));
+
+const mockImpact = jest.mocked(Haptics.impactAsync);
+
+const routes = {
+  _layout: RootLayout,
+  index: IndexRoute,
+  'city/[cityId]': CityRoute,
+  'view/[cityId]': ViewerRoute,
+  settings: SettingsRoute,
+};
+
+// A searched city: flat imagery, so the preview passes over it.
+const REYKJAVIK: RecentCity = {
+  id: 'reykjavik_64.146_-21.943',
+  name: 'Reykjavík',
+  country: 'Iceland',
+  lat: 64.1466,
+  lon: -21.9426,
+  altitude: 1500,
+};
+
+const PARIS: RecentCity = {
+  id: 'paris',
+  name: 'Paris',
+  country: 'France',
+  lat: 48.8575,
+  lon: 2.2957,
+  altitude: 1000,
+};
+
+/** The native stack's header settings for one screen (react-native-screens). */
+const HEADER_CONFIG: string = 'RNSScreenStackHeaderConfig';
+
+/** RN types `__DEV__` as a constant; under Jest it's a plain global, so a test can flip it. */
+function setDevBuild(isDev: boolean) {
+  Reflect.set(globalThis, '__DEV__', isDev);
+}
+
+let reduceMotionListener: ((enabled: boolean) => void) | undefined;
+
+beforeEach(() => {
+  queryClient.clear();
+  clearRecents();
+  resetSettings();
+  mockImpact.mockClear();
+  reduceMotionListener = undefined;
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+  // Keep the Reduce Motion listener, so a test can flip the setting live.
+  const addEventListener = (event: string, listener: (enabled: boolean) => void) => {
+    if (event === 'reduceMotionChanged') reduceMotionListener = listener;
+    return { remove: jest.fn() };
+  };
+  jest
+    .spyOn(AccessibilityInfo, 'addEventListener')
+    .mockImplementation(addEventListener as unknown as typeof AccessibilityInfo.addEventListener);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+async function openSettings() {
+  const router = renderRouter(routes, { initialUrl: '/settings' });
+  await screen.findByTestId('settings-screen');
+  // Let the Reduce Motion check settle.
+  await act(async () => {});
+  return router;
+}
+
+function previewMap(): DioramaMapViewProps {
+  return screen.getByTestId('settings-preview-map').props as DioramaMapViewProps;
+}
+
+function slider(setting: SliderSetting) {
+  return screen.getByTestId(`${setting}-slider`);
+}
+
+/** Where the thumb is. The slider sends 0 to UIKit as "unset", which is its default, 0. */
+function sliderPosition(setting: SliderSetting): number {
+  return (slider(setting).props.value as number | undefined) ?? 0;
+}
+
+/** What a finger on the slider reports as it moves. */
+function slideTo(setting: SliderSetting, position: number) {
+  fireEvent(slider(setting), 'valueChange', position);
+}
+
+function savedSettings() {
+  return JSON.parse(storage.getString('settings') ?? 'null').state;
+}
+
+describe('settings', () => {
+  it('is a large-title list with every control', async () => {
+    await openSettings();
+
+    const header = screen.UNSAFE_root.findAll(
+      (node) => node.type === HEADER_CONFIG && node.props.title === 'Settings',
+    );
+    expect(header).toHaveLength(1);
+    expect(header[0].props.largeTitle).toBe(true);
+
+    for (const title of ['Miniature effect', 'Model size', 'Tracking sensitivity']) {
+      expect(screen.getByText(title)).toBeOnTheScreen();
+      expect(screen.getByLabelText(title)).toBeOnTheScreen();
+    }
+    expect(screen.getByRole('switch', { name: 'Stereo' })).toBeOnTheScreen();
+    expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeOnTheScreen();
+  });
+
+  it('shows what the store holds', async () => {
+    setEyeSeparation(0.3);
+    setTrackingSensitivity(1);
+    setMiniatureIntensity(0.25);
+    setMode('mono');
+    setDebugLook(true);
+    await openSettings();
+
+    expect(sliderPosition('eyeSeparation')).toBeCloseTo(1);
+    expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
+    expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.25);
+    expect(screen.getByRole('switch', { name: 'Stereo' })).not.toBeChecked();
+    expect(screen.getByTestId('stereo-switch').props.value).toBe(false);
+    expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeChecked();
+    expect(screen.getByTestId('debug-look-switch').props.value).toBe(true);
+  });
+
+  it('follows store changes made while it is open', async () => {
+    await openSettings();
+
+    act(() => setMiniatureIntensity(0.8));
+
+    expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.8);
+    expect(previewMap().miniatureIntensity).toBe(0.8);
+  });
+
+  it('saves each slider move as it happens', async () => {
+    await openSettings();
+
+    slideTo('miniatureIntensity', 0.3);
+    expect(getSettings().miniatureIntensity).toBeCloseTo(0.3);
+    expect(savedSettings().miniatureIntensity).toBeCloseTo(0.3);
+
+    slideTo('trackingSensitivity', 1);
+    expect(getSettings().trackingSensitivity).toBeCloseTo(2);
+
+    // Right is a bigger model: the eyes closer together.
+    slideTo('eyeSeparation', 1);
+    expect(getSettings().eyeSeparation).toBeCloseTo(0.3);
+    slideTo('eyeSeparation', 0);
+    expect(getSettings().eyeSeparation).toBeCloseTo(3);
+    expect(savedSettings().eyeSeparation).toBeCloseTo(3);
+  });
+
+  it('keeps every value in range, whatever the slider reports', async () => {
+    await openSettings();
+
+    slideTo('miniatureIntensity', 1.4);
+    slideTo('trackingSensitivity', -0.5);
+    slideTo('eyeSeparation', 2);
+    expect(getSettings()).toMatchObject({
+      miniatureIntensity: 1,
+      trackingSensitivity: 0.5,
+      eyeSeparation: 0.3,
+    });
+
+    slideTo('miniatureIntensity', -1);
+    slideTo('trackingSensitivity', 3);
+    slideTo('eyeSeparation', -1);
+    expect(getSettings()).toMatchObject({
+      miniatureIntensity: 0,
+      trackingSensitivity: 2,
+      eyeSeparation: 3,
+    });
+  });
+
+  it('saves the final value when the finger lifts', async () => {
+    await openSettings();
+
+    fireEvent(slider('miniatureIntensity'), 'slidingComplete', 0.9);
+
+    expect(getSettings().miniatureIntensity).toBeCloseTo(0.9);
+  });
+
+  it('flips between stereo and mono', async () => {
+    await openSettings();
+    const row = screen.getByRole('switch', { name: 'Stereo' });
+    expect(row).toBeChecked();
+
+    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    expect(getSettings().mode).toBe('mono');
+    expect(row).not.toBeChecked();
+    expect(savedSettings().mode).toBe('mono');
+
+    // VoiceOver: a double-tap anywhere on the row flips it back.
+    fireEvent(row, 'accessibilityTap');
+    expect(getSettings().mode).toBe('stereo');
+    expect(row).toBeChecked();
+  });
+
+  it('dims model size in mono, where it does nothing', async () => {
+    await openSettings();
+    expect(slider('eyeSeparation').props.disabled).toBe(false);
+
+    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+
+    expect(slider('eyeSeparation').props.disabled).toBe(true);
+    expect(slider('trackingSensitivity').props.disabled).toBe(false);
+    expect(slider('miniatureIntensity').props.disabled).toBe(false);
+  });
+
+  it('turns look around by dragging on and off', async () => {
+    await openSettings();
+
+    fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
+    expect(getSettings().debugLook).toBe(true);
+
+    fireEvent(screen.getByRole('switch', { name: 'Look around by dragging' }), 'accessibilityTap');
+    expect(getSettings().debugLook).toBe(false);
+  });
+
+  it('leaves look around by dragging out of release builds', async () => {
+    setDevBuild(false);
+    try {
+      await openSettings();
+
+      expect(screen.queryByText('Look around by dragging')).toBeNull();
+      expect(screen.queryByText('Developer')).toBeNull();
+      expect(screen.queryByTestId('debug-look-switch')).toBeNull();
+      expect(screen.getByRole('switch', { name: 'Stereo' })).toBeOnTheScreen();
+    } finally {
+      setDevBuild(true);
+    }
+  });
+
+  it('resets everything at once, with a light tap', async () => {
+    await openSettings();
+    slideTo('miniatureIntensity', 0.1);
+    slideTo('trackingSensitivity', 0.9);
+    slideTo('eyeSeparation', 0.2);
+    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Reset to defaults' }));
+
+    expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    expect(getSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(savedSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.6);
+    expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
+    expect(screen.getByRole('switch', { name: 'Stereo' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
+    expect(previewMap().miniatureIntensity).toBe(0.6);
+  });
+});
+
+describe('settings preview', () => {
+  it('shows the miniature look live, in one picture', async () => {
+    await openSettings();
+    expect(previewMap().miniatureIntensity).toBe(0.6);
+
+    slideTo('miniatureIntensity', 0);
+    expect(previewMap().miniatureIntensity).toBe(0);
+
+    slideTo('miniatureIntensity', 1);
+    expect(previewMap().miniatureIntensity).toBe(1);
+
+    expect(previewMap().mode ?? 'mono').toBe('mono');
+    expect(previewMap().headTracking).toBeFalsy();
+  });
+
+  it('shows the first featured city until you open one', async () => {
+    addRecent(REYKJAVIK);
+    await openSettings();
+
+    expect(previewMap()).toMatchObject({
+      center: { latitude: 40.7549, longitude: -73.984 },
+      altitude: 1200,
+      pitch: 60,
+      heading: 29,
+    });
+    expect(screen.getByLabelText('Preview of New York')).toBeOnTheScreen();
+  });
+
+  it('shows the featured city you opened last', async () => {
+    addRecent(PARIS);
+    addRecent(REYKJAVIK);
+    await openSettings();
+
+    expect(previewMap()).toMatchObject({
+      center: { latitude: 48.8575, longitude: 2.2957 },
+      heading: 137,
+    });
+    expect(screen.getByLabelText('Preview of Paris')).toBeOnTheScreen();
+  });
+
+  it('turns slowly, and keeps still under Reduce Motion', async () => {
+    await openSettings();
+    expect(previewMap().orbit).toBe(true);
+
+    act(() => reduceMotionListener?.(true));
+    expect(previewMap().orbit).toBe(false);
+  });
+
+  it('keeps still from the start when Reduce Motion is already on', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    await openSettings();
+
+    await waitFor(() => expect(previewMap().orbit).toBe(false));
+  });
+});
+
+describe('settings in the Viewer', () => {
+  it('uses what was set here', async () => {
+    await openSettings();
+    slideTo('miniatureIntensity', 0.2);
+    slideTo('trackingSensitivity', 1);
+    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    screen.unmount();
+
+    renderRouter(routes, { initialUrl: '/view/paris' });
+
+    const viewerMap = (await screen.findByTestId('viewer-map')).props as DioramaMapViewProps;
+    expect(viewerMap.miniatureIntensity).toBeCloseTo(0.2);
+    expect(viewerMap.trackingSensitivity).toBeCloseTo(2);
+    expect(viewerMap.mode).toBe('mono');
+  });
+});

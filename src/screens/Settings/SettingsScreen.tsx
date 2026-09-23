@@ -1,34 +1,31 @@
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack } from 'expo-router';
+import { View } from 'react-native';
 
-import { useSettings } from '@/features/settings/store';
-import { colors } from '@/theme';
+import { Screen } from '@/ui';
 
-/** Placeholder until T13 builds the settings list. Shows the stored values. */
+import { DeveloperSection } from './DeveloperSection';
+import { MiniatureSection } from './MiniatureSection';
+import { ResetSection } from './ResetSection';
+import { SliderSection } from './SliderSection';
+import { StereoSection } from './StereoSection';
+
+/**
+ * How the diorama looks and moves, as an inset-grouped list under a large
+ * title. Every control writes to the settings store as it moves; the store
+ * saves itself, and the Viewer reads the same store.
+ */
 export function SettingsScreen() {
-  const settings = useSettings();
-
   return (
-    <ScrollView
-      testID="settings-screen"
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
-    >
-      <Text style={styles.row}>Model size: {settings.eyeSeparation.toFixed(1)}</Text>
-      <Text style={styles.row}>
-        Tracking sensitivity: {settings.trackingSensitivity.toFixed(1)}
-      </Text>
-      <Text style={styles.row}>Miniature effect: {settings.miniatureIntensity.toFixed(1)}</Text>
-      <Text style={styles.row}>Stereo: {settings.mode === 'stereo' ? 'On' : 'Off'}</Text>
-    </ScrollView>
+    <Screen background="grouped">
+      <Stack.Screen options={{ headerLargeTitleEnabled: true }} />
+      <View testID="settings-screen">
+        <MiniatureSection />
+        <StereoSection />
+        <SliderSection setting="eyeSeparation" />
+        <SliderSection setting="trackingSensitivity" />
+        <DeveloperSection />
+        <ResetSection />
+      </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: {
-    padding: 16,
-    gap: 12,
-  },
-  row: {
-    color: colors.label,
-  },
-});

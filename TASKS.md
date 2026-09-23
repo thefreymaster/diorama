@@ -146,14 +146,15 @@ Acceptance: `npm test` is green.
 Notes: Coverage of target code 93%→98% statements (features, providers, theme 100%; ui 100% lines). `jest.setup.ts` points expo-router testing-library's reanimated mock at the real Reanimated, so `useReducedMotion` works under `renderRouter`. Dev routes tested to redirect when `__DEV__` is false. Found a bug: malformed persisted recents crashed `getRecent()`, fixed as a T03 follow-up.
 
 ### T17 App icon, launch screen, TestFlight
-Status: in-progress
+Status: blocked
 Depends: T14
 Files: app.json, assets/
 Details: Icon (tiny isometric city block, Apple-style), a plain launch screen, Info.plist strings, and an EAS or Xcode archive configuration for TestFlight.
 Acceptance: The build uploads to TestFlight.
+Notes: Prep done and verified: isometric city-block icon (Icon Composer layers + flat fallback), light/dark splash marks, `appleTeamId` 3U62R986E5, buildNumber 1, iPhone only, `ITSAppUsesNonExemptEncryption` false. An unsigned Release archive builds (JS bundle embedded, icon compiled into Assets.car). BLOCKED ON OWNER — create the App Store Connect record for `com.ejf.diorama`, then archive and upload in Xcode, or hand the orchestrator an App Store Connect API key (see `docs/testflight.md`). Bump `ios.buildNumber` for every upload.
 
 ### T20 Viewer loading cover lifts before both eyes are ready
-Status: todo
+Status: in-progress
 Depends: T08, T12
 Files: modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/ios/StereoRig.swift
 Details: Found in the T14 visual pass: on a first, uncached visit (e.g. the retuned Sydney framing), the Viewer's black cover lifted and the city was visible for ~6 s with no countdown; `onReady` (and so the countdown) came later. The cover must stay up until the same moment `onReady` fires (both eyes fully rendered, or the 10-s fallback), so the cover, countdown and tracking start stay in sync. Reproduce cold with a cleared tile cache if possible.

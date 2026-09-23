@@ -1,26 +1,25 @@
 import UIKit
 
 // The headset the stereo view is laid out for: a Cardboard-style viewer with
-// two lenses a fixed distance apart. Pure layout math plus a small lookup
-// table, like a `utils.ts` file. StereoRig asks it where each eye goes.
+// two round lenses a fixed distance apart. Pure layout math plus a small
+// lookup table, like a `utils.ts` file. StereoRig asks it where each eye goes.
 //
-// Each eye's picture is a window centered on its lens, with black around it
-// (see docs/reference/cardboard-viewer.png). A picture centered off its lens
-// makes the eyes turn outward to merge the two, which most people can't do,
-// and a picture wider than the lens runs into the lens edges.
+// Each eye's picture is a round window centered on its lens, with black
+// around it (see docs/reference/cardboard-viewer.png). A picture centered
+// off its lens makes the eyes turn outward to merge the two, which most
+// people can't do, and a picture larger than the lens hole runs into its
+// edge.
 struct ViewerProfile {
   // Millimeters between the two lens centers. Cardboard v2 is 64 mm.
   static let defaultLensSpacing = 64.0
-  // One eye's window, in millimeters, unless the `windowWidth` and
-  // `windowHeight` props say otherwise (Settings > Viewer fit). The owner's
-  // viewer has lens holes about 34 mm wide, so 33 mm wide keeps both sides
-  // of the picture inside the hole, and 42 mm tall uses more of the lens
-  // than the old 38 × 31 mm window did. Millimeters, not a share of the
-  // screen, so a bigger phone behind the same lenses shows the same picture
-  // rather than one that spills past them.
-  static let defaultWindowWidth = 33.0
-  static let defaultWindowHeight = 42.0
-  // Millimeters of black kept above and below the tallest window, so it
+  // Millimeters across one eye's round window, unless the `windowDiameter`
+  // prop says otherwise (Settings > Viewer fit). The owner's viewer has
+  // round lens holes about 35 mm across, so the circle fills the hole.
+  // Millimeters, not a share of the screen, so a bigger phone behind the
+  // same lenses shows the same picture rather than one that spills past
+  // them.
+  static let defaultWindowDiameter = 35.0
+  // Millimeters of black kept above and below the largest circle, so it
   // never touches the screen's edge.
   static let edgeMargin = 2.0
   // Millimeters from the lenses to the screen. A Cardboard-style viewer
@@ -29,10 +28,9 @@ struct ViewerProfile {
 
   // The `lensSpacing` prop, in millimeters.
   var lensSpacing: Double
-  // The `windowWidth` and `windowHeight` props: one eye's window, in
+  // The `windowDiameter` prop: across one eye's round window, in
   // millimeters, before `eyeFrames` fits it to the screen.
-  var windowWidth = defaultWindowWidth
-  var windowHeight = defaultWindowHeight
+  var windowDiameter = defaultWindowDiameter
   // Screen points per millimeter on this phone (see `pointsPerMillimeter`).
   var pointsPerMillimeter: Double
   // Screen pixels per point, so window edges land on whole pixels.
@@ -41,32 +39,33 @@ struct ViewerProfile {
   var lensDistance = defaultLensDistance
 
   // The two eye windows, left then right, in a view of `size` that fills the
-  // screen: centered on the lenses, vertically centered, never overlapping.
+  // screen: each the square around one eye's circle (StereoRig rounds it),
+  // centered on its lens and vertically centered. The circles never overlap
+  // and keep `edgeMargin` from the screen's top and bottom.
   func eyeFrames(in size: CGSize) -> [CGRect] {
     let perMillimeter = CGFloat(pointsPerMillimeter)
     // Lens centers no farther out than the middle of each half-screen (the
     // old side-by-side layout), so a window can't run off a narrow screen.
     let spacing = min(CGFloat(lensSpacing) * perMillimeter, size.width / 2)
-    // No wider than the lens spacing, so the two windows never overlap.
-    let width = min(CGFloat(windowWidth) * perMillimeter, spacing).rounded(.down)
     // No taller than the screen less a margin above and below.
     let tallest = max(size.height - 2 * CGFloat(Self.edgeMargin) * perMillimeter, 1)
-    let height = min(CGFloat(windowHeight) * perMillimeter, tallest).rounded(.down)
+    // No wider than the lens spacing either, so the circles never overlap.
+    let diameter = min(CGFloat(windowDiameter) * perMillimeter, spacing, tallest).rounded(.down)
     let left = CGRect(
-      x: onPixel((size.width - spacing - width) / 2),
-      y: onPixel((size.height - height) / 2),
-      width: width,
-      height: height
+      x: onPixel((size.width - spacing - diameter) / 2),
+      y: onPixel((size.height - diameter) / 2),
+      width: diameter,
+      height: diameter
     )
     // The right window mirrors the left, so both sit exactly as far from the
     // screen's center.
-    let right = CGRect(x: size.width - left.maxX, y: left.minY, width: width, height: height)
+    let right = CGRect(x: size.width - left.maxX, y: left.minY, width: diameter, height: diameter)
     return [left, right]
   }
 
   // How many degrees of your view a picture `height` points tall fills when
   // seen through a lens: 2 × atan(half its height ÷ the lens distance), both
-  // in millimeters. About 55° for a 42 mm window 40 mm from the lens.
+  // in millimeters. About 47° for a 35 mm circle 40 mm from the lens.
   func perceivedFieldOfView(height: CGFloat) -> Double {
     let millimeters = Double(height) / max(pointsPerMillimeter, 0.01)
     return 2 * atan(millimeters / 2 / max(lensDistance, 1)) * 180 / .pi
@@ -74,7 +73,7 @@ struct ViewerProfile {
 
   // How far the camera turns per degree the head turns, so that a head turn
   // of N° moves the city N° as seen through the lens. A window `height`
-  // points tall shows `shownFieldOfView` degrees of the city (StereoRig) but
+  // points tall (a round one's diameter) shows `shownFieldOfView` degrees of the city (StereoRig) but
   // fills `perceivedFieldOfView` degrees of your view, which magnifies it by
   // perceived ÷ shown; the camera turns by the inverse. Scaled on top by the
   // tracking sensitivity setting (1 = true to life). See FirstPersonCamera.

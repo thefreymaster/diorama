@@ -14,8 +14,7 @@ import {
   setMiniatureIntensity,
   setMode,
   setTrackingSensitivity,
-  setWindowHeight,
-  setWindowWidth,
+  setWindowDiameter,
 } from '@/features/settings/store';
 import { queryClient } from '@/providers/queryClient';
 import { storage } from '@/providers/storage';
@@ -162,14 +161,16 @@ describe('settings', () => {
       'Model size',
       'Tracking sensitivity',
       'Lens spacing',
-      'Window width',
-      'Window height',
+      'Diameter',
     ]) {
       expect(screen.getByText(title)).toBeOnTheScreen();
       expect(screen.getByLabelText(title)).toBeOnTheScreen();
     }
     expect(screen.getByText('Viewer fit')).toBeOnTheScreen();
-    expect(screen.getByText("Match the windows to your viewer's lenses.")).toBeOnTheScreen();
+    expect(screen.getByText("Match the circles to your viewer's lenses.")).toBeOnTheScreen();
+    // The old rectangular window's sliders are gone.
+    expect(screen.queryByText('Window width')).toBeNull();
+    expect(screen.queryByText('Window height')).toBeNull();
     expect(screen.getByRole('switch', { name: 'Stereo' })).toBeOnTheScreen();
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeOnTheScreen();
@@ -182,16 +183,13 @@ describe('settings', () => {
     setMode('mono');
     setDebugLook(true);
     setLensSpacing(72);
-    setWindowWidth(25);
-    setWindowHeight(60);
+    setWindowDiameter(25);
     await openSettings();
 
     expect(sliderPosition('lensSpacing')).toBeCloseTo(1);
-    expect(sliderPosition('windowWidth')).toBeCloseTo(0);
-    expect(sliderPosition('windowHeight')).toBeCloseTo(1);
+    expect(sliderPosition('windowDiameter')).toBeCloseTo(0);
     expect(fitValue('lensSpacing')).toBe('72 mm');
-    expect(fitValue('windowWidth')).toBe('25 mm');
-    expect(fitValue('windowHeight')).toBe('60 mm');
+    expect(fitValue('windowDiameter')).toBe('25 mm');
     expect(sliderPosition('eyeSeparation')).toBeCloseTo(1);
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
     expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.25);
@@ -289,12 +287,13 @@ describe('settings', () => {
     await openSettings();
 
     expect(fitValue('lensSpacing')).toBe('64 mm');
-    expect(fitValue('windowWidth')).toBe('33 mm');
-    expect(fitValue('windowHeight')).toBe('42 mm');
+    expect(fitValue('windowDiameter')).toBe('35 mm');
     expect(screen.getByLabelText('Lens spacing')).toHaveAccessibilityValue({
       text: '64 millimeters',
     });
-    expect(screen.getByRole('adjustable', { name: 'Window height' })).toBeOnTheScreen();
+    expect(screen.getByRole('adjustable', { name: 'Diameter' })).toHaveAccessibilityValue({
+      text: '35 millimeters',
+    });
   });
 
   it('snaps the viewer fit to whole millimeters, saves it and shows it as it moves', async () => {
@@ -306,39 +305,42 @@ describe('settings', () => {
     expect(savedSettings().lensSpacing).toBe(61);
     expect(fitValue('lensSpacing')).toBe('61 mm');
 
-    slideTo('windowWidth', 0);
-    expect(getSettings().windowWidth).toBe(25);
-    fireEvent(slider('windowWidth'), 'slidingComplete', 1);
-    expect(getSettings().windowWidth).toBe(40);
-    expect(fitValue('windowWidth')).toBe('40 mm');
+    slideTo('windowDiameter', 0);
+    expect(getSettings().windowDiameter).toBe(25);
+    fireEvent(slider('windowDiameter'), 'slidingComplete', 1);
+    expect(getSettings().windowDiameter).toBe(45);
+    expect(fitValue('windowDiameter')).toBe('45 mm');
 
-    slideTo('windowHeight', 0.5);
-    expect(getSettings().windowHeight).toBe(43);
-    slideTo('windowHeight', 1.2);
-    expect(getSettings().windowHeight).toBe(60);
-    expect(savedSettings()).toMatchObject({ lensSpacing: 61, windowWidth: 40, windowHeight: 60 });
+    // 25 to 45 mm: 0.52 of the way is 35.4, so 35.
+    slideTo('windowDiameter', 0.52);
+    expect(getSettings().windowDiameter).toBe(35);
+    slideTo('windowDiameter', 1.2);
+    expect(getSettings().windowDiameter).toBe(45);
+    expect(savedSettings()).toMatchObject({ lensSpacing: 61, windowDiameter: 45 });
 
     // The slider snaps too: one step is one millimeter of its track.
     expect(slider('lensSpacing').props.step).toBeCloseTo(1 / 17);
-    expect(slider('windowHeight').props.step).toBeCloseTo(1 / 35);
+    expect(slider('windowDiameter').props.step).toBeCloseTo(1 / 20);
   });
 
   it('moves a viewer fit size a millimeter per VoiceOver swipe, within its range', async () => {
     await openSettings();
 
-    adjust('Window width', 'increment');
-    expect(getSettings().windowWidth).toBe(34);
-    expect(screen.getByLabelText('Window width')).toHaveAccessibilityValue({
-      text: '34 millimeters',
+    adjust('Diameter', 'increment');
+    expect(getSettings().windowDiameter).toBe(36);
+    expect(screen.getByLabelText('Diameter')).toHaveAccessibilityValue({
+      text: '36 millimeters',
     });
 
     adjust('Lens spacing', 'decrement');
     adjust('Lens spacing', 'decrement');
     expect(getSettings().lensSpacing).toBe(62);
 
-    act(() => setWindowHeight(60));
-    adjust('Window height', 'increment');
-    expect(getSettings().windowHeight).toBe(60);
+    act(() => setWindowDiameter(45));
+    adjust('Diameter', 'increment');
+    expect(getSettings().windowDiameter).toBe(45);
+    adjust('Diameter', 'decrement');
+    expect(getSettings().windowDiameter).toBe(44);
   });
 
   it('dims the viewer fit in mono, where there are no windows', async () => {
@@ -347,12 +349,14 @@ describe('settings', () => {
 
     fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
 
-    for (const setting of ['lensSpacing', 'windowWidth', 'windowHeight'] as const) {
+    for (const setting of ['lensSpacing', 'windowDiameter'] as const) {
       expect(slider(setting).props.disabled).toBe(true);
     }
     expect(screen.getByLabelText('Lens spacing')).toBeDisabled();
+    expect(screen.getByLabelText('Diameter')).toBeDisabled();
     adjust('Lens spacing', 'increment');
-    expect(getSettings().lensSpacing).toBe(64);
+    adjust('Diameter', 'increment');
+    expect(getSettings()).toMatchObject({ lensSpacing: 64, windowDiameter: 35 });
   });
 
   it('turns look around by dragging on and off', async () => {
@@ -385,8 +389,7 @@ describe('settings', () => {
     slideTo('trackingSensitivity', 0.9);
     slideTo('eyeSeparation', 0.2);
     slideTo('lensSpacing', 0);
-    slideTo('windowWidth', 1);
-    slideTo('windowHeight', 1);
+    slideTo('windowDiameter', 1);
     fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
 
@@ -401,8 +404,7 @@ describe('settings', () => {
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
     expect(previewMap().miniatureIntensity).toBe(0.6);
     expect(fitValue('lensSpacing')).toBe('64 mm');
-    expect(fitValue('windowWidth')).toBe('33 mm');
-    expect(fitValue('windowHeight')).toBe('42 mm');
+    expect(fitValue('windowDiameter')).toBe('35 mm');
   });
 });
 
@@ -478,36 +480,31 @@ describe('settings in the Viewer', () => {
     expect(viewerMap.mode).toBe('mono');
   });
 
-  it('fits the eye windows to the viewer as set here', async () => {
+  it('fits the eye circles to the viewer as set here', async () => {
     await openSettings();
     slideTo('lensSpacing', 0);
-    slideTo('windowWidth', 0.2);
-    slideTo('windowHeight', 1);
+    slideTo('windowDiameter', 0.2);
     screen.unmount();
 
     renderRouter(routes, { initialUrl: '/view/paris' });
 
     const viewerMap = (await screen.findByTestId('viewer-map')).props as DioramaMapViewProps;
-    expect(viewerMap).toMatchObject({
-      mode: 'stereo',
-      lensSpacing: 55,
-      windowWidth: 28,
-      windowHeight: 60,
-    });
+    expect(viewerMap).toMatchObject({ mode: 'stereo', lensSpacing: 55, windowDiameter: 29 });
+    expect(viewerMap).not.toHaveProperty('windowWidth');
+    expect(viewerMap).not.toHaveProperty('windowHeight');
   });
 
-  it('resizes the windows live while the Viewer is open', async () => {
+  it('resizes the circles live while the Viewer is open', async () => {
     renderRouter(routes, { initialUrl: '/view/paris' });
     const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
     await screen.findByTestId('viewer-map');
-    expect(viewerMap()).toMatchObject({ lensSpacing: 64, windowWidth: 33, windowHeight: 42 });
+    expect(viewerMap()).toMatchObject({ lensSpacing: 64, windowDiameter: 35 });
 
     act(() => {
       setLensSpacing(66);
-      setWindowWidth(30);
-      setWindowHeight(48);
+      setWindowDiameter(30);
     });
 
-    expect(viewerMap()).toMatchObject({ lensSpacing: 66, windowWidth: 30, windowHeight: 48 });
+    expect(viewerMap()).toMatchObject({ lensSpacing: 66, windowDiameter: 30 });
   });
 });

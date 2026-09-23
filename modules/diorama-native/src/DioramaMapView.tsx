@@ -11,9 +11,8 @@ import {
 
 /** Millimeters between Google Cardboard v2's lens centers. */
 export const DEFAULT_LENS_SPACING = 64;
-/** Millimeters: each stereo eye window, just inside a 34 mm lens hole and taller than wide. */
-export const DEFAULT_WINDOW_WIDTH = 33;
-export const DEFAULT_WINDOW_HEIGHT = 42;
+/** Millimeters across each stereo eye's round window, filling a 35 mm round lens hole. */
+export const DEFAULT_WINDOW_DIAMETER = 35;
 
 /**
  * A photoreal 3D Apple Maps view with a camera driven by props. All
@@ -31,8 +30,7 @@ export function DioramaMapView({
   mode = 'mono',
   eyeSeparation = 1,
   lensSpacing = DEFAULT_LENS_SPACING,
-  windowWidth = DEFAULT_WINDOW_WIDTH,
-  windowHeight = DEFAULT_WINDOW_HEIGHT,
+  windowDiameter = DEFAULT_WINDOW_DIAMETER,
   miniatureIntensity = 0,
   ...props
 }: DioramaMapViewProps) {
@@ -77,8 +75,7 @@ export function DioramaMapView({
       mode={mode}
       eyeSeparation={eyeSeparation}
       lensSpacing={lensSpacing}
-      windowWidth={windowWidth}
-      windowHeight={windowHeight}
+      windowDiameter={windowDiameter}
       miniatureIntensity={miniatureIntensity}
       onReady={handleReady}
       onDegraded={handleDegraded}

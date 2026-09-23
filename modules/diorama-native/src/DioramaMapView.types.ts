@@ -22,7 +22,10 @@ export type DioramaRect = {
   height: number;
 };
 
-/** Where each eye's picture is drawn in stereo. */
+/**
+ * Where each eye's picture is drawn in stereo: the square around each eye's
+ * circle, so its center is the circle's center.
+ */
 export type DioramaStereoEyes = {
   left: DioramaRect;
   right: DioramaRect;
@@ -101,8 +104,9 @@ export type DioramaHeadTrackingProps = {
 export type DioramaStereoProps = {
   /**
    * `stereo` shows two eyes side by side (landscape, in a viewer), each in a
-   * window centered on one of the viewer's lenses with black around it, and
-   * `onReady` waits for both. `mono` fills the view. Defaults to `mono`.
+   * round window centered on one of the viewer's lenses with black around
+   * it, and `onReady` waits for both. `mono` fills the view. Defaults to
+   * `mono`.
    */
   mode?: DioramaViewMode;
   /**
@@ -112,27 +116,23 @@ export type DioramaStereoProps = {
   eyeSeparation?: number;
   /**
    * Millimeters between the centers of the viewer's two lenses. In stereo
-   * each eye's window is centered on its lens; the native side converts to
+   * each eye's circle is centered on its lens; the native side converts to
    * points for the phone it runs on. Defaults to 64 (Google Cardboard v2).
    */
   lensSpacing?: number;
   /**
-   * Width of each eye's window in stereo, in millimeters. Keep it inside the
-   * viewer's lens hole, so neither side of the picture is cut off. The
-   * windows never grow wider than `lensSpacing`, so they never overlap.
-   * Defaults to 33 (just inside a 34 mm hole).
+   * Diameter of each eye's round window in stereo, in millimeters: match it
+   * to the viewer's round lens holes. The circles never grow wider than
+   * `lensSpacing`, so they never overlap, and stop a little short of the
+   * screen's height. Larger shows more of the city and makes head tracking
+   * turn the camera a little less per degree, since the picture then fills
+   * more of your view. Defaults to 35.
    */
-  windowWidth?: number;
-  /**
-   * Height of each eye's window in stereo, in millimeters. It stops a little
-   * short of the screen's height. Taller shows more of the city and makes
-   * head tracking turn the camera a little less per degree, since the
-   * picture then fills more of your view. Defaults to 42.
-   */
-  windowHeight?: number;
+  windowDiameter?: number;
   /**
    * Fires with where each eye's picture is, and again whenever that changes
-   * (rotation, stereo to mono). For drawing something once per eye.
+   * (rotation, stereo to mono, a new viewer fit). For drawing something once
+   * per eye: in stereo each rect is the square around that eye's circle.
    * `useStereoEyes()` gives the same for the stereo map on screen.
    */
   onEyeLayout?: (layout: DioramaEyeLayout) => void;
@@ -152,7 +152,7 @@ export type DioramaStereoProps = {
 export type DioramaMiniatureProps = {
   /**
    * Tilt-shift strength, 0 to 1: blurs bands at the top and bottom of each
-   * eye, leaving a sharp strip in the middle, and adds a faint warm tint
+   * eye (inside its circle in stereo), leaving a sharp strip in the middle, and adds a faint warm tint
    * that gives the gray city a little more color. Higher means taller bands,
    * stronger blur and more tint. The bands stay level with the screen under
    * head tracking. Defaults to 0 (off).

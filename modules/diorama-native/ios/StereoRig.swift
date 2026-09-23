@@ -10,7 +10,7 @@ enum ViewMode: String, Enumerable {
 
 // Lays out the eyes and gives each one its camera. Like a layout component
 // that renders <EyeView/> once (mono, filling the view) or twice (stereo,
-// left then right, each in a window centered on a headset lens with black
+// left then right, each a circle centered on a headset lens with black
 // around it; see ViewerProfile.swift), plus the per-eye camera math (see
 // StereoGeometry.swift for the why). DioramaMapView decides *what* to show;
 // the rig decides how each eye shows it.
@@ -23,6 +23,9 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   private static let loadTimeoutSeconds = 10.0
   // Left eye slides left (-1), right eye slides right (+1).
   private static let sides: [Double] = [-1, 1]
+  // Points (in the eye, after the shrink) kept between a round eye's edge
+  // and the outer corner of MapKit's logo or Legal link.
+  private static let attributionPadding: CGFloat = 2
 
   // The rig's root view (like a component's root <View>): holds the eyes.
   let view = UIView()
@@ -79,10 +82,10 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   }
 
   // Sizes and places the eyes in `bounds`: mono fills it, stereo puts each
-  // eye in its lens window from `profile`. `maxRoll` (degrees) is how far a
-  // mono map may turn against head roll, 0 when not tracking. `safeArea`
-  // keeps MapKit's logo clear of the notch and corners. Returns true when
-  // the maps changed size or position, so cameras need redoing.
+  // eye in its round lens window from `profile`. `maxRoll` (degrees) is how
+  // far a mono map may turn against head roll, 0 when not tracking.
+  // `safeArea` keeps MapKit's logo clear of the notch and corners. Returns
+  // true when the maps changed size or position, so cameras need redoing.
   func layout(
     in bounds: CGRect, safeArea: UIEdgeInsets, maxRoll: Double, profile: ViewerProfile
   ) -> Bool {
@@ -93,7 +96,9 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     // shrunk by `scale` into the eye; see `pictureScale`.
     let scale = isStereo ? Self.pictureScale(forEyeHeight: eyeSize.height, in: size) : 1
     let drawnSize = CGSize(width: eyeSize.width / scale, height: eyeSize.height / scale)
-    let mapSize = StereoGeometry.mapSize(forEye: drawnSize, maxRoll: maxRoll, stereo: isStereo)
+    let mapSize = isStereo
+      ? Self.mapSize(forRoundEye: drawnSize.height)
+      : StereoGeometry.mapSize(forEye: drawnSize, maxRoll: maxRoll, stereo: false)
     view.frame = bounds
     // The black around the stereo windows. Mono covers the whole view.
     view.backgroundColor = isStereo ? .black : nil
@@ -107,7 +112,11 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       eye.frame = frame
       eye.mapSize = mapSize
       eye.pictureScale = scale
-      eye.attributionInsets = Self.attributionInsets(of: frame, clearOf: safeFrame)
+      eye.isRound = isStereo
+      let clear = Self.attributionInsets(of: frame, clearOf: safeFrame)
+      let inside = isStereo ? Self.attributionInsets(inCircleOf: frame.width) : .zero
+      eye.attributionInsets = CGSize(
+        width: max(clear.width, inside.width), height: max(clear.height, inside.height))
     }
     // MapKit's field of view spans the whole (overscanned) map, while the eye
     // shows only its middle: see DioramaMapView.baseCamera.
@@ -134,13 +143,45 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // tall as the screen's short side, as the old half-screen eyes were, then
   // shrunk into the window: the same picture as before, only smaller. Only
   // the height sets the scale, so the width keeps the window's own aspect
-  // (a 33 × 42 mm window is drawn 316 × 402 points on an iPhone 17 Pro and
-  // shrunk by 0.63). The cost: MapKit's logo and Legal link shrink with it,
-  // and each map draws as many pixels as a window that tall would.
+  // (a 35 mm circle's square is drawn 402 × 402 points on an iPhone 17 Pro
+  // and shrunk by 0.52). The cost: MapKit's logo and Legal link shrink with
+  // it, and each map draws as many pixels as a window that tall would.
   private static func pictureScale(forEyeHeight height: CGFloat, in size: CGSize) -> CGFloat {
     let shortSide = min(size.width, size.height)
     guard height > 0, shortSide > 0 else { return 1 }
     return min(height / shortSide, 1)
+  }
+
+  // The map a round (stereo) eye needs, for a circle `diameter` points
+  // across before the shrink. StereoGeometry sizes a stereo eye's map to
+  // cover the eye's diagonal, because the warp may turn the picture by any
+  // amount. But a circle turned about its center is still the same circle,
+  // so a round eye's map only has to cover its diameter: the map
+  // StereoGeometry gives a square whose diagonal is that diameter (with its
+  // margin for the warp's slight perspective). Half the pixels of covering
+  // the whole square around the circle, and the camera backs off less, so
+  // it stays nearer where the city's own settings put it (see
+  // DioramaMapView.baseCamera).
+  private static func mapSize(forRoundEye diameter: CGFloat) -> CGSize {
+    let inscribed = diameter / 2.squareRoot()
+    return StereoGeometry.mapSize(
+      forEye: CGSize(width: inscribed, height: inscribed), maxRoll: 0, stereo: true)
+  }
+
+  // How far in from a round eye's square MapKit's logo and Legal link go,
+  // so the circle doesn't cut them off. MapKit puts them in the bottom
+  // corners of the map's layout margins (iOS 26 sets Legal beside the logo,
+  // bottom left; older versions bottom right), so the farthest point from
+  // the eye's center is a margin's bottom corner. This pulls both bottom
+  // corners in along the diagonals to `attributionPadding` inside the
+  // circle, so both show whole, and they stay inside however far head roll
+  // turns the picture, since a circle turned about its center is the same
+  // circle.
+  private static func attributionInsets(inCircleOf diameter: CGFloat) -> CGSize {
+    let radius = diameter / 2
+    let corner = max(radius - attributionPadding, 0) / 2.squareRoot()
+    let inset = radius - corner
+    return CGSize(width: inset, height: inset)
   }
 
   // How far the safe area (notch, rounded corners, home indicator) reaches

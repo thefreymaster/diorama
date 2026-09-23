@@ -11,8 +11,8 @@ type EyeLayoutState = {
 const useEyeLayoutStore = create<EyeLayoutState>()(() => ({ owner: null, eyes: null }));
 
 /**
- * Where each eye's window is on the stereo map that's on screen, in its own
- * points, or `null` when no map is in stereo (or it hasn't laid out yet).
+ * Where each eye's window is on the stereo map that's on screen (the square
+ * around its circle), in its own points, or `null` when no map is in stereo (or it hasn't laid out yet).
  * For overlays drawn once per eye, like the Viewer's HUD. Every
  * `<DioramaMapView>` keeps this up to date on its own.
  */

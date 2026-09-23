@@ -22,8 +22,8 @@ final class DioramaMapView: ExpoView {
   let onDegraded = EventDispatcher()
   // Event prop: where each eye's picture is, whenever that changes, so JS
   // can draw things once per eye. Payload: `{ mode, left, right }`, each eye
-  // a `{ x, y, width, height }` in this view's points (in mono both are the
-  // whole view).
+  // a `{ x, y, width, height }` in this view's points: in stereo the square
+  // around its circle, in mono (both) the whole view.
   let onEyeLayout = EventDispatcher()
 
   // Camera props from JS, applied together in `propsDidUpdate()`.
@@ -43,12 +43,9 @@ final class DioramaMapView: ExpoView {
   var lensSpacing = ViewerProfile.defaultLensSpacing {
     didSet { if lensSpacing != oldValue { setNeedsLayout() } }
   }
-  // Millimeters: the size of each stereo eye window (see ViewerProfile).
-  var windowWidth = ViewerProfile.defaultWindowWidth {
-    didSet { if windowWidth != oldValue { setNeedsLayout() } }
-  }
-  var windowHeight = ViewerProfile.defaultWindowHeight {
-    didSet { if windowHeight != oldValue { setNeedsLayout() } }
+  // Millimeters across each stereo eye's round window (see ViewerProfile).
+  var windowDiameter = ViewerProfile.defaultWindowDiameter {
+    didSet { if windowDiameter != oldValue { setNeedsLayout() } }
   }
   // Debug builds only: pretend the phone is this hot (see ThermalMonitor).
   var debugThermalState: ProcessInfo.ThermalState?
@@ -203,8 +200,9 @@ final class DioramaMapView: ExpoView {
     let profile = viewerProfile
     let changed = rig.layout(
       in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: profile)
-    // The eye's window through the headset lens decides how far the camera
-    // turns per head degree. Mono is seen through the same lenses.
+    // The eye's window through the headset lens (a circle's diameter tall)
+    // decides how far the camera turns per head degree. Mono is seen
+    // through the same lenses.
     if let window = rig.eyeFrames.first, window.height > 0 {
       lookGain = profile.lookGain(height: window.height, shownFieldOfView: rig.shownFieldOfView)
     }
@@ -223,8 +221,7 @@ final class DioramaMapView: ExpoView {
     let displayScale = traitCollection.displayScale
     return ViewerProfile(
       lensSpacing: lensSpacing,
-      windowWidth: windowWidth,
-      windowHeight: windowHeight,
+      windowDiameter: windowDiameter,
       pointsPerMillimeter: ViewerProfile.pointsPerMillimeter(
         nativeScale: screen?.nativeScale ?? displayScale),
       displayScale: displayScale

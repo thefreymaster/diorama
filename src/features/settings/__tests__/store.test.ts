@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from '@diorama/native';
+import { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_DIAMETER } from '@diorama/native';
 
 import {
   resetSettings,
@@ -41,8 +41,7 @@ describe('settings store', () => {
       mode: 'stereo',
       debugLook: false,
       lensSpacing: 64,
-      windowWidth: 33,
-      windowHeight: 42,
+      windowDiameter: 35,
     });
   });
 
@@ -51,8 +50,7 @@ describe('settings store', () => {
 
     expect(store.getSettings()).toMatchObject({
       lensSpacing: DEFAULT_LENS_SPACING,
-      windowWidth: DEFAULT_WINDOW_WIDTH,
-      windowHeight: DEFAULT_WINDOW_HEIGHT,
+      windowDiameter: DEFAULT_WINDOW_DIAMETER,
     });
   });
 
@@ -74,8 +72,7 @@ describe('settings store', () => {
     first.store.setMode('mono');
     first.store.setDebugLook(true);
     first.store.setLensSpacing(62);
-    first.store.setWindowWidth(30);
-    first.store.setWindowHeight(50);
+    first.store.setWindowDiameter(38);
     const saved = first.disk.getString('settings');
 
     const second = launch(saved);
@@ -87,8 +84,7 @@ describe('settings store', () => {
       mode: 'mono',
       debugLook: true,
       lensSpacing: 62,
-      windowWidth: 30,
-      windowHeight: 50,
+      windowDiameter: 38,
     });
   });
 
@@ -114,18 +110,79 @@ describe('settings store', () => {
       mode: 'mono',
       debugLook: false,
       lensSpacing: 64,
-      windowWidth: 33,
-      windowHeight: 42,
+      windowDiameter: 35,
     });
 
     // The next change saves the whole set, viewer fit included.
-    store.setWindowHeight(45);
+    store.setWindowDiameter(40);
     expect(JSON.parse(disk.getString('settings') ?? 'null').state).toMatchObject({
       eyeSeparation: 2,
       lensSpacing: 64,
-      windowWidth: 33,
-      windowHeight: 45,
+      windowDiameter: 40,
     });
+  });
+
+  it('drops the window width and height saved before the windows were round', () => {
+    // What a T24 build saved: version 1, a rectangular window.
+    const saved = JSON.stringify({
+      state: {
+        eyeSeparation: 1.5,
+        trackingSensitivity: 1.2,
+        miniatureIntensity: 0.4,
+        mode: 'stereo',
+        debugLook: false,
+        lensSpacing: 62,
+        windowWidth: 31,
+        windowHeight: 48,
+      },
+      version: 1,
+    });
+
+    const { store, disk } = launch(saved);
+
+    // Everything else carries over; the circle starts at the default size.
+    expect(store.getSettings()).toEqual({
+      eyeSeparation: 1.5,
+      trackingSensitivity: 1.2,
+      miniatureIntensity: 0.4,
+      mode: 'stereo',
+      debugLook: false,
+      lensSpacing: 62,
+      windowDiameter: 35,
+    });
+    expect(store.getSettings()).not.toHaveProperty('windowWidth');
+    expect(store.getSettings()).not.toHaveProperty('windowHeight');
+
+    // The next save leaves the old keys behind for good.
+    store.setMode('mono');
+    const rewritten = JSON.parse(disk.getString('settings') ?? 'null');
+    expect(rewritten).toEqual({
+      state: {
+        eyeSeparation: 1.5,
+        trackingSensitivity: 1.2,
+        miniatureIntensity: 0.4,
+        mode: 'mono',
+        debugLook: false,
+        lensSpacing: 62,
+        windowDiameter: 35,
+      },
+      version: 1,
+    });
+
+    // And the launch after that reads it back the same.
+    expect(launch(JSON.stringify(rewritten)).store.getSettings()).toEqual(rewritten.state);
+  });
+
+  it('keeps a saved diameter alongside leftover window sizes', () => {
+    const saved = JSON.stringify({
+      state: { windowDiameter: 41, windowWidth: 33, windowHeight: 42 },
+      version: 1,
+    });
+
+    const { store } = launch(saved);
+
+    expect(store.getSettings().windowDiameter).toBe(41);
+    expect(store.getSettings()).not.toHaveProperty('windowHeight');
   });
 
   it('ignores invalid values on disk', () => {
@@ -136,8 +193,7 @@ describe('settings store', () => {
         miniatureIntensity: 7,
         debugLook: true,
         lensSpacing: '64 mm',
-        windowWidth: null,
-        windowHeight: Number.NaN,
+        windowDiameter: null,
       },
       version: 1,
     });
@@ -151,8 +207,7 @@ describe('settings store', () => {
       mode: 'stereo',
       debugLook: true,
       lensSpacing: 64,
-      windowWidth: 33,
-      windowHeight: 42,
+      windowDiameter: 35,
     });
   });
 
@@ -163,8 +218,7 @@ describe('settings store', () => {
         trackingSensitivity: 100,
         miniatureIntensity: 0.4,
         lensSpacing: 90,
-        windowWidth: 10,
-        windowHeight: 58,
+        windowDiameter: 10,
       },
       version: 1,
     });
@@ -176,8 +230,7 @@ describe('settings store', () => {
       trackingSensitivity: store.SETTING_RANGES.trackingSensitivity.max,
       miniatureIntensity: 0.4,
       lensSpacing: 72,
-      windowWidth: 25,
-      windowHeight: 58,
+      windowDiameter: 25,
     });
   });
 
@@ -215,26 +268,21 @@ describe('settings store', () => {
     });
   });
 
-  it('keeps the viewer fit in range: 55-72 mm apart, 25-40 mm wide, 25-60 mm tall', () => {
+  it('keeps the viewer fit in range: 55-72 mm apart, circles 25-45 mm across', () => {
     const { store } = launch();
 
     store.setLensSpacing(40);
-    store.setWindowWidth(34);
-    store.setWindowHeight(80);
-    expect(store.getSettings()).toMatchObject({
-      lensSpacing: 55,
-      windowWidth: 34,
-      windowHeight: 60,
-    });
+    store.setWindowDiameter(34);
+    expect(store.getSettings()).toMatchObject({ lensSpacing: 55, windowDiameter: 34 });
 
     store.setLensSpacing(100);
-    store.setWindowWidth(0);
-    store.setWindowHeight(Number.NaN);
-    expect(store.getSettings()).toMatchObject({
-      lensSpacing: 72,
-      windowWidth: 25,
-      windowHeight: 42,
-    });
+    store.setWindowDiameter(80);
+    expect(store.getSettings()).toMatchObject({ lensSpacing: 72, windowDiameter: 45 });
+
+    store.setWindowDiameter(0);
+    expect(store.getSettings().windowDiameter).toBe(25);
+    store.setWindowDiameter(Number.NaN);
+    expect(store.getSettings().windowDiameter).toBe(35);
   });
 
   it('accepts the exact ends of each range, and falls back to the default for infinities', () => {
@@ -261,8 +309,7 @@ describe('settings store', () => {
     store.setEyeSeparation(3);
     store.setMode('mono');
     store.setLensSpacing(60);
-    store.setWindowWidth(36);
-    store.setWindowHeight(50);
+    store.setWindowDiameter(30);
 
     store.resetSettings();
 

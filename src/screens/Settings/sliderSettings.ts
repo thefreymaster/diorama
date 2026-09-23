@@ -6,8 +6,7 @@ import {
   setLensSpacing,
   setMiniatureIntensity,
   setTrackingSensitivity,
-  setWindowHeight,
-  setWindowWidth,
+  setWindowDiameter,
 } from '@/features/settings/store';
 
 import {
@@ -22,7 +21,7 @@ import {
 export type SliderSetting = keyof typeof SETTING_RANGES;
 
 /** The "Viewer fit" sliders: sizes in millimeters, shown with their value. */
-export type FitSetting = 'lensSpacing' | 'windowWidth' | 'windowHeight';
+export type FitSetting = 'lensSpacing' | 'windowDiameter';
 
 /** The sliders between two glyphs, each in a section of its own. */
 export type GlyphSliderSetting = Exclude<SliderSetting, FitSetting>;
@@ -58,7 +57,7 @@ type FitSliderConfig = SliderConfig & {
 };
 
 const { eyeSeparation, trackingSensitivity, miniatureIntensity } = SETTING_RANGES;
-const { lensSpacing, windowWidth, windowHeight } = SETTING_RANGES;
+const { lensSpacing, windowDiameter } = SETTING_RANGES;
 
 /** Every glyph slider: what it shows and does. */
 export const SLIDER_SETTINGS: Readonly<Record<GlyphSliderSetting, GlyphSliderConfig>> = {
@@ -100,16 +99,10 @@ export const FIT_SETTINGS: Readonly<Record<FitSetting, FitSliderConfig>> = {
     set: setLensSpacing,
     stereoOnly: true,
   },
-  windowWidth: {
-    title: 'Window width',
-    scale: steppedScale(windowWidth.min, windowWidth.max, 1),
-    set: setWindowWidth,
-    stereoOnly: true,
-  },
-  windowHeight: {
-    title: 'Window height',
-    scale: steppedScale(windowHeight.min, windowHeight.max, 1),
-    set: setWindowHeight,
+  windowDiameter: {
+    title: 'Diameter',
+    scale: steppedScale(windowDiameter.min, windowDiameter.max, 1),
+    set: setWindowDiameter,
     stereoOnly: true,
   },
 };

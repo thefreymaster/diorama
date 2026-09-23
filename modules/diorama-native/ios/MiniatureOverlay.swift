@@ -14,6 +14,9 @@ import UIKit
 // and the blur and tint stronger; 0 hides everything, so "off" costs nothing.
 // It sits on the eye, not on the turned map, so the bands stay level with
 // the screen whatever the head does, and both eyes get the exact same one.
+// A round (stereo) eye clips it to its circle along with the map (see
+// EyeView), so the bands blur the top and bottom of the circle and nothing
+// spills into the black around it.
 //
 // Cost: a blur band makes the GPU copy what's under it and blur that copy
 // on every frame the map moves, which is the expensive part. So each eye

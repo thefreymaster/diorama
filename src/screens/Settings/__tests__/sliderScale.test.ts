@@ -85,8 +85,7 @@ describe('Settings sliders', () => {
 describe('Viewer fit sliders', () => {
   it.each<[FitSetting, number, number]>([
     ['lensSpacing', 55, 72],
-    ['windowWidth', 25, 40],
-    ['windowHeight', 25, 60],
+    ['windowDiameter', 25, 45],
   ])('runs %s from %d to %d mm in whole millimeters', (setting, min, max) => {
     const { scale } = FIT_SETTINGS[setting];
 

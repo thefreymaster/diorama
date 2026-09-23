@@ -2,10 +2,11 @@ import MapKit
 import UIKit
 
 // One eye's picture. Mono shows one EyeView filling the component; stereo
-// shows two, one per headset lens (see StereoRig). Think of it as a small
-// component with this tree:
+// shows two round ones, one per headset lens (see StereoRig). Think of it as
+// a small component with this tree:
 //
-//   EyeView        clips to its frame, like `overflow: hidden`
+//   EyeView        clips to its frame, like `overflow: hidden`, and when
+//   │              `isRound` to the circle inside it (`border-radius: 50%`)
 //   ├─ warpView    shows its content turned (and in stereo slightly warped
 //   │  │           and shrunk) so this eye sees what it should; see
 //   │  │           StereoGeometry and `pictureScale`
@@ -59,8 +60,16 @@ final class EyeView: UIView {
     }
   }
 
-  // Room MapKit's logo and Legal link keep from this eye's edges, so they
-  // stay clear of the rounded corners.
+  // Round: shows only the circle that fills this (square) eye, black
+  // outside it, like the round lens holes of a headset. Stereo eyes are
+  // round; mono is not.
+  var isRound = false {
+    didSet { if isRound != oldValue { setNeedsLayout() } }
+  }
+
+  // Room MapKit's logo and Legal link keep from this eye's edges, in this
+  // eye's points, so they stay clear of the screen's rounded corners (mono)
+  // or inside the circle (round). Width: each side; height: the bottom.
   var attributionInsets: CGSize = .zero {
     didSet { if attributionInsets != oldValue { setNeedsLayout() } }
   }
@@ -73,6 +82,11 @@ final class EyeView: UIView {
   init() {
     super.init(frame: .zero)
     clipsToBounds = true
+    // With `clipsToBounds`, a corner radius of half the side clips this view
+    // and everything in it (the map, the tilt-shift overlay) to a circle.
+    // `.circular` makes it a true circle rather than iOS's smoother
+    // "squircle" corner.
+    layer.cornerCurve = .circular
     isUserInteractionEnabled = false
     configureMap()
     warpView.addSubview(mapView)
@@ -112,6 +126,7 @@ final class EyeView: UIView {
     // shrink a map from 933 to 618 points and it zooms in 1.5×. So resize
     // it at once, then put back the camera we asked for.
     UIView.performWithoutAnimation {
+      layer.cornerRadius = isRound ? min(bounds.width, bounds.height) / 2 : 0
       layoutMap()
     }
   }
@@ -137,10 +152,11 @@ final class EyeView: UIView {
       }
     }
     // MapKit centers its camera between the layout margins and puts its logo
-    // and Legal link inside them. Equal margins on opposite sides keep the
-    // camera on the map's center, where the warp expects it. Their size
-    // pulls the logo in to the part of the map this eye shows (in map
-    // points: the eye's size before the shrink).
+    // and Legal link inside them, in the bottom corners. Equal margins on
+    // opposite sides keep the camera on the map's center, where the warp
+    // expects it. Their size pulls the logo in to the part of the map this
+    // eye shows (in map points: the eye's size before the shrink), plus
+    // `attributionInsets` (so the top grows with the bottom).
     let scale = max(pictureScale, 0.01)
     let sideMargin = max((size.width - bounds.width / scale) / 2, 0) + attributionInsets.width / scale
     let endMargin = max((size.height - bounds.height / scale) / 2, 0) + attributionInsets.height / scale

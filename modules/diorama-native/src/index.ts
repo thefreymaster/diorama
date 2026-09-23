@@ -1,9 +1,4 @@
-export {
-  DEFAULT_LENS_SPACING,
-  DEFAULT_WINDOW_HEIGHT,
-  DEFAULT_WINDOW_WIDTH,
-  DioramaMapView,
-} from './DioramaMapView';
+export { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_DIAMETER, DioramaMapView } from './DioramaMapView';
 export type {
   Coordinate,
   DioramaCameraProps,

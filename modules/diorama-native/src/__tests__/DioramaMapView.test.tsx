@@ -1,7 +1,13 @@
 import { act, fireEvent, render, renderHook } from '@testing-library/react-native';
 import { createRef } from 'react';
 
-import { DioramaMapView, useStereoEyes, type DioramaEyeLayout, type DioramaMapViewRef } from '..';
+import {
+  DEFAULT_WINDOW_DIAMETER,
+  DioramaMapView,
+  useStereoEyes,
+  type DioramaEyeLayout,
+  type DioramaMapViewRef,
+} from '..';
 import { NativeDioramaMapView } from '../NativeDioramaMapView';
 
 const CAMERA = {
@@ -12,11 +18,12 @@ const CAMERA = {
 };
 
 // What the native view reports on an iPhone 17 Pro in landscape, with the
-// default 33 × 42 mm windows (measured in the Simulator).
+// default 35 mm circles 64 mm apart (measured in the Simulator): the square
+// around each circle, centered on its lens at x = 243.83 and 630.17.
 const STEREO_LAYOUT: DioramaEyeLayout = {
   mode: 'stereo',
-  left: { x: 144.33, y: 74.67, width: 199, height: 253 },
-  right: { x: 530.67, y: 74.67, width: 199, height: 253 },
+  left: { x: 138.33, y: 95.67, width: 211, height: 211 },
+  right: { x: 524.67, y: 95.67, width: 211, height: 211 },
 };
 const WHOLE_VIEW = { x: 0, y: 0, width: 874, height: 402 };
 const MONO_LAYOUT: DioramaEyeLayout = { mode: 'mono', left: WHOLE_VIEW, right: WHOLE_VIEW };
@@ -53,24 +60,20 @@ describe('DioramaMapView', () => {
     });
   });
 
-  it('defaults to eye windows 33 mm wide and 42 mm tall, inside a 34 mm lens hole', () => {
+  it('defaults to round eye windows 35 mm across, filling a 35 mm lens hole', () => {
     const view = render(<DioramaMapView {...CAMERA} mode="stereo" />);
-    expect(view.toJSON()).toMatchObject({ props: { windowWidth: 33, windowHeight: 42 } });
+    expect(view.toJSON()).toMatchObject({ props: { windowDiameter: DEFAULT_WINDOW_DIAMETER } });
+    expect(DEFAULT_WINDOW_DIAMETER).toBe(35);
   });
 
-  it('passes the viewer fit to the native view', () => {
+  it('passes the viewer fit to the native view, as a diameter only', () => {
     const view = render(
-      <DioramaMapView
-        {...CAMERA}
-        mode="stereo"
-        lensSpacing={60}
-        windowWidth={30}
-        windowHeight={50}
-      />,
+      <DioramaMapView {...CAMERA} mode="stereo" lensSpacing={60} windowDiameter={30} />,
     );
-    expect(view.toJSON()).toMatchObject({
-      props: { mode: 'stereo', lensSpacing: 60, windowWidth: 30, windowHeight: 50 },
-    });
+    const props = view.UNSAFE_getByType(NativeDioramaMapView).props;
+    expect(props).toMatchObject({ mode: 'stereo', lensSpacing: 60, windowDiameter: 30 });
+    expect(props).not.toHaveProperty('windowWidth');
+    expect(props).not.toHaveProperty('windowHeight');
   });
 
   it('passes stereo props to the native view', () => {

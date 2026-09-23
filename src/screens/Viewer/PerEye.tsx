@@ -4,10 +4,11 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { useStereoEyes, type DioramaStereoEyes } from '@diorama/native';
 import { spacing } from '@/theme';
 
-// In stereo the native view draws each eye in a window centered on one of
-// the headset's lenses, so a copy centered in each window sits dead ahead of
-// each eye and fuses at the depth of the city's center. Until the map has
-// reported its windows, each copy is centered in its half of the screen.
+// In stereo the native view draws each eye in a circle centered on one of
+// the headset's lenses, and reports the square around it, so a copy centered
+// in each square sits dead ahead of each eye and fuses at the depth of the
+// city's center. Until the map has reported its windows, each copy is
+// centered in its half of the screen.
 const STEREO_EYES = ['left', 'right'] as const;
 const MONO_EYES = ['both'] as const;
 
@@ -63,7 +64,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.xl,
   },
-  // A lens window is small (33 mm wide by default), so the HUD gets most of it.
+  // A lens circle is small (35 mm across by default), so the HUD gets most
+  // of its width.
   window: {
     position: 'absolute',
     paddingHorizontal: spacing.sm,

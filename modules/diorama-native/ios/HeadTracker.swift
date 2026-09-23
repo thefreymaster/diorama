@@ -19,6 +19,17 @@ final class HeadTracker {
   private static let debugDegreesPerPoint = 0.25
   // Debug-look pitch stops here, like a neck.
   private static let debugPitchLimit = 90.0
+  // Smoothing tuned for heads (see OneEuroFilter.swift). At rest it evens
+  // out sensor jitter; the moment the head moves it lets go, so the view
+  // keeps up with a turn: about 3 ms behind at 100°/s and 9 ms at a slow
+  // 20°/s, 10 ms at most as a turn begins. (It was 1, 0.1 and 1 Hz: 10 to
+  // 26 ms behind, up to 43 ms as a turn began, which read as floaty.)
+  static let filterMinCutoff = 1.5  // Hz, at rest
+  static let filterBeta = 0.5  // Hz more per degree per second
+  static let filterSpeedCutoff = 10.0  // Hz: how fast it notices a turn
+  // Motion samples per second. Faster than the screen, so the sample each
+  // frame reads is fresh (5 ms old at most instead of 17).
+  private static let motionRate = 100.0
 
   // Apple asks for a single CMMotionManager per app, so every tracker shares
   // this one and the last to stop turns the sensors off.
@@ -33,11 +44,10 @@ final class HeadTracker {
   // The smoothed look from the last update().
   private(set) var look = HeadPose.zero
 
-  // Smoothing tuned for heads: steady when still, about a frame of lag at a
-  // brisk 100°/s turn. See OneEuroFilter.swift.
-  private var yawFilter = OneEuroFilter(minCutoff: 1, beta: 0.1)
-  private var pitchFilter = OneEuroFilter(minCutoff: 1, beta: 0.1)
-  private var rollFilter = OneEuroFilter(minCutoff: 1, beta: 0.1)
+  // One filter per angle (see `filterMinCutoff`).
+  private var yawFilter = HeadTracker.makeFilter()
+  private var pitchFilter = HeadTracker.makeFilter()
+  private var rollFilter = HeadTracker.makeFilter()
 
   // Reference, captured from the first sample after start()/recenter().
   private var referencePitch: Double?
@@ -81,8 +91,8 @@ final class HeadTracker {
     look = .zero
   }
 
-  // Whatever way you face now becomes straight ahead. The look glides back
-  // to zero through the filters instead of snapping.
+  // Whatever way you face now becomes straight ahead. The look swings back
+  // to zero through the filters (within a few frames) instead of snapping.
   func recenter() {
     referencePitch = nil
     referenceScreen = nil
@@ -147,20 +157,25 @@ final class HeadTracker {
     return HeadPose(yaw: turnedYaw, pitch: head.pitch - (referencePitch ?? head.pitch), roll: head.roll)
   }
 
+  private static func makeFilter() -> OneEuroFilter {
+    OneEuroFilter(minCutoff: filterMinCutoff, beta: filterBeta, speedCutoff: filterSpeedCutoff)
+  }
+
   private func resetFilters() {
     yawFilter.reset()
     pitchFilter.reset()
     rollFilter.reset()
   }
 
-  // Turns the shared sensors on: 60 samples a second, gravity-aligned, with
-  // the compass correcting slow yaw drift when the device supports it.
+  // Turns the shared sensors on: `motionRate` samples a second,
+  // gravity-aligned, with the compass correcting slow yaw drift when the
+  // device supports it.
   private static func startMotion() {
     guard motionManager.isDeviceMotionAvailable else { return }
     let available = CMMotionManager.availableAttitudeReferenceFrames()
     let frame: CMAttitudeReferenceFrame =
       available.contains(.xArbitraryCorrectedZVertical) ? .xArbitraryCorrectedZVertical : .xArbitraryZVertical
-    motionManager.deviceMotionUpdateInterval = 1.0 / 60
+    motionManager.deviceMotionUpdateInterval = 1 / motionRate
     // No handler: update() reads the latest sample on each display frame.
     motionManager.startDeviceMotionUpdates(using: frame)
   }

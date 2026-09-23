@@ -7,8 +7,10 @@ import UIKit
 // then calls `propsDidUpdate()` once per render.
 //
 // Every frame (orbit, head tracking) runs here on a display link, never
-// through JS: props + orbit + head look → a camera → StereoRig, which gives
-// each eye (one in mono, two in stereo) its own MapKit camera.
+// through JS: props + orbit → the base camera; with head tracking, you stand
+// where the base camera is and the head look turns your gaze from there
+// (FirstPersonCamera) → StereoRig, which gives each eye (one in mono, two in
+// stereo) its own MapKit camera.
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady([:])` fires the JS `onReady` callback.
   // MapKit can't tell whether a place has photoreal 3D (it accepts a 3D
@@ -62,6 +64,10 @@ final class DioramaMapView: ExpoView {
   // Per-frame changes smaller than this (degrees) are skipped, so a still
   // head lets MapKit finish rendering and rest.
   private static let minFrameChange = 0.01
+  // Degrees the gaze stays under MapKit's steepest pitch: with head roll the
+  // two eyes sit a little higher and lower than the head, and tilt a
+  // little more or less.
+  private static let pitchCapMargin = 0.5
   // Fade from the loading cover to the city (stereo; mono lifts at once).
   private static let revealSeconds = 0.3
 
@@ -83,12 +89,17 @@ final class DioramaMapView: ExpoView {
   private var orbitOffset = 0.0
   // The latest smoothed head look; zero when not tracking.
   private var look = HeadPose.zero
+  // Camera degrees per head degree, so the city holds still through the
+  // headset's lens (see ViewerProfile.lookGain). Set by layout.
+  private var lookGain = 1.0
   private var appliedPose: CameraPose?
   private var appliedEyeSeparation = 1.0
-  // The camera last handed to the rig, with orbit and look added, and the
-  // head roll (degrees) its pictures were turned against so the city stays
-  // level. Roll past `maxRollDegrees` tilts the city with you.
-  private var appliedCamera: CameraPose?
+  // What the rig was last handed: the base camera (props plus orbit), the
+  // gaze turned from it (nil when not tracking), and the head roll (degrees)
+  // the pictures were turned against so the city stays level. Roll past
+  // `maxRollDegrees` tilts the city with you.
+  private var appliedBase: CameraPose?
+  private var appliedGaze: FirstPersonCamera.Gaze?
   private var appliedRoll = 0.0
   // True once the phone got too hot and stereo fell back to mono.
   private var isDegraded = false
@@ -164,7 +175,8 @@ final class DioramaMapView: ExpoView {
   }
 
   // Back to the pose given by props: drops the orbit angle, and wherever the
-  // head faces now becomes straight ahead.
+  // head faces now becomes straight ahead. You stay where you stand: the
+  // vantage point comes from the props, so only the gaze swings back.
   func recenter() {
     orbitOffset = 0
     headTracker.recenter()
@@ -181,8 +193,14 @@ final class DioramaMapView: ExpoView {
   // Sizes the eyes; overscan (room to turn against roll) only while tracking.
   private func layoutEyes() {
     let maxRoll = headTracker.isRunning ? Self.maxRollDegrees : 0
+    let profile = viewerProfile
     let changed = rig.layout(
-      in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: viewerProfile)
+      in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: profile)
+    // The eye's window through the headset lens decides how far the camera
+    // turns per head degree. Mono is seen through the same lenses.
+    if let window = rig.eyeFrames.first, window.height > 0 {
+      lookGain = profile.lookGain(height: window.height, shownFieldOfView: rig.shownFieldOfView)
+    }
     reportEyeLayout()
     guard changed else { return }
     // Resize the maps first (a map resized after its camera is set moves
@@ -263,9 +281,11 @@ final class DioramaMapView: ExpoView {
 
   // MARK: - Camera
 
-  // This frame's camera: the props, turned by the orbit and the head look.
-  private var liveCamera: CameraPose {
-    var camera = pose.looking(look, sensitivity: trackingSensitivity)
+  // This frame's base camera: the props turned by the orbit. With head
+  // tracking it's where you stand (FirstPersonCamera's vantage point), so
+  // it's the view with the head straight ahead.
+  private var baseCamera: CameraPose {
+    var camera = pose
     camera.heading = CameraPose.normalizedHeading(camera.heading + orbitOffset)
     // MapKit's field of view spans the map's height, so a taller
     // (overscanned) map shows the city bigger. Backing the camera off by the
@@ -274,16 +294,38 @@ final class DioramaMapView: ExpoView {
     return camera
   }
 
+  // Where the head looks this frame, turned from the base camera's gaze, or
+  // nil when not tracking. The pitch stops, smoothly, where MapKit stops
+  // drawing (it caps pitch lower the farther out it looks).
+  private func liveGaze(from firstPerson: FirstPersonCamera) -> FirstPersonCamera.Gaze? {
+    guard headTracker.isRunning else { return nil }
+    let start = firstPerson.base.pitch
+    // Until the map can be asked, don't look up past the start.
+    let steepest = rig.steepestPitch(from: firstPerson) ?? start
+    // A little under MapKit's steepest, but never under a starting pitch it
+    // draws: with the head still you see exactly the starting camera.
+    let upper = max(steepest - Self.pitchCapMargin, min(start, steepest))
+    let limits = CameraPose.pitchRange.lowerBound...max(upper, CameraPose.pitchRange.lowerBound)
+    return firstPerson.gaze(for: look, gain: lookGain * trackingSensitivity, pitchLimits: limits)
+  }
+
   // The head roll to cancel, capped at `maxRollDegrees`.
   private var liveRoll: Double {
     min(max(look.roll, -Self.maxRollDegrees), Self.maxRollDegrees)
   }
 
   private func applyCamera(animated: Bool) {
-    let camera = liveCamera
+    let base = baseCamera
+    let firstPerson = FirstPersonCamera(base: base)
+    let gaze = liveGaze(from: firstPerson)
+    let camera = gaze.map { firstPerson.camera(for: $0) } ?? base
     let roll = liveRoll
-    rig.apply(camera, roll: roll, eyeSeparation: eyeSeparation, animated: animated)
-    appliedCamera = camera
+    // The eyes' spacing follows the base camera's distance from the model
+    // center (fixed while you stand still), not how far away you look.
+    let baseline = StereoGeometry.baseline(distance: base.altitude, eyeSeparation: eyeSeparation)
+    rig.apply(camera, roll: roll, baseline: baseline, animated: animated)
+    appliedBase = base
+    appliedGaze = gaze
     appliedRoll = roll
   }
 
@@ -295,14 +337,25 @@ final class DioramaMapView: ExpoView {
       orbitOffset = (orbitOffset + seconds * Self.orbitDegreesPerSecond)
         .truncatingRemainder(dividingBy: 360)
     }
+    // Read the head and move the cameras in this same frame: no added lag.
     if headTracker.isRunning {
       look = headTracker.update(screen: screenAxes, seconds: seconds)
     }
+    let base = baseCamera
+    let gaze = liveGaze(from: FirstPersonCamera(base: base))
+    let baseMoved = appliedBase.map { !$0.isWithin(Self.minFrameChange, of: base) } ?? true
+    let gazeMoved = !Self.isWithin(Self.minFrameChange, gaze, appliedGaze)
     let rollMoved = abs(liveRoll - appliedRoll) >= Self.minFrameChange
-    if let applied = appliedCamera, applied.isWithin(Self.minFrameChange, of: liveCamera), !rollMoved {
-      return
-    }
+    guard baseMoved || gazeMoved || rollMoved else { return }
     applyCamera(animated: false)
+  }
+
+  // True when two gazes (nil = not tracking) differ by less than `degrees`.
+  private static func isWithin(
+    _ degrees: Double, _ a: FirstPersonCamera.Gaze?, _ b: FirstPersonCamera.Gaze?
+  ) -> Bool {
+    guard let a, let b else { return a == nil && b == nil }
+    return a.isWithin(degrees, of: b)
   }
 
   // Tick while orbiting or following a head, but only once the first render
@@ -389,36 +442,3 @@ final class DioramaMapView: ExpoView {
   }
 }
 
-// MARK: - Head look → camera
-
-extension CameraPose {
-  // Straight down (0) to MapKit's steepest pitch, the same range makeCamera()
-  // allows. MapKit may cap it lower still at high altitudes; it then simply
-  // stops tilting, it doesn't jump.
-  static let pitchRange = 0.0...85.0
-
-  // This pose as seen with a head look: yaw turns the heading, and looking
-  // down tilts the camera toward straight down over the model (pitch 0).
-  // `sensitivity` scales both; roll is handled by rotating the view.
-  func looking(_ look: HeadPose, sensitivity: Double) -> CameraPose {
-    var result = self
-    result.heading = Self.normalizedHeading(heading + look.yaw * sensitivity)
-    let tilted = pitch + look.pitch * sensitivity
-    result.pitch = min(max(tilted, Self.pitchRange.lowerBound), Self.pitchRange.upperBound)
-    return result
-  }
-
-  // Wraps a heading into 0..<360 (MapKit headings are compass degrees).
-  static func normalizedHeading(_ heading: Double) -> Double {
-    let wrapped = heading.truncatingRemainder(dividingBy: 360)
-    return wrapped < 0 ? wrapped + 360 : wrapped
-  }
-
-  // True when `other` differs by less than `degrees` in heading and pitch
-  // and not at all in place or distance: too small a change to redraw for.
-  func isWithin(_ degrees: Double, of other: CameraPose) -> Bool {
-    hasSameCenter(as: other) && altitude == other.altitude
-      && abs(HeadPose.wrapDegrees(heading - other.heading)) < degrees
-      && abs(pitch - other.pitch) < degrees
-  }
-}

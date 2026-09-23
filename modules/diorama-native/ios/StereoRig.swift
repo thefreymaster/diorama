@@ -45,6 +45,9 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // MapKit caps high pitches (the cap depends on the distance). Learned from
   // what it actually drew; see `eyePoses`.
   private var pitchCap: (altitude: Double, pitch: Double)?
+  // The steepest gaze MapKit draws from a vantage point, found by asking it
+  // (see `steepestPitch(from:)`), for the vantage point and map size asked.
+  private var steepestGaze: (key: SteepestPitchKey, pitch: Double)?
 
   var isStereo: Bool { eyes.count == 2 }
 
@@ -107,7 +110,7 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       eye.attributionInsets = Self.attributionInsets(of: frame, clearOf: safeFrame)
     }
     // MapKit's field of view spans the whole (overscanned) map, while the eye
-    // shows only its middle: see DioramaMapView.liveCamera.
+    // shows only its middle: see DioramaMapView.baseCamera.
     distanceScale = drawnSize.height > 0 ? Double(mapSize.height / drawnSize.height) : 1
     focalLength = StereoGeometry.focalLength(mapHeight: mapSize.height)
     return changed
@@ -115,6 +118,12 @@ final class StereoRig: NSObject, MKMapViewDelegate {
 
   // Where each eye sits in the view, left to right (one in mono).
   var eyeFrames: [CGRect] { eyes.map(\.frame) }
+
+  // How many degrees of the city an eye shows from top to bottom (less than
+  // MapKit's 30° when the map is larger than the eye).
+  var shownFieldOfView: Double {
+    StereoGeometry.shownFieldOfView(overscan: distanceScale)
+  }
 
   // How much a stereo eye's picture is shrunk to fit its lens window.
   // MapKit caps the pitch by how zoomed in the map is, which it judges by
@@ -144,11 +153,15 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   }
 
   // Points every eye at `camera` in one go (same frame): in stereo each eye
-  // from its own spot, with its picture warped to match (StereoGeometry).
-  // `roll` is the head roll to cancel, in degrees. Only mono glides:
-  // `animated` would let the two eyes drift apart mid-glide.
-  func apply(_ camera: CameraPose, roll: Double, eyeSeparation: Double, animated: Bool) {
-    let poses = eyePoses(for: camera, roll: roll, eyeSeparation: eyeSeparation)
+  // from its own spot, `baseline` meters apart, with its picture warped to
+  // match (StereoGeometry). The caller picks the baseline from where the
+  // head is, so it stays the same while the gaze moves (with head tracking
+  // the camera's distance changes as you look nearer or farther, but your
+  // eyes don't move apart). `roll` is the head roll to cancel, in degrees.
+  // Only mono glides: `animated` would let the two eyes drift apart
+  // mid-glide.
+  func apply(_ camera: CameraPose, roll: Double, baseline: Double, animated: Bool) {
+    let poses = eyePoses(for: camera, roll: roll, baseline: baseline)
     let glide = animated && !isStereo
     for (eye, pose) in zip(eyes, poses) {
       if eye.appliedCamera != pose.camera {
@@ -204,9 +217,10 @@ final class StereoRig: NSObject, MKMapViewDelegate {
 
   // Each eye's camera and picture warp. MapKit caps high pitches (lower
   // the farther out it is), and a capped eye would no longer match its warp,
-  // so in stereo the whole camera stops tilting at the cap instead.
-  private func eyePoses(for camera: CameraPose, roll: Double, eyeSeparation: Double) -> [EyePose] {
-    let baseline = StereoGeometry.baseline(distance: camera.altitude, eyeSeparation: eyeSeparation)
+  // so in stereo the whole camera stops tilting at the cap instead. (Head
+  // tracking keeps its gaze under the cap in the first place; see
+  // `steepestPitch(from:)`. This is the safety net.)
+  private func eyePoses(for camera: CameraPose, roll: Double, baseline: Double) -> [EyePose] {
     var base = camera
     var poses: [EyePose] = []
     // Twice, because tilting less also changes how far each eye tilts.
@@ -221,6 +235,58 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       base.pitch = max(base.pitch - (steepest - cap.pitch), 0)
     }
     return poses
+  }
+
+  // The steepest gaze pitch MapKit will draw from `firstPerson`'s vantage
+  // point, or nil if the map can't be asked yet (no size, or no camera of
+  // ours on it to put back). MapKit caps pitch by how far out the camera
+  // is, and a gaze from a fixed spot reaches farther the higher it looks,
+  // so the cap comes down as you look up. Rather than find it by hitting it
+  // (T08's `pitchCap`, which shows one mismatched frame), this asks MapKit
+  // up front: it sets trial cameras on the first eye's map, reads back the
+  // pitch MapKit kept, and puts our camera back, all within this one call,
+  // so no trial camera is ever drawn. The trials look at the vantage point's
+  // own model center from the gaze's distance (the cap doesn't depend on
+  // where on the map), so the map never stands a camera on new ground.
+  // Asked once per vantage point and map size.
+  func steepestPitch(from firstPerson: FirstPersonCamera) -> Double? {
+    let key = SteepestPitchKey(
+      latitude: firstPerson.base.center.latitude, longitude: firstPerson.base.center.longitude,
+      eyeHeight: firstPerson.eyeHeight, mapSize: eyes.first?.mapSize ?? .zero)
+    if let steepestGaze, steepestGaze.key == key { return steepestGaze.pitch }
+    guard let eye = eyes.first, eye.window != nil, !eye.mapView.bounds.isEmpty,
+      let ours = eye.appliedCamera
+    else { return nil }
+    let map = eye.mapView
+    // True when MapKit draws the gaze at `pitch` as asked.
+    func accepts(_ pitch: Double) -> Bool {
+      var trial = firstPerson.base
+      trial.pitch = pitch
+      trial.altitude = firstPerson.reach(for: .init(heading: trial.heading, pitch: pitch))
+      map.setCamera(trial.makeCamera(), animated: false)
+      return Double(map.camera.pitch) >= pitch - 0.01
+    }
+    // Try the starting pitch first (MapKit usually draws it, and then it's
+    // found exactly), then halve the gap between a pitch MapKit draws and
+    // one it doesn't until it's under 0.05° (about 10 steps).
+    let range = CameraPose.pitchRange
+    let start = min(max(firstPerson.base.pitch, range.lowerBound), range.upperBound)
+    var drawn = range.lowerBound
+    var capped = range.upperBound
+    UIView.performWithoutAnimation {
+      if accepts(start) { drawn = start } else { capped = start }
+      if capped == range.upperBound, accepts(capped) {
+        drawn = capped
+      } else {
+        while capped - drawn > 0.05 {
+          let middle = (drawn + capped) / 2
+          if accepts(middle) { drawn = middle } else { capped = middle }
+        }
+      }
+      map.setCamera(ours.makeCamera(), animated: false)
+    }
+    steepestGaze = (key, drawn)
+    return drawn
   }
 
   // Remembers MapKit's pitch cap at this distance from what it really drew.
@@ -280,4 +346,13 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     guard let eye = eyes.first(where: { $0.mapView === mapView }) else { return }
     markRendered(eye)
   }
+}
+
+// What `steepestPitch(from:)` depends on: where the vantage point is and how
+// big the maps are.
+private struct SteepestPitchKey: Equatable {
+  var latitude: Double
+  var longitude: Double
+  var eyeHeight: Double
+  var mapSize: CGSize
 }

@@ -17,6 +17,9 @@ struct ViewerProfile {
   // same lenses shows the same picture rather than one that spills past them.
   static let eyeWidth = 38.0
   static let eyeHeight = 31.0
+  // Millimeters from the lenses to the screen. A Cardboard-style viewer
+  // puts the screen about one focal length (~40 mm) behind its lenses.
+  static let defaultLensDistance = 40.0
 
   // The `lensSpacing` prop, in millimeters.
   var lensSpacing: Double
@@ -24,6 +27,8 @@ struct ViewerProfile {
   var pointsPerMillimeter: Double
   // Screen pixels per point, so window edges land on whole pixels.
   var displayScale: CGFloat
+  // Millimeters from the lenses to the screen (not a prop yet).
+  var lensDistance = defaultLensDistance
 
   // The two eye windows, left then right, in a view of `size` that fills the
   // screen: centered on the lenses, vertically centered, never overlapping.
@@ -45,6 +50,26 @@ struct ViewerProfile {
     // screen's center.
     let right = CGRect(x: size.width - left.maxX, y: left.minY, width: width, height: height)
     return [left, right]
+  }
+
+  // How many degrees of your view a picture `height` points tall fills when
+  // seen through a lens: 2 × atan(half its height ÷ the lens distance), both
+  // in millimeters. About 42° for a 31 mm window 40 mm from the lens.
+  func perceivedFieldOfView(height: CGFloat) -> Double {
+    let millimeters = Double(height) / max(pointsPerMillimeter, 0.01)
+    return 2 * atan(millimeters / 2 / max(lensDistance, 1)) * 180 / .pi
+  }
+
+  // How far the camera turns per degree the head turns, so that a head turn
+  // of N° moves the city N° as seen through the lens. A window `height`
+  // points tall shows `shownFieldOfView` degrees of the city (StereoRig) but
+  // fills `perceivedFieldOfView` degrees of your view, which magnifies it by
+  // perceived ÷ shown; the camera turns by the inverse. Scaled on top by the
+  // tracking sensitivity setting (1 = true to life). See FirstPersonCamera.
+  func lookGain(height: CGFloat, shownFieldOfView: Double) -> Double {
+    let perceived = perceivedFieldOfView(height: height)
+    guard perceived > 0, shownFieldOfView > 0 else { return 1 }
+    return shownFieldOfView / perceived
   }
 
   // Rounds a position to the nearest whole screen pixel.

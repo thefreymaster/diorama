@@ -9,15 +9,18 @@ import simd
 //
 // How the two eyes work:
 // 1. The ideal eyes are "parallel": both keep the head-tracked pitch and
-//    heading and sit baseline/2 left and right of the camera, along the
-//    wearer's ear-to-ear line. Each eye's picture is then slid sideways so
-//    the model center lands in the same spot in both eyes (zero parallax).
-//    Buildings rising toward you pop out, the ground beyond sinks in.
+//    heading and sit baseline/2 left and right of the camera's position
+//    (with head tracking, the fixed vantage point; see FirstPersonCamera),
+//    along the wearer's ear-to-ear line. Each eye's picture is then slid
+//    sideways so the point the camera looks at (the model center, or with
+//    head tracking the aim point) lands in the same spot in both eyes (zero
+//    parallax). Buildings rising toward you pop out, the ground beyond
+//    sinks in.
 // 2. MapKit can't draw that directly. It stands every camera on the surface
 //    under the point it looks at, rooftops included, so two eyes looking at
 //    two different points can end up a skyscraper's height apart. So both
-//    MapKit cameras look at the *same* point, the model center, from the
-//    ideal eye positions (a slight "toe-in").
+//    MapKit cameras look at the *same* point, the one the camera looks at,
+//    from the ideal eye positions (a slight "toe-in").
 // 3. A toed-in MapKit camera sees the same rays as the ideal eye in the same
 //    spot, only turned (and MapKit keeps its horizon level, so looking
 //    nearly straight down it turns a lot). The picture of a camera turned in
@@ -46,6 +49,14 @@ enum StereoGeometry {
     distance * baselinePerMeter * eyeSeparation
   }
 
+  // The vertical field of view, in degrees, of the part of the map an eye
+  // shows. MapKit's 30° spans the whole map, but a map larger than its eye
+  // (`overscan` = map height ÷ height shown, 1 = none) shows only its middle.
+  static func shownFieldOfView(overscan: Double) -> Double {
+    let halfAngle = verticalFieldOfView / 2 * .pi / 180
+    return 2 * atan(tan(halfAngle) / max(overscan, 1)) * 180 / .pi
+  }
+
   // MapKit's focal length in points for a map this tall: how many points a
   // one-meter object spans at one meter away.
   static func focalLength(mapHeight: CGFloat) -> Double {
@@ -72,9 +83,11 @@ enum StereoGeometry {
   }
 
   // One eye: the camera MapKit should draw, and how to warp its picture.
-  // `side` is -1 for the left eye, +1 for the right, 0 for mono. `roll` is
-  // the head roll to cancel, in degrees (as in HeadPose). `focal` is the
-  // map's focal length in points.
+  // `base` is the camera between the eyes. `side` is -1 for the left eye,
+  // +1 for the right, 0 for mono. `baseline` is the meters between the eyes
+  // (fixed for a head: see StereoRig.apply). `roll` is the head roll to
+  // cancel, in degrees (as in HeadPose). `focal` is the map's focal length
+  // in points.
   static func eyePose(
     of base: CameraPose, side: Double, baseline: Double, roll: Double, focal: Double
   ) -> EyePose {
@@ -82,8 +95,9 @@ enum StereoGeometry {
     var camera = base
     var drawn = CameraAxes(heading: base.heading, pitch: base.pitch, roll: 0)
     if side != 0, baseline > 0 {
-      // Where the eye sits relative to the model center (meters: east,
-      // north, up), and MapKit's camera from there looking at the center.
+      // Where the eye sits relative to the point the camera looks at
+      // (meters: east, north, up), and MapKit's camera from there looking
+      // at that same point.
       let eye = -base.altitude * ideal.forward + side * baseline / 2 * ideal.right
       let look = simd_normalize(-eye)
       camera.altitude = simd_length(eye)
@@ -91,8 +105,8 @@ enum StereoGeometry {
       camera.heading = CameraPose.normalizedHeading(atan2(look.x, look.y) * 180 / .pi)
       drawn = CameraAxes(heading: camera.heading, pitch: camera.pitch, roll: 0)
     }
-    // Zero parallax: the ideal eye sees the model center (b/2)·focal/distance
-    // points to one side; slide it back to the middle.
+    // Zero parallax: the ideal eye sees the point the camera looks at
+    // (b/2)·focal/distance points to one side; slide it back to the middle.
     let slide = side * baseline / 2 * focal / base.altitude
     return EyePose(camera: camera, picture: picture(from: drawn, to: ideal, focal: focal, slide: slide))
   }

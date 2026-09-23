@@ -179,7 +179,7 @@ Notes: NEEDS DEVICE CHECK — in the headset, do the two windows fuse, and is de
 
 ### T18 Barrel (lens) distortion pre-correction per eye
 Status: todo
-Depends: T22
+Depends: T22, T24
 Files: modules/diorama-native/ios/
 Details: The reference (`docs/reference/cardboard-viewer.png`) pre-distorts each eye with a barrel warp (bulged edges) so straight lines look straight through the viewer's lenses. Start from Cardboard v2 coefficients (k1 = 0.34, k2 = 0.55). The current per-eye picture is a `CAReplicatorLayer` copy with a projective `CATransform3D`, which can't bend lines, and `CAMeshTransform` is private (forbidden). Research first and pick the cheapest public path, e.g. a grid of clipped replicator tiles each with its own local projective transform (piecewise-projective approximation of the warp) vs capturing the map into a Metal texture and warping it with a mesh. Report the cost before building; drop it if fps falls below 50 with stereo and miniature on.
 Acceptance: Simulator screenshots show the reference's bulged-edge eye shape, and the fps budget holds on device. NEEDS DEVICE CHECK — straight lines look straight through a Cardboard lens.

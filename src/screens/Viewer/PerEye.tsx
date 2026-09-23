@@ -4,6 +4,8 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { useStereoEyes, type DioramaStereoEyes } from '@diorama/native';
 import { spacing } from '@/theme';
 
+import { useCircleFit } from './useCircleFit';
+
 // In stereo the native view draws each eye in a circle centered on one of
 // the headset's lenses, and reports the square around it, so a copy centered
 // in each square sits dead ahead of each eye and fuses at the depth of the
@@ -21,12 +23,15 @@ type PerEyeProps = {
 };
 
 /**
- * An overlay that shows its content where each eye looks. It never takes
- * touches, and VoiceOver skips it (the HUD announces itself instead).
+ * An overlay that shows its content where each eye looks, kept inside each
+ * eye's circle. It never takes touches, and VoiceOver skips it (the HUD
+ * announces itself instead).
  */
 export function PerEye({ perEye, children }: PerEyeProps) {
   const windows = useStereoEyes();
   const eyes = perEye ? STEREO_EYES : MONO_EYES;
+  // The copies are identical, so one fit serves both and they always match.
+  const fit = useCircleFit(perEye && windows ? circleDiameter(windows) : null);
 
   return (
     <View
@@ -36,11 +41,18 @@ export function PerEye({ perEye, children }: PerEyeProps) {
     >
       {eyes.map((eye) => (
         <View key={eye} testID={`hud-eye-${eye}`} style={eyeStyle(eye, windows)}>
-          {children}
+          <View testID={`hud-fit-${eye}`} onLayout={fit.onLayout} style={fit.style}>
+            {children}
+          </View>
         </View>
       ))}
     </View>
   );
+}
+
+/** Each eye's circle fills the square the map reports around it. */
+function circleDiameter({ left }: DioramaStereoEyes): number {
+  return Math.min(left.width, left.height);
 }
 
 /** One eye's box: its lens window when known, else its share of the screen. */
@@ -64,10 +76,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.xl,
   },
-  // A lens circle is small (35 mm across by default), so the HUD gets most
-  // of its width.
+  // The circle's own fit (`useCircleFit`) keeps the HUD clear of its edge.
   window: {
     position: 'absolute',
-    paddingHorizontal: spacing.sm,
   },
 });

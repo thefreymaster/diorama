@@ -10,21 +10,27 @@ type CountdownHudProps = {
 
 /**
  * "3 / Put on your viewer / Hold anywhere to exit", for the HUD's glass
- * tile. Text grows with Dynamic Type, but only as far as still fits in one
- * eye's lens window; the hint wraps there rather than widen the tile.
+ * tile. Compact, like a system HUD, so it fits inside a round eye window at
+ * full size. Text grows with Dynamic Type up to a cap; past what the circle
+ * holds, the eye's fit (`useCircleFit`) wraps it and then shrinks it.
  */
 export function CountdownHud({ secondsLeft }: CountdownHudProps) {
   return (
     <View style={styles.stack}>
       <Text
-        variant="largeTitle"
+        variant="title1"
         emphasized
         maxFontSizeMultiplier={MAX_GLYPH_SCALE}
         style={styles.number}
       >
         {String(secondsLeft)}
       </Text>
-      <Text variant="headline" maxFontSizeMultiplier={MAX_GLYPH_SCALE} style={styles.center}>
+      <Text
+        variant="subheadline"
+        emphasized
+        maxFontSizeMultiplier={MAX_GLYPH_SCALE}
+        style={styles.center}
+      >
         {COUNTDOWN_TITLE}
       </Text>
       <Text

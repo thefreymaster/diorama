@@ -36,9 +36,10 @@ export function HudGlass({ kind, visible, children }: HudGlassProps) {
 }
 
 const styles = StyleSheet.create({
+  // Snug, so the countdown fits a 35-mm eye circle at full size.
   tile: {
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderRadius: TILE_RADIUS,
   },
   capsule: {

@@ -38,6 +38,7 @@ import * as IndexRoute from '../../../../app/index';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
+import { CIRCLE_MARGIN } from '../useCircleFit';
 import { EXIT_HOLD_DRIFT, EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../ViewerGestures';
 
 const mockRecenter = jest.fn(() => Promise.resolve());
@@ -96,6 +97,11 @@ const EXIT = { name: 'Exit' };
 const EYES: DioramaStereoEyes = {
   left: { x: 133.33, y: 70, width: 199, height: 253 },
   right: { x: 519.67, y: 70, width: 199, height: 253 },
+};
+// T26's default 35-mm eye circles there (211.3 pt), as the squares around them.
+const CIRCLES: DioramaStereoEyes = {
+  left: { x: 127.19, y: 90.86, width: 211.28, height: 211.28 },
+  right: { x: 513.53, y: 90.86, width: 211.28, height: 211.28 },
 };
 
 type HudLook = { opacity: number; transform: unknown };
@@ -211,6 +217,28 @@ function tagOf(testId: string): number {
   return getByGestureTestId(testId).handlerTag;
 }
 
+/**
+ * Plays layout for one eye's copy of the HUD at its natural `width` ×
+ * `height`, and returns how far its corners reach from the eye's center
+ * once it's been fitted, and where that center is.
+ */
+function layOutHud(eye: 'left' | 'right', width: number, height: number) {
+  const fit = screen.getByTestId(`hud-fit-${eye}`, HIDDEN);
+  act(() => fireEvent(fit, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width, height } } }));
+  const style = StyleSheet.flatten(screen.getByTestId(`hud-fit-${eye}`, HIDDEN).props.style);
+  const [{ scale }] = style.transform as [{ scale: number }];
+  const box = StyleSheet.flatten(screen.getByTestId(`hud-eye-${eye}`, HIDDEN).props.style);
+  return {
+    reach: Math.hypot(width / 2, height / 2) * scale,
+    center: {
+      x: Number(box.left) + Number(box.width) / 2,
+      y: Number(box.top) + Number(box.height) / 2,
+    },
+    centered: box.alignItems === 'center' && box.justifyContent === 'center',
+    scale,
+  };
+}
+
 async function holdToExit() {
   await nextGestureCallbacks();
   // Async, so the preview it lands on can settle inside act.
@@ -285,6 +313,41 @@ describe('viewer', () => {
     wait(3000);
     await doubleTap();
     expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(2);
+  });
+
+  it('keeps every HUD inside each eye circle', async () => {
+    mockStereoEyes = CIRCLES;
+    await openViewer();
+    finishLoading();
+    const eyeCenter = (rect: DioramaRect) => ({
+      x: rect.x + rect.width / 2,
+      y: rect.y + rect.height / 2,
+    });
+    const fitsCircle = (eye: 'left' | 'right', width: number, height: number) => {
+      const rect = CIRCLES[eye];
+      const hud = layOutHud(eye, width, height);
+      // Centered on the eye, and every corner clear of the circle's edge.
+      expect(hud.centered).toBe(true);
+      expect(hud.center.x).toBeCloseTo(eyeCenter(rect).x, 5);
+      expect(hud.center.y).toBeCloseTo(eyeCenter(rect).y, 5);
+      expect(hud.reach).toBeLessThanOrEqual(rect.width / 2 - CIRCLE_MARGIN + 1e-9);
+      return hud.scale;
+    };
+
+    // The countdown with its hint. At the size it used to come to (194 ×
+    // 142 pt, corners about 15 pt past the circle), it shrinks to fit...
+    expect(screen.getAllByText(COUNTDOWN_HINT, HIDDEN)).toHaveLength(2);
+    for (const eye of ['left', 'right'] as const) expect(fitsCircle(eye, 194, 142)).toBeLessThan(1);
+    // ...and compact, as it's now laid out, it fits at full size, as does
+    // the tallest it gets at the largest text sizes, shrunk.
+    for (const eye of ['left', 'right'] as const) expect(fitsCircle(eye, 158, 104)).toBe(1);
+    for (const eye of ['left', 'right'] as const) fitsCircle(eye, 169, 230);
+
+    // "Recentered" on its capsule.
+    wait(3000);
+    await doubleTap();
+    expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(2);
+    for (const eye of ['left', 'right'] as const) expect(fitsCircle(eye, 152, 44)).toBe(1);
   });
 
   it('draws the HUD once in mono', async () => {

@@ -132,11 +132,12 @@ Details: Profile with Instruments (Core Animation FPS, GPU, Energy) on a device.
 Acceptance: 10 minutes in stereo without reaching `.critical` on an iPhone 15-class device. Record the numbers in Notes.
 
 ### T16 Tests
-Status: in-progress
+Status: done
 Depends: T03, T05
 Files: src/**/__tests__/, jest.setup.ts
 Details: Jest is set up in T01. Add tests for the stores, query hooks (with the native module mocked), curated list integrity, and routes (each path renders its screen, using `renderRouter` from `expo-router/testing-library`). Add pure-TS tests for any math that lives in TS.
 Acceptance: `npm test` is green.
+Notes: Coverage of target code 93%→98% statements (features, providers, theme 100%; ui 100% lines). `jest.setup.ts` points expo-router testing-library's reanimated mock at the real Reanimated, so `useReducedMotion` works under `renderRouter`. Dev routes tested to redirect when `__DEV__` is false. Found a bug: malformed persisted recents crashed `getRecent()`, fixed as a T03 follow-up.
 
 ### T17 App icon, launch screen, TestFlight
 Status: todo

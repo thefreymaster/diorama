@@ -134,6 +134,44 @@ describe('native calls', () => {
     await expect(request).rejects.toThrow('Search aborted');
   });
 
+  it('autocomplete rejects at once for a signal that has already aborted', async () => {
+    mockNative.autocomplete.mockReturnValue(new Promise(() => {}));
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(autocomplete('Pa', { signal: controller.signal })).rejects.toThrow(
+      'Search aborted',
+    );
+  });
+
+  it('autocomplete passes Swift errors through when it has a signal', async () => {
+    const superseded = Object.assign(new Error('A newer search replaced this one'), {
+      code: 'ERR_SEARCH_SUPERSEDED',
+    });
+    mockNative.autocomplete.mockRejectedValue(superseded);
+
+    const request = autocomplete('Pa', { signal: new AbortController().signal });
+
+    await expect(request).rejects.toBe(superseded);
+  });
+
+  it('autocomplete keeps its answer when the signal aborts afterwards', async () => {
+    mockNative.autocomplete.mockResolvedValue([PARIS_COMPLETION]);
+    const controller = new AbortController();
+
+    const request = autocomplete('Par', { signal: controller.signal });
+    await expect(request).resolves.toEqual([PARIS_COMPLETION]);
+    controller.abort();
+
+    await expect(request).resolves.toEqual([PARIS_COMPLETION]);
+  });
+
+  it('resolve passes Swift errors through', async () => {
+    mockNative.resolve.mockRejectedValue(new Error('No place found'));
+
+    await expect(resolve('Nowhere\u001f')).rejects.toThrow('No place found');
+  });
+
   it('autocomplete still answers when its signal never aborts', async () => {
     mockNative.autocomplete.mockResolvedValue([PARIS_COMPLETION]);
 

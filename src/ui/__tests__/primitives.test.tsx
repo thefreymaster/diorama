@@ -1,11 +1,29 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  isHiddenFromAccessibility,
+  render,
+  screen,
+} from '@testing-library/react-native';
+import { SymbolView } from 'expo-symbols';
+import { ScrollView, Text as NativeText } from 'react-native';
 
 import * as ui from '..';
 import { UIGalleryScreen } from '../dev/UIGalleryScreen';
+import { GlassButton } from '../GlassButton';
 import { InsetGroupedSection } from '../InsetGroupedSection';
 import { ListRow } from '../ListRow';
 import { PrimaryButton } from '../PrimaryButton';
+import { RowPositionContext, useRowPosition } from '../rowPosition';
+import { RowSeparator } from '../RowSeparator';
+import { Screen } from '../Screen';
 import { SkeletonRow } from '../SkeletonRow';
+import { SymbolIcon } from '../SymbolIcon';
+
+/** Shows what its section told it about its position. */
+function PositionProbe({ label }: { label: string }) {
+  const { isFirst } = useRowPosition();
+  return <NativeText>{`${label}: ${isFirst ? 'first' : 'after another row'}`}</NativeText>;
+}
 
 describe('ListRow', () => {
   it('is a button when tappable and calls onPress', () => {
@@ -42,6 +60,106 @@ describe('InsetGroupedSection', () => {
     expect(screen.getByText('Paris')).toBeOnTheScreen();
     expect(screen.getByText('Rome')).toBeOnTheScreen();
     expect(screen.getByLabelText('Loading')).toBeOnTheScreen();
+  });
+});
+
+describe('row separators', () => {
+  it('tells only the first visible row it is first, skipping rows left out with null', () => {
+    const showHidden = false as boolean;
+    render(
+      <InsetGroupedSection>
+        {showHidden ? <PositionProbe label="Hidden" /> : null}
+        <PositionProbe label="Paris" />
+        <PositionProbe label="Rome" />
+        <PositionProbe label="Tokyo" />
+      </InsetGroupedSection>,
+    );
+
+    expect(screen.getByText('Paris: first')).toBeOnTheScreen();
+    expect(screen.getByText('Rome: after another row')).toBeOnTheScreen();
+    expect(screen.getByText('Tokyo: after another row')).toBeOnTheScreen();
+  });
+
+  it('draws a line above a row only when another row sits above it', () => {
+    const first = render(<RowSeparator />);
+    expect(first.toJSON()).toBeNull();
+
+    const later = render(
+      <RowPositionContext value={{ isFirst: false }}>
+        <RowSeparator />
+      </RowPositionContext>,
+    );
+    expect(later.toJSON()).not.toBeNull();
+  });
+
+  it('leaves out the header and footer when there are none', () => {
+    render(
+      <InsetGroupedSection>
+        <ListRow title="Paris" />
+      </InsetGroupedSection>,
+    );
+
+    expect(screen.queryByRole('header')).toBeNull();
+    expect(screen.getByText('Paris')).toBeOnTheScreen();
+  });
+});
+
+describe('SymbolIcon', () => {
+  it('hides decorative symbols from VoiceOver and names meaningful ones', () => {
+    render(
+      <>
+        <SymbolIcon name="chevron.right" />
+        <SymbolIcon name="location.fill" accessibilityLabel="Current location" />
+      </>,
+    );
+
+    const [decorative, meaningful] = screen.UNSAFE_getAllByType(SymbolView);
+    expect(isHiddenFromAccessibility(decorative!)).toBe(true);
+    expect(isHiddenFromAccessibility(meaningful!)).toBe(false);
+    expect(screen.getByRole('image', { name: 'Current location' })).toBeOnTheScreen();
+  });
+});
+
+describe('GlassButton', () => {
+  it('names a symbol-only button with its accessibility label', () => {
+    const onPress = jest.fn();
+    render(<GlassButton symbol="xmark" accessibilityLabel="Close" onPress={onPress} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('names a labelled button with its title', () => {
+    render(<GlassButton title="Recenter" symbol="scope" onPress={() => {}} />);
+
+    expect(screen.getByRole('button', { name: 'Recenter' })).toBeOnTheScreen();
+  });
+});
+
+describe('Screen', () => {
+  // Automatic insets let the native header collapse its large title on scroll.
+  it('scrolls under the header by default', () => {
+    render(
+      <Screen>
+        <NativeText>Content</NativeText>
+      </Screen>,
+    );
+
+    expect(screen.UNSAFE_getByType(ScrollView).props).toMatchObject({
+      contentInsetAdjustmentBehavior: 'automatic',
+    });
+  });
+
+  it('does not scroll for full-bleed screens', () => {
+    render(
+      <Screen scroll={false}>
+        <NativeText>Map</NativeText>
+      </Screen>,
+    );
+
+    expect(screen.UNSAFE_queryByType(ScrollView)).toBeNull();
+    expect(screen.getByText('Map')).toBeOnTheScreen();
   });
 });
 

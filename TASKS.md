@@ -47,11 +47,12 @@ Acceptance: A Simulator build compiles. `diorama://dev/map` shows Manhattan in 3
 Notes: NEEDS DEVICE CHECK — orbit smoothness and heat on `diorama://dev/map?orbit=1`. MapKit gives no reliable Flyover signal, so `flyoverAvailable` comes from `modules/diorama-native/src/flyoverCoverage.ts` (61 cities checked by screenshot; Dubai and Mexico City are flat only). `altitude` = camera-to-center distance (`centerCoordinateDistance`). Add new props in `DioramaMapView.types.ts` + a `Prop` in `DioramaNativeModule.swift`; `FrameTicker` is reusable for T07.
 
 ### T05 Native city search (MKLocalSearchCompleter)
-Status: todo
+Status: done
 Depends: T03, T04, T06
 Files: modules/diorama-native/ios/DioramaSearch*.swift, modules/diorama-native/src/search.ts, src/features/cities/queries.ts, app/dev/search.tsx
 Details: Async functions `autocomplete(query): Promise<Completion[]>` (restricted to cities and address results) and `resolve(completionId): Promise<City>` (name, country, lat, lon, suggested altitude from region span). TS hooks: `useCitySearch(query)` (debounced, `enabled: query.length > 1`, `placeholderData: keepPreviousData`) and `useCity(cityId)` (resolves curated or recent cities from the local cache without a network call). Add a dev-only route `app/dev/search.tsx` with a text field and a results list for checking.
 Acceptance: A Simulator build compiles. In `diorama://dev/search`, typing "Par" returns Paris within about 300 ms. `useCity` works offline for curated cities (Jest test with the native module mocked).
+Notes: "Par" → Paris 193–256 ms after last keystroke in the Simulator (debounce 100 ms). Resolved ids are `slug_lat_lon` (e.g. `paris_48.857_2.351`); suggested altitude ≈ place width / 12, clamped 800–3000 m. Filter = localities + neighborhoods + regions (Tokyo is filed as a prefecture); each query gets its own completer, newer cancels older. For T10: `useResolveCity().mutate(id)` → `addRecent` → navigate (the resolved city is already in the `useCity` cache); completions carry `titleHighlights`. NEEDS DEVICE CHECK — search latency on cellular; on iOS 16/17 street addresses also appear (no locality filter there).
 
 ### T06 Curated Flyover city list
 Status: done

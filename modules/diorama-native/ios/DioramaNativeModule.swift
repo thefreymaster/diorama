@@ -1,11 +1,26 @@
 import ExpoModulesCore
 
 // The module's public surface, like an `index.ts` for native code. It lists
-// what JS can use: the <DioramaMapView> component, its props, its events and
-// the methods available on its ref. The TS types live in ../src.
+// what JS can use: the city search functions, the <DioramaMapView>
+// component, its props, its events and the methods available on its ref.
+// The TS types live in ../src.
 public class DioramaNativeModule: Module {
+  // One search service for the whole app, like a module-level singleton in JS.
+  private let search = DioramaSearch()
+
   public func definition() -> ModuleDefinition {
     Name("DioramaNative")
+
+    // `autocomplete(query)` in src/search.ts: Apple Maps suggestions for
+    // cities and addresses. A newer call rejects the older one.
+    AsyncFunction("autocomplete") { (query: String, promise: Promise) in
+      self.search.autocomplete(query, promise: promise)
+    }.runOnQueue(.main)
+
+    // `resolve(completionId)` in src/search.ts: one suggestion → a place.
+    AsyncFunction("resolve") { (completionId: String, promise: Promise) in
+      self.search.resolve(completionId, promise: promise)
+    }.runOnQueue(.main)
 
     // requireNativeView('DioramaNative') in JS renders this view.
     View(DioramaMapView.self) {

@@ -123,11 +123,12 @@ Notes: Preview card with the Miniature slider directly under it (like Display & 
 ## Phase 3 — Polish and ship
 
 ### T14 Apple polish pass
-Status: in-progress
+Status: done
 Depends: T10, T11, T12, T13
 Files: src/**, app/**
 Details: Check Dynamic Type at XXL, VoiceOver labels and hints, Reduce Motion (turns off orbit and spring overshoot), dark mode, and haptics consistency. Also check copy and SF Symbol weights against the text weight. Confirm settings changes apply live in the Viewer. Confirm the `app/dev/*` routes redirect outside `__DEV__`.
 Acceptance: A checklist in the task Notes with every item ticked.
+Notes: Checklist: [x] VoiceOver (labels/hints/roles, rows as one element, Viewer Recenter/Exit actions + hint, failed-open announcement; tested) [x] Reduce Motion (one live `useReduceMotion` in `@/theme`; orbit off in Preview/Settings, verified by pixel diff; no spring bounce; HUD fade only) [x] Shared hooks in `src/features/map/`; `ControlRow`/`ToggleRow`/destructive `ListRow`/haptics in `@/ui` [x] Dynamic Type XXL + AX5 (rows wrap, value moves under title at AX sizes, buttons/HUD capped) [x] Dark mode [x] Haptics (selection rows, light Enter/Recenter/Reset, medium Exit) [x] Copy [x] SF Symbol weights [x] Settings apply live in Viewer [x] Dev routes redirect outside `__DEV__` [x] T02 separators match iOS 26 Settings exactly (72→369.7 pt, 1 pt) [x] T03 no hairline at rest [x] T06 framings (Sydney, Chicago retuned) [x] T10–T13 screens in light/dark. Fixed: HUD Liquid Glass not drawn under animated opacity, preview title drawn over map, terrain note clipped to 0 height, `?q=` links not syncing the search field. Open: T19, T20, T21. NEEDS DEVICE CHECK — spoken VoiceOver pass, haptic feel, live Reduce Motion toggle, HUD glass on a real iPhone.
 
 ### T15 Performance and thermals
 Status: todo

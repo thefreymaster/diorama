@@ -21,14 +21,14 @@ Acceptance: `npm run typecheck && npm run lint && npm test` pass. `npx expo preb
 Notes: Expo SDK 57 (RN 0.86.3, React 19.2.3, TS 6.0); iOS target 16.4 is the SDK default. `typecheck` regenerates typed routes first (`expo customize tsconfig.json`). @testing-library/react-native pinned to 13.3.x (expo-router's `renderRouter` breaks on v14); `jest.setup.ts` mocks worklets/nitro, MMKV uses its in-memory fallback. `.gitignore` anchors `/ios` so `modules/diorama-native/ios/` stays tracked. After a fresh install, the first `simctl openurl` shows an "Open in 'Diorama'?" alert: press its "Open" button via System Events AXPress.
 
 ### T02 Theme tokens and Apple-style UI primitives
-Status: todo
+Status: in-progress
 Depends: T01
 Files: src/theme/, src/ui/, app/dev/ui.tsx
 Details: Tokens use iOS system colors via `PlatformColor` (label, secondaryLabel, systemBackground, secondarySystemGroupedBackground, systemBlue, separator…), the iOS type ramp (largeTitle…caption2, Dynamic Type friendly), and spacing (4-pt grid). Primitives: `Screen`, `InsetGroupedSection`, `ListRow` (with SF Symbol + chevron), `SkeletonRow`, `PrimaryButton` (capsule, filled), `GlassButton` (expo-blur material), `Symbol` (wrapper for expo-symbols). No large-title header or search field primitives: the native stack header provides those (`headerLargeTitle`, `headerSearchBarOptions`). Each primitive gets its own file and stays under ~80 lines.
 Acceptance: A dev-only route `app/dev/ui.tsx` (open with `diorama://dev/ui`; it redirects to `/` outside `__DEV__`) renders every primitive. Simulator screenshots look right in light and dark mode. Typecheck passes.
 
 ### T03 Providers: navigation stack, query client, stores
-Status: todo
+Status: in-progress
 Depends: T01
 Files: app/_layout.tsx, app/index.tsx, app/city/[cityId].tsx, app/view/[cityId].tsx, app/settings.tsx, src/providers/, src/screens/, src/features/settings/store.ts, src/features/cities/recentsStore.ts
 Details: The root `Stack` in `app/_layout.tsx` is wrapped in providers from `src/providers/`: `GestureHandlerRootView`, and a `QueryClientProvider` (staleTime 5 min). Routes: `app/index.tsx` → CityPicker, `app/city/[cityId].tsx` → CityPreview, `app/view/[cityId].tsx` → Viewer (presentation `fullScreenModal`, no header), `app/settings.tsx` → Settings. Each route file only renders its screen from `src/screens/<Name>/`; use placeholder screens for now. Native stack options: large title on the picker, `orientation: 'portrait'` by default, and landscape only on the Viewer. Zustand stores persisted with `react-native-mmkv`: settings (eyeSeparation 1.0, trackingSensitivity 1.0, miniatureIntensity 0.6, mode 'stereo', debugLook false) and recents (max 8).
@@ -37,11 +37,12 @@ Acceptance: `diorama://settings`, `diorama://city/paris` and `diorama://view/par
 ## Phase 1 — Native module (Swift)
 
 ### T04 Expo Module skeleton + mono DioramaMapView
-Status: todo
+Status: done
 Depends: T01
 Files: modules/diorama-native/**, app/dev/map.tsx
 Details: Scaffold with `npx create-expo-module --local diorama-native`. It's interactive: if flags can't skip the prompts, write the module files by hand (expo-module.config.json, podspec, Swift, TS index). Add a native view `DioramaMapView` that wraps one `MKMapView` using `MKImageryMapConfiguration(elevationStyle: .realistic)`, with no POIs, no compass or scale, and interaction off. Props: center, altitude, pitch, heading, orbit. Apply them through `MKMapCamera`. Emit `onReady({ flyoverAvailable })` when the first full render finishes (`mapViewDidFinishRenderingMap` with fullyRendered). Infer `flyoverAvailable` from the 3D camera actually being accepted, or from a curated list if that's unreliable. Write a typed TS wrapper and a `ref` with `recenter()`. Comment the Swift for a React developer. The dev-only route `app/dev/map.tsx` (redirects to `/` outside `__DEV__`) reads optional `lat`, `lon`, `altitude`, `pitch`, `heading` search params and defaults to Manhattan.
 Acceptance: A Simulator build compiles. `diorama://dev/map` shows Manhattan in 3D photoreal at altitude 1200 m, pitch 60° (check the screenshot). Changing props from JS moves the camera. `orbit` rotates slowly.
+Notes: NEEDS DEVICE CHECK — orbit smoothness and heat on `diorama://dev/map?orbit=1`. MapKit gives no reliable Flyover signal, so `flyoverAvailable` comes from `modules/diorama-native/src/flyoverCoverage.ts` (61 cities checked by screenshot; Dubai and Mexico City are flat only). `altitude` = camera-to-center distance (`centerCoordinateDistance`). Add new props in `DioramaMapView.types.ts` + a `Prop` in `DioramaNativeModule.swift`; `FrameTicker` is reusable for T07.
 
 ### T05 Native city search (MKLocalSearchCompleter)
 Status: todo

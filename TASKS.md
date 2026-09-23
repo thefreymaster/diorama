@@ -21,11 +21,13 @@ Acceptance: `npm run typecheck && npm run lint && npm test` pass. `npx expo preb
 Notes: Expo SDK 57 (RN 0.86.3, React 19.2.3, TS 6.0); iOS target 16.4 is the SDK default. `typecheck` regenerates typed routes first (`expo customize tsconfig.json`). @testing-library/react-native pinned to 13.3.x (expo-router's `renderRouter` breaks on v14); `jest.setup.ts` mocks worklets/nitro, MMKV uses its in-memory fallback. `.gitignore` anchors `/ios` so `modules/diorama-native/ios/` stays tracked. After a fresh install, the first `simctl openurl` shows an "Open in 'Diorama'?" alert: press its "Open" button via System Events AXPress.
 
 ### T02 Theme tokens and Apple-style UI primitives
-Status: in-progress
+Status: done
 Depends: T01
 Files: src/theme/, src/ui/, app/dev/ui.tsx
 Details: Tokens use iOS system colors via `PlatformColor` (label, secondaryLabel, systemBackground, secondarySystemGroupedBackground, systemBlue, separator…), the iOS type ramp (largeTitle…caption2, Dynamic Type friendly), and spacing (4-pt grid). Primitives: `Screen`, `InsetGroupedSection`, `ListRow` (with SF Symbol + chevron), `SkeletonRow`, `PrimaryButton` (capsule, filled), `GlassButton` (expo-blur material), `Symbol` (wrapper for expo-symbols). No large-title header or search field primitives: the native stack header provides those (`headerLargeTitle`, `headerSearchBarOptions`). Each primitive gets its own file and stays under ~80 lines.
 Acceptance: A dev-only route `app/dev/ui.tsx` (open with `diorama://dev/ui`; it redirects to `/` outside `__DEV__`) renders every primitive. Simulator screenshots look right in light and dark mode. Typecheck passes.
+Notes: SF Symbol wrapper is `SymbolIcon`: a component named `Symbol` shadows the global the React Compiler calls (`Symbol.for`). `GlassButton`/`GlassSurface` use Liquid Glass (expo-glass-effect) on iOS 26 with an expo-blur fallback; `Text` primitive has Dynamic Type variants. 52-pt rows / 26-pt corners match iOS 26 Settings (pixel-checked). Follow-up being fixed: large title invisible on `dev/ui`, separator insets/thickness. NEEDS DEVICE CHECK — glass reacts to touch; Reduce Motion stops skeleton pulse.
+
 
 ### T03 Providers: navigation stack, query client, stores
 Status: in-progress
@@ -52,7 +54,7 @@ Details: Async functions `autocomplete(query): Promise<Completion[]>` (restricte
 Acceptance: A Simulator build compiles. In `diorama://dev/search`, typing "Par" returns Paris within about 300 ms. `useCity` works offline for curated cities (Jest test with the native module mocked).
 
 ### T06 Curated Flyover city list
-Status: todo
+Status: in-progress
 Depends: T01, T04
 Files: src/features/cities/curated.ts, src/features/cities/__tests__/curated.test.ts
 Details: About 20 cities known to have Apple 3D Flyover (New York, San Francisco, Chicago, London, Paris, Rome, Barcelona, Tokyo, Sydney, Las Vegas, Seattle, Boston, Berlin, Venice, Florence, Prague, Vancouver, Miami, Los Angeles, Dubai). Each entry has id, name, country, coordinates of a landmark-dense center, default altitude, pitch, heading, and an SF Symbol or accent for its row.

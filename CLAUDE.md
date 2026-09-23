@@ -1,0 +1,28 @@
+# Diorama
+
+A stereoscopic "tiny model city" iOS app. React Native (Expo dev client) with a small Swift Expo Module around Apple MapKit.
+
+Read these first:
+- @OVERVIEW.md: product, research findings, architecture, code rules, and the "made by Apple" bar.
+- @TASKS.md: the task list. It's the source of truth for what to do next.
+
+## Workflow
+
+Run two terminals on the Mac:
+
+1. **Planner terminal.** `/add-task <description>` adds a well-formed task to TASKS.md.
+2. **Cycle terminal.** Start it with `claude --model sonnet`, then run `/begin-cycle`. The orchestrator (a cheap model) picks ready tasks and sends each one to the `implementer` subagent (Opus). It then verifies the work, commits, and loops.
+
+## Rules for everyone
+
+- TypeScript strict. No prop drilling: use zustand stores and TanStack Query hooks. Routing goes through react-router.
+- Put every per-frame job (motion, camera, stereo) in Swift. Put all UI and flow in React.
+- The owner knows React, not Swift. Keep Swift small, commented, and exposed only through typed props/events/functions in `modules/diorama-native/src`.
+- Always re-read TASKS.md right before you edit it. Another terminal may have changed it. Edit only the lines you need.
+- Commit after each finished task: `T07: head tracking (native)`.
+
+## Commands
+
+- `npm run typecheck`, `npm run lint`, `npm test`
+- `npx expo prebuild -p ios` (after native or config changes)
+- `npx expo run:ios` (Simulator: no gyro, use debugLook) / `npx expo run:ios --device` (real motion)

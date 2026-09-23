@@ -154,11 +154,12 @@ Acceptance: The build uploads to TestFlight.
 Notes: Prep done and verified: isometric city-block icon (Icon Composer layers + flat fallback), light/dark splash marks, `appleTeamId` 3U62R986E5, buildNumber 1, iPhone only, `ITSAppUsesNonExemptEncryption` false. An unsigned Release archive builds (JS bundle embedded, icon compiled into Assets.car). BLOCKED ON OWNER — create the App Store Connect record for `com.ejf.diorama`, then archive and upload in Xcode, or hand the orchestrator an App Store Connect API key (see `docs/testflight.md`). Bump `ios.buildNumber` for every upload.
 
 ### T20 Viewer loading cover lifts before both eyes are ready
-Status: in-progress
+Status: done
 Depends: T08, T12
 Files: modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/ios/StereoRig.swift
 Details: Found in the T14 visual pass: on a first, uncached visit (e.g. the retuned Sydney framing), the Viewer's black cover lifted and the city was visible for ~6 s with no countdown; `onReady` (and so the countdown) came later. The cover must stay up until the same moment `onReady` fires (both eyes fully rendered, or the 10-s fallback), so the cover, countdown and tracking start stay in sync. Reproduce cold with a cleared tile cache if possible.
 Acceptance: On 5 cold first visits to uncached cities, the cover lifts at the same moment the countdown starts (Simulator screenshots/frame capture). Stereo alignment unchanged.
+Notes: Stereo never lifted early (the cover and `onReady` already shared one code path); the gap was in mono and in a stereo view falling back to mono while loading, where the city showed 0.7–1.7 s before `onReady`. Now the cover depends only on readiness in every mode and lifts in the same update that sends `onReady` (measured 0 ms; JS countdown 2–8 ms later). Stereo fades over 0.3 s; mono lifts instantly, so the preview/Settings reveals are unchanged. The 1.5× zoom fix still holds. NEEDS DEVICE CHECK — with Stereo on and off, entering an unopened city stays black until the city and "3" appear together.
 
 ### T21 Keep MapKit attribution legible under the miniature blur
 Status: blocked

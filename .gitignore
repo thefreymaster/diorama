@@ -46,3 +46,6 @@ yarn-error.*
 
 # Claude Code
 .claude/settings.local.json
+
+# Agent worktrees (full repo copies)
+.claude/worktrees/

@@ -8,7 +8,7 @@ module.exports = defineConfig([
   // Runs Prettier as a lint rule and turns off stylistic rules that fight it.
   prettierRecommended,
   {
-    ignores: ['dist/*', 'ios/*', 'android/*', '.expo/*', 'expo-env.d.ts'],
+    ignores: ['dist/*', 'ios/*', 'android/*', '.expo/*', '.claude/*', 'expo-env.d.ts'],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],

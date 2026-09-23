@@ -11,5 +11,7 @@ module.exports = {
   },
   // Watchman can hang in sandboxed shells; the node crawler is plenty for this repo.
   watchman: false,
-  testPathIgnorePatterns: ['/node_modules/', '/ios/', '/android/', '/.expo/'],
+  testPathIgnorePatterns: ['/node_modules/', '/ios/', '/android/', '/.expo/', '/.claude/'],
+  // Agent worktrees under .claude/worktrees/ hold full copies of the repo.
+  modulePathIgnorePatterns: ['<rootDir>/.claude/'],
 };

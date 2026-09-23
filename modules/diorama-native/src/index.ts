@@ -18,16 +18,23 @@ export type {
 export { useStereoEyes } from './eyeLayoutStore';
 export { FLYOVER_AREAS, distanceKm, hasFlyover, type FlyoverArea } from './flyoverCoverage';
 export {
+  PLACE_ALTITUDES,
   SEARCH_SUPERSEDED,
   SUGGESTED_ALTITUDE_RANGE,
   autocomplete,
+  completionKind,
   isSearchSuperseded,
   placeId,
+  placeKind,
+  placeSubtitle,
   resolve,
   suggestedAltitude,
+  toCompletion,
   toResolvedCity,
   type Completion,
+  type NativeCompletion,
   type NativePlace,
+  type PlaceKind,
   type ResolvedCity,
   type TextRange,
 } from './search';

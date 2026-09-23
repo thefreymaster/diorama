@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { autocomplete, resolve } from '@diorama/native';
+import { autocomplete, resolve, type PlaceKind } from '@diorama/native';
 
 import { getCuratedCity, type CuratedCity } from './curated';
 import { getRecent, type RecentCity } from './recentsStore';
@@ -84,7 +84,8 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 /**
- * Apple Maps suggestions for what the user is typing. Searches
+ * Apple Maps suggestions (cities, addresses, places) for what the user is
+ * typing, each with its `kind`. Searches
  * `SEARCH_DEBOUNCE_MS` after the last keystroke, and only for 2+ characters.
  * While a new query loads, the previous results stay (`isPlaceholderData`).
  * Deleting down to 0–1 characters clears the results at once.
@@ -106,19 +107,28 @@ export function useCitySearch(query: string) {
   });
 }
 
+/** A resolved search suggestion: a `City`, plus what kind of place it is. */
+export type ResolvedPlace = City & {
+  /** Decides whether it may stand for a featured city (only cities can). */
+  kind: PlaceKind;
+};
+
 /**
- * Turns a search suggestion into a `City` (call `mutate(completion.id)`).
- * The result is cached for `useCity`, so its route renders at once. To keep
- * it across launches, pass it to `addRecent` before navigating.
+ * Turns a search suggestion (a city, an address or a place) into a `City`
+ * (call `mutate(completion.id)`). The result is cached for `useCity`, so its
+ * route renders at once. To keep it across launches, pass it to `addRecent`
+ * before navigating.
  */
 export function useResolveCity() {
   const queryClient = useQueryClient();
   return useMutation({
     // `resolve` returns a RecentCity-shaped place; this adds the camera.
-    mutationFn: async (completionId: string): Promise<City> =>
-      withDefaultCamera(await resolve(completionId)),
-    onSuccess: (city) => {
-      queryClient.setQueryData(cityKeys.detail(city.id), city);
+    mutationFn: async (completionId: string): Promise<ResolvedPlace> => {
+      const place = await resolve(completionId);
+      return { ...withDefaultCamera(place), kind: place.kind };
+    },
+    onSuccess: (place) => {
+      queryClient.setQueryData(cityKeys.detail(place.id), withDefaultCamera(place));
     },
   });
 }

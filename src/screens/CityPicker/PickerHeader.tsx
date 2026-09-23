@@ -19,7 +19,7 @@ export function PickerHeader() {
     <>
       <Stack.SearchBar
         ref={searchBarRef}
-        placeholder="Search for a city"
+        placeholder="Search for a city or place"
         autoCapitalize="words"
         // Searching is what this screen is for: keep the field in reach.
         hideWhenScrolling={false}

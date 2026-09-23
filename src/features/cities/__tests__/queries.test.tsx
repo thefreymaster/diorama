@@ -25,7 +25,7 @@ const mockAutocomplete = jest.mocked(autocomplete);
 const mockResolve = jest.mocked(resolve);
 
 function completion(title: string, subtitle: string): Completion {
-  return { id: `${title}\u001f${subtitle}`, title, subtitle, titleHighlights: [] };
+  return { id: `${title}\u001f${subtitle}`, title, subtitle, titleHighlights: [], kind: 'city' };
 }
 
 const PARIS = completion('Paris', 'France');
@@ -127,19 +127,43 @@ describe('useCity', () => {
 
 describe('useResolveCity', () => {
   it('resolves a suggestion into a City that useCity can find', async () => {
-    const resolved: ResolvedCity = { ...HOBOKEN };
+    const resolved: ResolvedCity = { ...HOBOKEN, kind: 'city' };
     mockResolve.mockResolvedValue(resolved);
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useResolveCity(), { wrapper });
 
     act(() => result.current.mutate('Hoboken\u001fNJ, United States'));
 
-    await waitFor(() => expect(result.current.data).toEqual({ ...HOBOKEN, ...DEFAULT_CAMERA }));
+    await waitFor(() =>
+      expect(result.current.data).toEqual({ ...HOBOKEN, ...DEFAULT_CAMERA, kind: 'city' }),
+    );
     expect(mockResolve).toHaveBeenCalledWith('Hoboken\u001fNJ, United States');
     // Not in recents, but cached for the route it navigates to.
     const cached = renderHook(() => useCity(HOBOKEN.id), { wrapper });
     expect(cached.result.current.data).toEqual({ ...HOBOKEN, ...DEFAULT_CAMERA });
     expect(getRecents()).toEqual([]);
+  });
+
+  it('resolves an address the same way, keeping its kind and close camera', async () => {
+    const city: RecentCity = {
+      id: '1-infinite-loop_37.332_-122.030',
+      name: '1 Infinite Loop',
+      country: 'Cupertino, United States',
+      lat: 37.331656,
+      lon: -122.030143,
+      altitude: 700,
+    };
+    const address: ResolvedCity = { ...city, kind: 'address' };
+    mockResolve.mockResolvedValue(address);
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useResolveCity(), { wrapper });
+
+    act(() => result.current.mutate('1 Infinite Loop\u001fCupertino, CA, United States'));
+
+    await waitFor(() => expect(result.current.data?.kind).toBe('address'));
+    expect(result.current.data).toEqual({ ...city, ...DEFAULT_CAMERA, kind: 'address' });
+    const cached = renderHook(() => useCity(address.id), { wrapper });
+    expect(cached.result.current.data).toEqual({ ...city, ...DEFAULT_CAMERA });
   });
 
   it('reports a failed resolve and caches nothing', async () => {

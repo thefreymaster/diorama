@@ -1,14 +1,17 @@
 import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { SEARCH_DEBOUNCE_MS, useCitySearch, useResolveCity } from '@/features/cities/queries';
 import { colors, metrics, spacing, typeRamp } from '@/theme';
+import { KIND_SYMBOLS } from '@/screens/CityPicker/searchSections';
+import { useOpenSearchResult } from '@/screens/CityPicker/useOpenSearchResult';
 import { InsetGroupedSection, ListRow, Screen, Text } from '@/ui';
 
 type SearchParams = {
   q?: string;
   resolve?: string;
+  open?: string;
 };
 
 /** Starts timing now; call the result to report the elapsed ms. Handlers and effects only. */
@@ -18,14 +21,17 @@ function startStopwatch(report: (ms: number) => void): () => void {
 }
 
 /**
- * Dev-only city search check: diorama://dev/search?q=Par&resolve=1
+ * Dev-only place search check: diorama://dev/search?q=Par&resolve=1
  *
- * Type in the field (or pass `q`) to list Apple Maps suggestions, with the
- * time from the last keystroke to the results. `q` searches at once; typing
- * adds the debounce. Tap a suggestion, or pass `resolve=1` to resolve the
- * first one, to see the resolved City as JSON. `resolve=<completion id>`
- * (e.g. `Tokyo%1FJapan`) resolves an id Swift hasn't seen, through its
- * text-search fallback.
+ * Type in the field (or pass `q`) to list Apple Maps suggestions in Apple's
+ * order, each with its kind (city, address or place), and the time from
+ * the last keystroke to the results. `q` searches at once; typing adds the
+ * debounce. Tap a suggestion, or pass `resolve=1` to resolve the first one,
+ * to see the resolved City (and its settled kind) as JSON.
+ * `resolve=<completion id>` (e.g. `Tokyo%1FJapan`) resolves an id Swift
+ * hasn't seen, through its text-search fallback. `open=1` opens the first
+ * suggestion exactly as tapping it in the picker would (Recent, then the
+ * preview): diorama://dev/search?q=1%20infinite%20loop&open=1
  */
 export default function DevSearchRoute() {
   const params = useLocalSearchParams<SearchParams>();
@@ -59,6 +65,16 @@ export default function DevSearchRoute() {
     resolveCompletion(autoResolveId, { onSuccess: startStopwatch(setResolveMs) });
   }, [resolveIdle, autoResolveId, resolveCompletion]);
 
+  // `open=1`: open the first suggestion once, through the picker's own code.
+  const { open: openInPicker } = useOpenSearchResult();
+  const opened = useRef(false);
+  const firstCompletion = settled ? completions[0] : undefined;
+  useEffect(() => {
+    if (params.open !== '1' || opened.current || !firstCompletion) return;
+    opened.current = true;
+    openInPicker(firstCompletion);
+  }, [params.open, firstCompletion, openInPicker]);
+
   if (!__DEV__) return <Redirect href="/" />;
 
   // From the last keystroke to the results arriving from Swift. Negative
@@ -73,7 +89,7 @@ export default function DevSearchRoute() {
 
   return (
     <Screen background="grouped">
-      <Stack.Screen options={{ title: 'City search' }} />
+      <Stack.Screen options={{ title: 'Place search' }} />
       <View style={styles.field}>
         <TextInput
           value={query}
@@ -116,7 +132,8 @@ export default function DevSearchRoute() {
               key={completion.id}
               title={completion.title}
               subtitle={completion.subtitle}
-              value={resolving && resolvingId === completion.id ? 'Resolving…' : undefined}
+              symbol={KIND_SYMBOLS[completion.kind]}
+              value={resolving && resolvingId === completion.id ? 'Resolving…' : completion.kind}
               onPress={() => startResolve(completion.id)}
             />
           ))}

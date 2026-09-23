@@ -21,6 +21,8 @@ export type FlyoverArea = {
 export const FLYOVER_AREAS: readonly FlyoverArea[] = [
   { name: 'New York', latitude: 40.7549, longitude: -73.984, radiusKm: 30 },
   { name: 'San Francisco', latitude: 37.7946, longitude: -122.3999, radiusKm: 25 },
+  // Silicon Valley: checked downtown San Jose, Cupertino and Palo Alto.
+  { name: 'San Jose', latitude: 37.3382, longitude: -121.8863, radiusKm: 30 },
   { name: 'Los Angeles', latitude: 34.0522, longitude: -118.2551, radiusKm: 40 },
   { name: 'Chicago', latitude: 41.8826, longitude: -87.6233, radiusKm: 30 },
   { name: 'Boston', latitude: 42.3555, longitude: -71.0605, radiusKm: 20 },

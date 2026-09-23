@@ -1,7 +1,7 @@
 import ExpoModulesCore
 import MapKit
 
-// The shapes city search sends to JS. A `Record` is Expo's typed version of
+// The shapes place search sends to JS. A `Record` is Expo's typed version of
 // a plain JS object: each `@Field` becomes the key with the same name. The
 // matching TS types live in ../src/search.ts.
 
@@ -20,37 +20,51 @@ struct TextRangeRecord: Record {
 }
 
 // One as-you-type suggestion, e.g. { title: "Paris", subtitle: "France" }.
-// JS passes `id` back to `resolve()` (see `Completion` in search.ts).
+// JS passes `id` back to `resolve()` (see `NativeCompletion` in search.ts).
 struct CompletionRecord: Record {
   @Field var id: String = ""
   @Field var title: String = ""
   @Field var subtitle: String = ""
   @Field var titleHighlights: [TextRangeRecord] = []
+  // In Apple's city list (cities, neighborhoods, regions). JS files the
+  // rest under places. Before iOS 18 that list has street addresses too.
+  @Field var isCity: Bool = false
 
   init() {}
 
-  init(id: String, completion: MKLocalSearchCompletion) {
+  init(id: String, completion: MKLocalSearchCompletion, isCity: Bool) {
     self.id = id
     title = completion.title
     subtitle = completion.subtitle
     titleHighlights = completion.titleHighlightRanges.map { TextRangeRecord($0.rangeValue) }
+    self.isCity = isCity
   }
 }
 
-// A resolved place: where it is and how big it is. TS turns this into a
-// city (URL id, camera altitude from the span); see `NativePlace` in search.ts.
+// A resolved place: where it is, how big it is and what kind of place it
+// is. TS turns this into a city (URL id, subtitle, camera altitude); see
+// `NativePlace` in search.ts.
 struct PlaceRecord: Record {
+  // "Paris", "1 Infinite Loop", "Eiffel Tower".
   @Field var name: String = ""
   @Field var country: String = ""
+  // The town it's in ("Cupertino"). For a city, often its own name. Empty
+  // when Apple gives none.
+  @Field var locality: String = ""
   @Field var latitude: Double = 0
   @Field var longitude: Double = 0
   // Size of the place in degrees (north–south, east–west).
   @Field var latitudeDelta: Double = 0
   @Field var longitudeDelta: Double = 0
+  // Apple's category for a landmark or business, e.g. "MKPOICategoryLandmark".
+  // Empty for a street address or a city.
+  @Field var category: String = ""
+  // It was suggested as a city (see DioramaSearch.resolve). False when unknown.
+  @Field var isCity: Bool = false
 
   init() {}
 
-  init(item: MKMapItem, region: MKCoordinateRegion, fallbackName: String) {
+  init(item: MKMapItem, region: MKCoordinateRegion, fallbackName: String, isCity: Bool) {
     // iOS 26 replaced `placemark` with `location` and `addressRepresentations`.
     // Both give the same answers; the check just avoids the deprecated API.
     if #available(iOS 26.0, *) {
@@ -58,14 +72,18 @@ struct PlaceRecord: Record {
       longitude = item.location.coordinate.longitude
       name = item.name ?? item.addressRepresentations?.cityName ?? fallbackName
       country = item.addressRepresentations?.regionName ?? ""
+      locality = item.addressRepresentations?.cityName ?? ""
     } else {
       latitude = item.placemark.coordinate.latitude
       longitude = item.placemark.coordinate.longitude
       name = item.name ?? item.placemark.locality ?? fallbackName
       country = item.placemark.country ?? ""
+      locality = item.placemark.locality ?? ""
     }
     latitudeDelta = region.span.latitudeDelta
     longitudeDelta = region.span.longitudeDelta
+    category = item.pointOfInterestCategory?.rawValue ?? ""
+    self.isCity = isCity
   }
 }
 
@@ -83,13 +101,13 @@ final class SearchSupersededException: Exception, @unchecked Sendable {
 
 final class SearchTimeoutException: Exception, @unchecked Sendable {
   override var reason: String {
-    "City search took too long"
+    "Place search took too long"
   }
 }
 
 final class SearchFailedException: GenericException<String>, @unchecked Sendable {
   override var reason: String {
-    "City search failed: \(param)"
+    "Place search failed: \(param)"
   }
 }
 

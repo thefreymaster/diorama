@@ -4,6 +4,7 @@ import { useCitySearch } from '@/features/cities/queries';
 import { InsetGroupedSection, ListRow, SkeletonRow } from '@/ui';
 
 import { PickerMessage } from './PickerMessage';
+import { KIND_SYMBOLS, searchSections } from './searchSections';
 import { openFailedMessage, useOpenSearchResult } from './useOpenSearchResult';
 import { usePickerQuery } from './usePickerQuery';
 
@@ -11,9 +12,10 @@ import { usePickerQuery } from './usePickerQuery';
 const SKELETON_ROWS = 3;
 
 /**
- * Apple Maps suggestions for the search text, with the matched letters in
- * bold. Shows skeleton rows until the first results arrive; after that, the
- * last results stay put while the next ones load.
+ * Apple Maps suggestions for the search text in "Cities" and "Places"
+ * sections, with the matched letters in bold. Shows skeleton rows until the
+ * first results arrive; after that, the last results stay put while the
+ * next ones load.
  */
 export function SearchResults() {
   const { query } = usePickerQuery();
@@ -51,20 +53,29 @@ export function SearchResults() {
     );
   }
 
-  const failed = completions.find((completion) => completion.id === failedId);
-
   return (
-    <InsetGroupedSection footer={failed ? openFailedMessage(failed.title) : undefined}>
-      {completions.map((completion) => (
-        <ListRow
-          key={completion.id}
-          title={completion.title}
-          titleHighlights={completion.titleHighlights}
-          subtitle={completion.subtitle}
-          symbol="mappin.and.ellipse"
-          onPress={() => open(completion)}
-        />
-      ))}
-    </InsetGroupedSection>
+    <>
+      {searchSections(completions).map((section) => {
+        const failed = section.completions.find((completion) => completion.id === failedId);
+        return (
+          <InsetGroupedSection
+            key={section.key}
+            title={section.title}
+            footer={failed ? openFailedMessage(failed.title) : undefined}
+          >
+            {section.completions.map((completion) => (
+              <ListRow
+                key={completion.id}
+                title={completion.title}
+                titleHighlights={completion.titleHighlights}
+                subtitle={completion.subtitle}
+                symbol={KIND_SYMBOLS[completion.kind]}
+                onPress={() => open(completion)}
+              />
+            ))}
+          </InsetGroupedSection>
+        );
+      })}
+    </>
   );
 }

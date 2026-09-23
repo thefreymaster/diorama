@@ -1,9 +1,16 @@
 import * as Haptics from 'expo-haptics';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { SymbolView } from 'expo-symbols';
 import { AccessibilityInfo } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import { autocomplete, resolve, type Completion, type ResolvedCity } from '@diorama/native';
+import {
+  autocomplete,
+  resolve,
+  type Completion,
+  type PlaceKind,
+  type ResolvedCity,
+} from '@diorama/native';
 
 import {
   addRecent,
@@ -42,7 +49,7 @@ const routes = {
   settings: SettingsRoute,
 };
 
-const HOBOKEN: ResolvedCity & RecentCity = {
+const HOBOKEN: RecentCity = {
   id: 'hoboken_40.744_-74.032',
   name: 'Hoboken',
   country: 'United States',
@@ -51,13 +58,50 @@ const HOBOKEN: ResolvedCity & RecentCity = {
   altitude: 800,
 };
 
-function completion(title: string, subtitle: string, matched = 0): Completion {
+/** Hoboken as `resolve()` returns it: the recents fields plus its kind. */
+const HOBOKEN_RESOLVED: ResolvedCity = { ...HOBOKEN, kind: 'city' };
+
+/** A street address as it's kept in Recent. */
+const INFINITE_LOOP: RecentCity = {
+  id: '1-infinite-loop_37.332_-122.030',
+  name: '1 Infinite Loop',
+  country: 'Cupertino, United States',
+  lat: 37.331656,
+  lon: -122.030143,
+  altitude: 700,
+};
+
+function completion(
+  title: string,
+  subtitle: string,
+  matched = 0,
+  kind: PlaceKind = 'city',
+): Completion {
   return {
     id: `${title}\u001f${subtitle}`,
     title,
     subtitle,
     titleHighlights: matched > 0 ? [{ start: 0, length: matched }] : [],
+    kind,
   };
+}
+
+function sectionHeaders(): string[] {
+  return screen.getAllByRole('header').map((header) => header.props.children);
+}
+
+const RESULT_SYMBOLS: readonly string[] = [
+  'mappin.and.ellipse',
+  'mappin.circle.fill',
+  'building.2.fill',
+];
+
+/** The leading glyph of each result row, top to bottom. */
+function resultSymbols(): string[] {
+  return screen
+    .UNSAFE_getAllByType(SymbolView)
+    .map((symbol) => String(symbol.props.name))
+    .filter((name) => RESULT_SYMBOLS.includes(name));
 }
 
 /** A promise the test settles by hand, to hold a native call "in flight". */
@@ -241,7 +285,7 @@ describe('city picker, opening a search result', () => {
 
   it('resolves it, adds it to Recent, then shows the preview', async () => {
     mockAutocomplete.mockResolvedValue([HOBOKEN_RESULT]);
-    mockResolve.mockResolvedValue(HOBOKEN);
+    mockResolve.mockResolvedValue(HOBOKEN_RESOLVED);
     const router = renderRouter(routes, { initialUrl: '/?q=hob' });
 
     fireEvent.press(await screen.findByText('NJ, United States'));
@@ -263,6 +307,7 @@ describe('city picker, opening a search result', () => {
       lat: 48.8566,
       lon: 2.3522,
       altitude: 1500,
+      kind: 'city',
     });
     const router = renderRouter(routes, { initialUrl: '/?q=par' });
 
@@ -288,7 +333,7 @@ describe('city picker, opening a search result', () => {
     expect(mockResolve).toHaveBeenCalledTimes(1);
     expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
 
-    await act(async () => pending.settle(HOBOKEN));
+    await act(async () => pending.settle(HOBOKEN_RESOLVED));
     expect(router.getPathname()).toBe(`/city/${HOBOKEN.id}`);
   });
 
@@ -316,9 +361,139 @@ describe('city picker, opening a search result', () => {
 
     fireEvent.press(await screen.findByText('NJ, United States'));
     act(() => pressSettingsButton());
-    await act(async () => pending.settle(HOBOKEN));
+    await act(async () => pending.settle(HOBOKEN_RESOLVED));
 
     expect(router.getPathname()).toBe('/settings');
     expect(getRecents()).toEqual([]);
+  });
+});
+
+describe('city picker, cities and places', () => {
+  it('lists cities and places in their own sections, each kind with its own icon', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('Paris', 'France', 3),
+      completion('Park St', 'Revere, MA, United States', 3, 'address'),
+      completion('The Paramount', '44 Charles St, Boston, MA  02114, United States', 0, 'place'),
+      completion('Parma', 'Italy', 3),
+    ]);
+    renderRouter(routes, { initialUrl: '/?q=par' });
+
+    expect(await screen.findByText('Italy')).toBeOnTheScreen();
+    expect(sectionHeaders()).toEqual(['Cities', 'Places']);
+    // Parma joins Paris among the cities; the address, then the place, follow.
+    expect(resultSymbols()).toEqual([
+      'mappin.and.ellipse',
+      'mappin.and.ellipse',
+      'mappin.circle.fill',
+      'building.2.fill',
+    ]);
+    const [firstMatch] = screen.getAllByText('Par');
+    expect(firstMatch).toHaveStyle({ fontWeight: '600' });
+  });
+
+  it('still leads with Paris under Cities when Apple ranks a nearby station first', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('Park Street Station', 'Boston, MA, United States', 3, 'address'),
+      completion('Paris', 'France', 3),
+    ]);
+    renderRouter(routes, { initialUrl: '/?q=par' });
+
+    expect(await screen.findByText('France')).toBeOnTheScreen();
+    expect(sectionHeaders()).toEqual(['Cities', 'Places']);
+    expect(resultSymbols()[0]).toBe('mappin.and.ellipse');
+  });
+
+  it('leads with Places when a landmark matches as well and Apple ranks it first', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('Eiffel Tower', '5 Avenue Anatole France, 75007 Paris, France', 12, 'place'),
+      completion('Eiffel Tower', 'Varachha, Surat, Gujarat, India', 12),
+    ]);
+    renderRouter(routes, { initialUrl: '/?q=eiffel%20tower' });
+
+    expect(await screen.findByText('Varachha, Surat, Gujarat, India')).toBeOnTheScreen();
+    expect(sectionHeaders()).toEqual(['Places', 'Cities']);
+  });
+
+  it('shows only Places for a street address', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('1 Infinite Loop', 'Cupertino, CA, United States', 15, 'address'),
+    ]);
+    renderRouter(routes, { initialUrl: '/?q=1%20infinite%20loop' });
+
+    expect(await screen.findByText('Cupertino, CA, United States')).toBeOnTheScreen();
+    expect(sectionHeaders()).toEqual(['Places']);
+    expect(resultSymbols()).toEqual(['mappin.circle.fill']);
+  });
+
+  it('says which place failed to open, under Places', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('Paris', 'France', 3),
+      completion('The Paramount', '44 Charles St, Boston, MA  02114, United States', 0, 'place'),
+    ]);
+    mockResolve.mockRejectedValue(new Error('MKErrorDomain error 4'));
+    renderRouter(routes, { initialUrl: '/?q=par' });
+
+    fireEvent.press(await screen.findByText('The Paramount'));
+
+    expect(await screen.findByText("Couldn't open The Paramount. Try again.")).toBeOnTheScreen();
+  });
+});
+
+describe('city picker, opening an address or a place', () => {
+  const INFINITE_LOOP_RESULT = completion(
+    '1 Infinite Loop',
+    'Cupertino, CA, United States',
+    15,
+    'address',
+  );
+
+  it('resolves an address, adds it to Recent, then shows its preview', async () => {
+    mockAutocomplete.mockResolvedValue([INFINITE_LOOP_RESULT]);
+    mockResolve.mockResolvedValue({ ...INFINITE_LOOP, kind: 'address' });
+    const router = renderRouter(routes, { initialUrl: '/?q=1%20infinite%20loop' });
+
+    fireEvent.press(await screen.findByText('Cupertino, CA, United States'));
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(mockResolve).toHaveBeenCalledWith(INFINITE_LOOP_RESULT.id);
+    expect(router.getPathname()).toBe(`/city/${INFINITE_LOOP.id}`);
+    // Kept like any city (the kind isn't stored), with its close camera.
+    expect(getRecents()).toEqual([INFINITE_LOOP]);
+  });
+
+  it('reopens an address from Recent with nothing cached and no search', async () => {
+    addRecent(INFINITE_LOOP);
+    const router = renderRouter(routes, { initialUrl: '/' });
+
+    expect(await screen.findByText('Cupertino, United States')).toBeOnTheScreen();
+    fireEvent.press(screen.getByText('1 Infinite Loop'));
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe(`/city/${INFINITE_LOOP.id}`);
+    expect(screen.queryByText('City not found')).toBeNull();
+    expect(mockResolve).not.toHaveBeenCalled();
+  });
+
+  it('never swaps a place for the featured city it shares a name with', async () => {
+    const bistro: ResolvedCity = {
+      id: 'paris_48.858_2.294',
+      name: 'Paris',
+      country: 'Paris, France',
+      lat: 48.8583,
+      lon: 2.2945,
+      altitude: 900,
+      kind: 'place',
+    };
+    mockAutocomplete.mockResolvedValue([
+      completion('Paris', '5 Avenue Anatole France, 75007 Paris, France', 5, 'place'),
+    ]);
+    mockResolve.mockResolvedValue(bistro);
+    const router = renderRouter(routes, { initialUrl: '/?q=paris' });
+
+    fireEvent.press(await screen.findByText('5 Avenue Anatole France, 75007 Paris, France'));
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe(`/city/${bistro.id}`);
+    expect(getRecents().map((city) => city.id)).toEqual([bistro.id]);
   });
 });

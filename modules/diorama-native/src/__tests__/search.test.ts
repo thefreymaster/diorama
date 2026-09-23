@@ -1,17 +1,23 @@
 import {
+  PLACE_ALTITUDES,
   SUGGESTED_ALTITUDE_RANGE,
   autocomplete,
+  completionKind,
   isSearchSuperseded,
   placeId,
+  placeKind,
+  placeSubtitle,
   resolve,
   suggestedAltitude,
+  toCompletion,
   toResolvedCity,
   type Completion,
+  type NativeCompletion,
   type NativePlace,
 } from '../search';
 
 const mockNative = {
-  autocomplete: jest.fn<Promise<Completion[]>, [string]>(),
+  autocomplete: jest.fn<Promise<NativeCompletion[]>, [string]>(),
   resolve: jest.fn<Promise<NativePlace>, [string]>(),
 };
 
@@ -20,13 +26,50 @@ jest.mock('expo', () => ({
   requireNativeModule: () => mockNative,
 }));
 
+// What Swift sends for real suggestions and places (checked against Apple
+// Maps on iOS 26).
 const PARIS: NativePlace = {
   name: 'Paris',
   country: 'France',
+  locality: 'Paris',
   latitude: 48.85661234567,
   longitude: 2.35222198765,
   latitudeDelta: 0.087,
   longitudeDelta: 0.246,
+  category: '',
+  isCity: true,
+};
+
+const INFINITE_LOOP: NativePlace = {
+  name: '1 Infinite Loop',
+  country: 'United States',
+  locality: 'Cupertino',
+  latitude: 37.331656,
+  longitude: -122.0301426,
+  latitudeDelta: 0.009,
+  longitudeDelta: 0.0113,
+  category: '',
+  isCity: false,
+};
+
+const EIFFEL_TOWER: NativePlace = {
+  name: 'Eiffel Tower',
+  country: 'France',
+  locality: 'Paris',
+  latitude: 48.8582583,
+  longitude: 2.2944877,
+  latitudeDelta: 0.0057,
+  longitudeDelta: 0.0087,
+  category: 'MKPOICategoryLandmark',
+  isCity: false,
+};
+
+const NATIVE_PARIS_COMPLETION: NativeCompletion = {
+  id: 'Paris\u001fFrance',
+  title: 'Paris',
+  subtitle: 'France',
+  titleHighlights: [{ start: 0, length: 3 }],
+  isCity: true,
 };
 
 const PARIS_COMPLETION: Completion = {
@@ -34,6 +77,7 @@ const PARIS_COMPLETION: Completion = {
   title: 'Paris',
   subtitle: 'France',
   titleHighlights: [{ start: 0, length: 3 }],
+  kind: 'city',
 };
 
 beforeEach(() => {
@@ -90,10 +134,109 @@ describe('suggestedAltitude', () => {
   it('uses the closest distance for bad input', () => {
     expect(suggestedAltitude({ latitude: 0, latitudeDelta: NaN, longitudeDelta: 1 })).toBe(min);
   });
+
+  it('frames an address or a place a block or two away, whatever its box', () => {
+    expect(suggestedAltitude(INFINITE_LOOP, 'address')).toBe(PLACE_ALTITUDES.address);
+    expect(suggestedAltitude(EIFFEL_TOWER, 'place')).toBe(PLACE_ALTITUDES.place);
+    // Mount Fuji's box is ~20 km: a city that big would get 1.5 km.
+    const fuji = { latitude: 35.36, latitudeDelta: 0.19, longitudeDelta: 0.2 };
+    expect(suggestedAltitude(fuji, 'place')).toBe(PLACE_ALTITUDES.place);
+    for (const altitude of Object.values(PLACE_ALTITUDES)) {
+      expect(altitude).toBeGreaterThanOrEqual(600);
+      expect(altitude).toBeLessThanOrEqual(900);
+    }
+  });
+
+  it('keeps the span rule for cities', () => {
+    expect(suggestedAltitude(PARIS, 'city')).toBe(suggestedAltitude(PARIS));
+  });
+});
+
+describe('completionKind', () => {
+  it('trusts the city list', () => {
+    expect(completionKind({ isCity: true, subtitle: 'France' })).toBe('city');
+    // Some towns come with a postcode.
+    expect(completionKind({ isCity: true, subtitle: '13730 Saint-Victoret, France' })).toBe('city');
+  });
+
+  it('tells a landmark or business (it has a street address) from a street', () => {
+    expect(
+      completionKind({ isCity: false, subtitle: '5 Avenue Anatole France, 75007 Paris, France' }),
+    ).toBe('place');
+    expect(
+      completionKind({
+        isCity: false,
+        subtitle: '88 Ames St, Cambridge, MA  02142, United States',
+      }),
+    ).toBe('place');
+    expect(completionKind({ isCity: false, subtitle: 'Cupertino, CA, United States' })).toBe(
+      'address',
+    );
+  });
+
+  it('adds the kind in place of the city flag', () => {
+    expect(toCompletion(NATIVE_PARIS_COMPLETION)).toEqual(PARIS_COMPLETION);
+    expect(
+      toCompletion({
+        id: '1 Infinite Loop\u001fCupertino, CA, United States',
+        title: '1 Infinite Loop',
+        subtitle: 'Cupertino, CA, United States',
+        titleHighlights: [],
+        isCity: false,
+      }),
+    ).toMatchObject({ kind: 'address' });
+  });
+});
+
+describe('placeKind', () => {
+  it('reads a point-of-interest category as a place', () => {
+    expect(placeKind(EIFFEL_TOWER)).toBe('place');
+    // Even when the suggestion looked like a street ("Golden Gate Bridge").
+    expect(placeKind({ ...INFINITE_LOOP, category: 'MKPOICategoryLandmark' })).toBe('place');
+  });
+
+  it('trusts a city suggestion, neighborhoods included', () => {
+    expect(placeKind(PARIS)).toBe('city');
+    expect(
+      placeKind({ name: 'Central Park', locality: 'New York', category: '', isCity: true }),
+    ).toBe('city');
+  });
+
+  it('works out the rest from the address: its own name inside a town is an address', () => {
+    expect(placeKind(INFINITE_LOOP)).toBe('address');
+    // Resolved from text (no suggestion to go by), or on iOS 17.
+    expect(placeKind({ ...PARIS, isCity: false })).toBe('city');
+    expect(placeKind({ ...PARIS, isCity: false, locality: 'PARIS' })).toBe('city');
+    expect(placeKind({ name: 'Tokyo', locality: '', category: '', isCity: false })).toBe('city');
+  });
+});
+
+describe('placeSubtitle', () => {
+  it('is the country for a city', () => {
+    expect(placeSubtitle(PARIS, 'city')).toBe('France');
+  });
+
+  it('is the town and country for an address or a place', () => {
+    expect(placeSubtitle(INFINITE_LOOP, 'address')).toBe('Cupertino, United States');
+    expect(placeSubtitle(EIFFEL_TOWER, 'place')).toBe('Paris, France');
+  });
+
+  it('skips parts that are missing or repeat the name', () => {
+    expect(placeSubtitle({ ...INFINITE_LOOP, locality: '' }, 'address')).toBe('United States');
+    expect(
+      placeSubtitle({ name: 'Monaco City', locality: 'Monaco', country: 'Monaco' }, 'place'),
+    ).toBe('Monaco');
+    expect(
+      placeSubtitle(
+        { name: 'Golden Gate Park', locality: 'Golden Gate Park', country: '' },
+        'place',
+      ),
+    ).toBe('');
+  });
 });
 
 describe('toResolvedCity', () => {
-  it('has the recents fields, a URL id and a suggested altitude', () => {
+  it('has the recents fields, a URL id, a suggested altitude and the kind', () => {
     expect(toResolvedCity(PARIS)).toEqual({
       id: 'paris_48.857_2.352',
       name: 'Paris',
@@ -101,7 +244,32 @@ describe('toResolvedCity', () => {
       lat: 48.856612,
       lon: 2.352222,
       altitude: suggestedAltitude(PARIS),
+      kind: 'city',
     });
+  });
+
+  it('gives a street address the same shape, framed on its block', () => {
+    expect(toResolvedCity(INFINITE_LOOP)).toEqual({
+      id: '1-infinite-loop_37.332_-122.030',
+      name: '1 Infinite Loop',
+      country: 'Cupertino, United States',
+      lat: 37.331656,
+      lon: -122.030143,
+      altitude: PLACE_ALTITUDES.address,
+      kind: 'address',
+    });
+  });
+
+  it('gives a landmark the same shape, with a URL-safe id', () => {
+    const tower = toResolvedCity(EIFFEL_TOWER);
+    expect(tower).toMatchObject({
+      id: 'eiffel-tower_48.858_2.294',
+      name: 'Eiffel Tower',
+      country: 'Paris, France',
+      altitude: PLACE_ALTITUDES.place,
+      kind: 'place',
+    });
+    expect(tower.id).toMatch(/^[a-z0-9._-]+$/);
   });
 });
 
@@ -117,8 +285,8 @@ describe('isSearchSuperseded', () => {
 });
 
 describe('native calls', () => {
-  it('autocomplete passes the query to Swift', async () => {
-    mockNative.autocomplete.mockResolvedValue([PARIS_COMPLETION]);
+  it('autocomplete passes the query to Swift and adds each kind', async () => {
+    mockNative.autocomplete.mockResolvedValue([NATIVE_PARIS_COMPLETION]);
 
     await expect(autocomplete('Par')).resolves.toEqual([PARIS_COMPLETION]);
     expect(mockNative.autocomplete).toHaveBeenCalledWith('Par');
@@ -156,7 +324,7 @@ describe('native calls', () => {
   });
 
   it('autocomplete keeps its answer when the signal aborts afterwards', async () => {
-    mockNative.autocomplete.mockResolvedValue([PARIS_COMPLETION]);
+    mockNative.autocomplete.mockResolvedValue([NATIVE_PARIS_COMPLETION]);
     const controller = new AbortController();
 
     const request = autocomplete('Par', { signal: controller.signal });
@@ -173,7 +341,7 @@ describe('native calls', () => {
   });
 
   it('autocomplete still answers when its signal never aborts', async () => {
-    mockNative.autocomplete.mockResolvedValue([PARIS_COMPLETION]);
+    mockNative.autocomplete.mockResolvedValue([NATIVE_PARIS_COMPLETION]);
 
     const request = autocomplete('Par', { signal: new AbortController().signal });
 
@@ -187,7 +355,16 @@ describe('native calls', () => {
       id: 'paris_48.857_2.352',
       name: 'Paris',
       country: 'France',
+      kind: 'city',
     });
     expect(mockNative.resolve).toHaveBeenCalledWith(PARIS_COMPLETION.id);
+  });
+
+  it('resolve turns a Swift address into the same shape', async () => {
+    mockNative.resolve.mockResolvedValue(INFINITE_LOOP);
+
+    await expect(resolve('1 Infinite Loop\u001fCupertino, CA, United States')).resolves.toEqual(
+      toResolvedCity(INFINITE_LOOP),
+    );
   });
 });

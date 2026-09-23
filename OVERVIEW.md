@@ -27,8 +27,8 @@ An iOS app that shows a real city as a tiny tabletop model. You pick a city, put
 ## Architecture
 
 ```
-React Native (TypeScript, Expo dev client, New Architecture)
-├── react-router (MemoryRouter)  — routing
+React Native (TypeScript, Expo dev client, New Architecture, iOS 16+)
+├── expo-router (native stack)   — file-based routing, typed routes, real swipe-back + large titles
 ├── @tanstack/react-query        — every async/native call (search, flyover availability)
 ├── zustand (+ persist/MMKV)     — settings + recents (no prop drilling)
 ├── expo-symbols, expo-haptics, expo-blur, expo-keep-awake, expo-screen-orientation
@@ -51,6 +51,7 @@ type DioramaMapViewProps = {
   mode: 'mono' | 'stereo';
   eyeSeparation: number;     // multiplier on altitude-derived baseline
   headTracking: boolean;
+  debugLook?: boolean;       // Simulator: drag to look instead of gyro
   trackingSensitivity: number;
   miniatureIntensity: number; // 0..1 tilt-shift + saturation
   orbit: boolean;            // slow auto-rotate (preview screen)
@@ -62,8 +63,11 @@ type DioramaMapViewProps = {
 ### Folder layout (target)
 
 ```
-app/                 # App.tsx, providers, router
-src/routes/          # one folder per screen: CityPicker, CityPreview, Viewer, Settings
+app/                 # expo-router route files only, each a thin wrapper that renders a screen
+                     #   _layout.tsx (root Stack + providers), index.tsx, city/[cityId].tsx,
+                     #   view/[cityId].tsx, settings.tsx, dev/* (dev-only test routes)
+src/providers/       # QueryClient, gesture root, etc. (used by app/_layout.tsx)
+src/screens/         # one folder per screen: CityPicker, CityPreview, Viewer, Settings
 src/features/        # cities (queries, curated list), settings (store), viewer (hooks)
 src/ui/              # small Apple-style primitives (ListRow, Section, GlassButton, …)
 src/theme/           # tokens: system colors, spacing, type ramp
@@ -75,13 +79,13 @@ modules/diorama-native/  # Expo Module (Swift + TS wrapper)
 - TypeScript `strict`. No `any`.
 - Keep components small: one screen is a thin route component plus a few child components. Hooks own the logic.
 - **No prop drilling.** Shared state goes in zustand stores. Server/native async goes through TanStack Query hooks (`useCitySearch`, `useCity`).
-- Routing only through react-router (`useNavigate`, `useParams`). No ad-hoc screen state.
+- Routing only through expo-router (`useRouter`, `useLocalSearchParams`, `<Link>`, typed routes). Route files in `app/` stay thin and render a screen from `src/screens/`. No ad-hoc screen state.
 - Keep Swift minimal, commented for a React developer, and exposed only through typed props, events, and functions.
 
 ## "Made by Apple" bar
 
 - SF Pro via the system font. SF Symbols via `expo-symbols`. System colors that follow light/dark mode. Support Dynamic Type.
-- Large-title navigation feel, inset-grouped lists, materials (blur) in place of flat fills, haptics on meaningful actions.
+- Native stack navigation (expo-router `Stack`): real large titles, header search bar, edge swipe-back. Inset-grouped lists, materials (blur) in place of flat fills, haptics on meaningful actions.
 - Motion: spring animations (Reanimated), no linear fades. Respect Reduce Motion.
 - Copy: short, sentence case, no exclamation marks.
 - Viewer: no chrome. A brief HUD fades in on recenter, then fades out.
@@ -90,10 +94,10 @@ modules/diorama-native/  # Expo Module (Swift + TS wrapper)
 
 1. **Two MKMapViews at 60 fps** is GPU/thermal heavy. Mitigations: cap the frame rate at 30–60, watch `ProcessInfo.thermalState` and drop to mono, pause the orbit.
 2. **Tile streaming mismatch.** Each eye streams its own tiles, so one eye can briefly show different detail than the other. Keep the baseline small relative to the view, and wait for both views to finish rendering before showing the viewer.
-3. **react-router in RN** has no native-stack transitions. Screen transitions are custom Reanimated slides, and the Viewer is presented full screen.
+3. **Orientation.** app.json must say `orientation: "default"`. If it says `portrait`, iOS can never rotate to landscape. Portrait is locked at runtime through native stack screen options, and only the Viewer route (a full-screen modal) allows landscape.
 4. **No roll in MKMapCamera.** Roll is faked by rotating the view, so you need to overscan (make the map views larger than the screen) to hide the corners.
 5. **Headset optics.** Cardboard lenses need barrel distortion correction. That's in the backlog as an optional setting; glasses-style viewers don't need it.
 
 ## Requirements (on the Mac)
 
-Xcode (latest), Node LTS, a paid Apple Developer account for on-device builds and TestFlight, and a physical iPhone to test motion. Build with `npx expo run:ios --device`.
+Xcode (latest), Node LTS, iOS 16+ deployment target, a paid Apple Developer account for on-device builds and TestFlight, and a physical iPhone to test motion. Build with `npx expo run:ios --device`.

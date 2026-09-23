@@ -15,14 +15,16 @@ Run two terminals on the Mac:
 
 ## Rules for everyone
 
-- TypeScript strict. No prop drilling: use zustand stores and TanStack Query hooks. Routing goes through react-router.
+- TypeScript strict. No prop drilling: use zustand stores and TanStack Query hooks. Routing goes through expo-router (file-based, native stack).
 - Put every per-frame job (motion, camera, stereo) in Swift. Put all UI and flow in React.
 - The owner knows React, not Swift. Keep Swift small, commented, and exposed only through typed props/events/functions in `modules/diorama-native/src`.
 - Always re-read TASKS.md right before you edit it. Another terminal may have changed it. Edit only the lines you need.
-- Commit after each finished task: `T07: head tracking (native)`.
+- Commit after each finished task: `T07: head tracking (native)`, then push.
+- Nobody is at the keyboard during a cycle. Never run interactive commands: pass non-interactive flags, or write the files by hand.
 
 ## Commands
 
 - `npm run typecheck`, `npm run lint`, `npm test`
 - `npx expo prebuild -p ios` (after native or config changes)
 - `npx expo run:ios` (Simulator: no gyro, use debugLook) / `npx expo run:ios --device` (real motion)
+- Look at the app without touching it: `xcrun simctl openurl booted "diorama://dev/map"` opens a route, `xcrun simctl io booted screenshot <file>.png` captures the screen (then Read the PNG), `xcrun simctl ui booted appearance dark|light` flips the theme.

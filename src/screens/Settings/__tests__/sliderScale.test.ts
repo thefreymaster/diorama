@@ -72,6 +72,17 @@ describe('Settings sliders', () => {
     expect(position('eyeSeparation', 1)).toBeCloseTo(0.48, 2);
   });
 
+  it("puts a higher camera to the right, with the city's own height near the middle", () => {
+    expect(position('cameraHeight', 0.4)).toBeCloseTo(0);
+    expect(position('cameraHeight', 3)).toBeCloseTo(1);
+    expect(position('cameraHeight', 1)).toBeCloseTo(0.45, 2);
+    // By ratio: half as high is as far left of 1× as twice as high is right.
+    const half = position('cameraHeight', 1) - position('cameraHeight', 0.5);
+    const double = position('cameraHeight', 2) - position('cameraHeight', 1);
+    expect(half).toBeCloseTo(double);
+    expect(SLIDER_SETTINGS.cameraHeight.scale.fromPosition(0.5)).toBeCloseTo(Math.sqrt(1.2));
+  });
+
   it('puts one-to-one tracking in the middle', () => {
     expect(position('trackingSensitivity', 1)).toBeCloseTo(0.5);
   });

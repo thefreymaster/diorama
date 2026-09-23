@@ -3,6 +3,7 @@ import Animated from 'react-native-reanimated';
 
 import { DioramaMapView, type DioramaReadyEvent } from '@diorama/native';
 import type { City } from '@/features/cities/queries';
+import { useCameraAltitude } from '@/features/map/cameraHeight';
 import { useMapReveal } from '@/features/map/useMapReveal';
 import { usePreviewOrbit } from '@/features/map/usePreviewOrbit';
 import { colors } from '@/theme';
@@ -15,10 +16,11 @@ type PreviewMapProps = {
 
 /**
  * The whole screen behind the card: one (mono) photoreal 3D map from the
- * city's own camera, turning slowly. The orbit itself runs natively and
- * only starts once the map has drawn.
+ * city's own camera, at the Camera height set in Settings, turning slowly.
+ * The orbit itself runs natively and only starts once the map has drawn.
  */
 export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
+  const altitude = useCameraAltitude(city.altitude);
   const orbit = usePreviewOrbit();
   const coverStyle = useMapReveal(isReady);
 
@@ -27,7 +29,7 @@ export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
       <DioramaMapView
         style={styles.fill}
         center={{ latitude: city.lat, longitude: city.lon }}
-        altitude={city.altitude}
+        altitude={altitude}
         pitch={city.pitch}
         heading={city.heading}
         orbit={orbit}

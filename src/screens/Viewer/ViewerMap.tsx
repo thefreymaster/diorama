@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 
 import { DioramaMapView, type DioramaMapViewRef } from '@diorama/native';
 import type { City } from '@/features/cities/queries';
+import { useCameraAltitude } from '@/features/map/cameraHeight';
 import { useSettings } from '@/features/settings/store';
 
 type ViewerMapProps = {
@@ -16,11 +17,14 @@ type ViewerMapProps = {
 /**
  * The city, edge to edge: one picture, or one round one per eye in stereo,
  * from the city's own camera and the wearer's Settings, viewer fit included
- * (it places and sizes each eye's circle, live). Head tracking, the eyes and the black
- * cover while they load all run natively.
+ * (it places and sizes each eye's circle, live). Camera height moves where
+ * you stand: the stereo baseline follows the distance, so the depth stays in
+ * proportion. Head tracking, the eyes and the black cover while they load all
+ * run natively.
  */
 export function ViewerMap({ city, headTracking, onReady, onDegraded, ref }: ViewerMapProps) {
   const settings = useSettings();
+  const altitude = useCameraAltitude(city.altitude);
 
   return (
     <DioramaMapView
@@ -28,7 +32,7 @@ export function ViewerMap({ city, headTracking, onReady, onDegraded, ref }: View
       testID="viewer-map"
       style={StyleSheet.absoluteFill}
       center={{ latitude: city.lat, longitude: city.lon }}
-      altitude={city.altitude}
+      altitude={altitude}
       pitch={city.pitch}
       heading={city.heading}
       mode={settings.mode}

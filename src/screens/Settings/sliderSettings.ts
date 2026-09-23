@@ -2,6 +2,7 @@ import type { SFSymbol } from 'expo-symbols';
 
 import {
   SETTING_RANGES,
+  setCameraHeight,
   setEyeSeparation,
   setLensSpacing,
   setMiniatureIntensity,
@@ -56,7 +57,7 @@ type FitSliderConfig = SliderConfig & {
   scale: SteppedScale;
 };
 
-const { eyeSeparation, trackingSensitivity, miniatureIntensity } = SETTING_RANGES;
+const { eyeSeparation, cameraHeight, trackingSensitivity, miniatureIntensity } = SETTING_RANGES;
 const { lensSpacing, windowDiameter } = SETTING_RANGES;
 
 /** Every glyph slider: what it shows and does. */
@@ -71,6 +72,16 @@ export const SLIDER_SETTINGS: Readonly<Record<GlyphSliderSetting, GlyphSliderCon
     minSymbol: { name: 'building.2.fill', size: 13 },
     maxSymbol: { name: 'building.2.fill', size: 22 },
     stereoOnly: true,
+  },
+  cameraHeight: {
+    title: 'Camera height',
+    footer: 'How high above the city you are. Higher views look more straight down.',
+    // By ratio, like Model size, so the city's own framing (1×) sits near
+    // the middle and halving the height is as far left as doubling it is right.
+    scale: logScale(cameraHeight.min, cameraHeight.max),
+    set: setCameraHeight,
+    minSymbol: { name: 'arrow.down.to.line.compact', size: 17 },
+    maxSymbol: { name: 'arrow.up.to.line.compact', size: 17 },
   },
   trackingSensitivity: {
     title: 'Tracking sensitivity',

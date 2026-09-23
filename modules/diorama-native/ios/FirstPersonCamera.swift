@@ -16,8 +16,13 @@ import simd
 //   position: `altitude` meters (camera-to-center distance) back from the
 //   model center, `pitch` degrees from straight down, facing `heading`. It
 //   stays put while you look around. New camera props (another city,
-//   another framing) are a new place to stand, so they move it; recentering
-//   doesn't (it only makes wherever you face now "straight ahead" again).
+//   another framing, another Camera height) are a new place to stand, so
+//   they move it; recentering doesn't (it only makes wherever you face now
+//   "straight ahead" again). From far out MapKit won't draw a city's own
+//   pitch, so DioramaMapView hands in the starting camera at the steepest
+//   pitch MapKit draws there (see `firstPersonCamera(from:)`): a higher
+//   camera stands farther forward and looks more straight down, with the
+//   model center still in the middle.
 // - Gaze: the direction you look, as a compass heading and a pitch.
 // - Aim point: where the gaze ray meets the ground. A MapKit camera always
 //   looks *at* a point on the map from some distance, so every frame the

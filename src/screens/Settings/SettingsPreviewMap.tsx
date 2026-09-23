@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { DioramaMapView } from '@diorama/native';
+import { useCameraAltitude } from '@/features/map/cameraHeight';
 import { useMapReveal } from '@/features/map/useMapReveal';
 import { usePreviewOrbit } from '@/features/map/usePreviewOrbit';
 import { useSetting } from '@/features/settings/store';
@@ -14,12 +15,14 @@ import { useSampleCity } from './useSampleCity';
 const ASPECT_RATIO = 3 / 2;
 
 /**
- * A small live picture of a city in the miniature look, so a slider move
- * shows at once. One (mono) map, turning slowly unless Reduce Motion is on.
- * It's only a picture: touches pass through to the list.
+ * A small live picture of a city in the miniature look, from the chosen
+ * camera height, so a slider move shows at once. One (mono) map, turning
+ * slowly unless Reduce Motion is on. It's only a picture: touches pass
+ * through to the list.
  */
 export function SettingsPreviewMap() {
   const city = useSampleCity();
+  const altitude = useCameraAltitude(city.altitude);
   const miniatureIntensity = useSetting('miniatureIntensity');
   const orbit = usePreviewOrbit();
   const [isReady, setReady] = useState(false);
@@ -31,7 +34,7 @@ export function SettingsPreviewMap() {
         testID="settings-preview-map"
         style={StyleSheet.absoluteFill}
         center={{ latitude: city.lat, longitude: city.lon }}
-        altitude={city.altitude}
+        altitude={altitude}
         pitch={city.pitch}
         heading={city.heading}
         miniatureIntensity={miniatureIntensity}

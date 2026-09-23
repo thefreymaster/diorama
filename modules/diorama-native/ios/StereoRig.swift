@@ -51,6 +51,9 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // The steepest gaze MapKit draws from a vantage point, found by asking it
   // (see `steepestPitch(from:)`), for the vantage point and map size asked.
   private var steepestGaze: (key: SteepestPitchKey, pitch: Double)?
+  // The steepest pitch MapKit draws looking at a camera's center from its
+  // distance (see `steepestPitch(lookingAt:)`), for the camera and map size asked.
+  private var steepestStart: (key: SteepestPitchKey, pitch: Double)?
 
   var isStereo: Bool { eyes.count == 2 }
 
@@ -286,34 +289,67 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // is, and a gaze from a fixed spot reaches farther the higher it looks,
   // so the cap comes down as you look up. Rather than find it by hitting it
   // (T08's `pitchCap`, which shows one mismatched frame), this asks MapKit
-  // up front: it sets trial cameras on the first eye's map, reads back the
-  // pitch MapKit kept, and puts our camera back, all within this one call,
-  // so no trial camera is ever drawn. The trials look at the vantage point's
-  // own model center from the gaze's distance (the cap doesn't depend on
-  // where on the map), so the map never stands a camera on new ground.
-  // Asked once per vantage point and map size.
+  // up front (see `askSteepestPitch`). The trials look at the vantage
+  // point's own model center from the gaze's distance (the cap doesn't
+  // depend on where on the map), so the map never stands a camera on new
+  // ground. Asked once per vantage point and map size.
   func steepestPitch(from firstPerson: FirstPersonCamera) -> Double? {
     let key = SteepestPitchKey(
       latitude: firstPerson.base.center.latitude, longitude: firstPerson.base.center.longitude,
-      eyeHeight: firstPerson.eyeHeight, mapSize: eyes.first?.mapSize ?? .zero)
+      meters: firstPerson.eyeHeight, mapSize: eyes.first?.mapSize ?? .zero)
     if let steepestGaze, steepestGaze.key == key { return steepestGaze.pitch }
+    let pitch = askSteepestPitch(startingAt: firstPerson.base.pitch) { pitch in
+      var trial = firstPerson.base
+      trial.pitch = pitch
+      trial.altitude = firstPerson.reach(for: .init(heading: trial.heading, pitch: pitch))
+      return trial
+    }
+    if let pitch { steepestGaze = (key, pitch) }
+    return pitch
+  }
+
+  // The steepest pitch MapKit will draw looking at `camera`'s center from
+  // `camera`'s distance, or nil if the map can't be asked yet. From far out
+  // (a high Camera height) it's lower than a city's own pitch, so with head
+  // tracking you start from here instead (see
+  // DioramaMapView.firstPersonCamera). Asked once per center, distance and
+  // map size.
+  func steepestPitch(lookingAt camera: CameraPose) -> Double? {
+    let key = SteepestPitchKey(
+      latitude: camera.center.latitude, longitude: camera.center.longitude,
+      meters: camera.altitude, mapSize: eyes.first?.mapSize ?? .zero)
+    if let steepestStart, steepestStart.key == key { return steepestStart.pitch }
+    let pitch = askSteepestPitch(startingAt: camera.pitch) { pitch in
+      var trial = camera
+      trial.pitch = pitch
+      return trial
+    }
+    if let pitch { steepestStart = (key, pitch) }
+    return pitch
+  }
+
+  // Finds the steepest pitch MapKit draws for the cameras `trial` makes
+  // (one per pitch), or nil if the map can't be asked yet. It sets trial
+  // cameras on the first eye's map, reads back the pitch MapKit kept, and
+  // puts our camera back, all within this one call, so no trial camera is
+  // ever drawn.
+  private func askSteepestPitch(
+    startingAt startPitch: Double, trial: (Double) -> CameraPose
+  ) -> Double? {
     guard let eye = eyes.first, eye.window != nil, !eye.mapView.bounds.isEmpty,
       let ours = eye.appliedCamera
     else { return nil }
     let map = eye.mapView
-    // True when MapKit draws the gaze at `pitch` as asked.
+    // True when MapKit draws the trial camera at `pitch` as asked.
     func accepts(_ pitch: Double) -> Bool {
-      var trial = firstPerson.base
-      trial.pitch = pitch
-      trial.altitude = firstPerson.reach(for: .init(heading: trial.heading, pitch: pitch))
-      map.setCamera(trial.makeCamera(), animated: false)
+      map.setCamera(trial(pitch).makeCamera(), animated: false)
       return Double(map.camera.pitch) >= pitch - 0.01
     }
     // Try the starting pitch first (MapKit usually draws it, and then it's
     // found exactly), then halve the gap between a pitch MapKit draws and
     // one it doesn't until it's under 0.05° (about 10 steps).
     let range = CameraPose.pitchRange
-    let start = min(max(firstPerson.base.pitch, range.lowerBound), range.upperBound)
+    let start = min(max(startPitch, range.lowerBound), range.upperBound)
     var drawn = range.lowerBound
     var capped = range.upperBound
     UIView.performWithoutAnimation {
@@ -328,7 +364,6 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       }
       map.setCamera(ours.makeCamera(), animated: false)
     }
-    steepestGaze = (key, drawn)
     return drawn
   }
 
@@ -391,11 +426,12 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   }
 }
 
-// What `steepestPitch(from:)` depends on: where the vantage point is and how
-// big the maps are.
+// What the steepest pitch depends on: the place, how far out (the vantage
+// point's height for `steepestPitch(from:)`, the camera's distance for
+// `steepestPitch(lookingAt:)`), and how big the maps are.
 private struct SteepestPitchKey: Equatable {
   var latitude: Double
   var longitude: Double
-  var eyeHeight: Double
+  var meters: Double
   var mapSize: CGSize
 }

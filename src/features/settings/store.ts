@@ -8,6 +8,11 @@ export type ViewMode = 'mono' | 'stereo';
 export type Settings = {
   /** Multiplier on the altitude-derived stereo baseline ("model size"). */
   eyeSeparation: number;
+  /**
+   * Multiplier on each place's own camera distance: below 1 is closer to the
+   * city, above 1 higher above it. See `cameraAltitude` in features/map.
+   */
+  cameraHeight: number;
   /** How strongly head motion turns the camera. */
   trackingSensitivity: number;
   /** Tilt-shift blur and saturation strength, 0 to 1. */
@@ -22,7 +27,12 @@ export type Settings = {
 };
 
 type NumericSetting =
-  'eyeSeparation' | 'trackingSensitivity' | 'miniatureIntensity' | 'lensSpacing' | 'windowDiameter';
+  | 'eyeSeparation'
+  | 'cameraHeight'
+  | 'trackingSensitivity'
+  | 'miniatureIntensity'
+  | 'lensSpacing'
+  | 'windowDiameter';
 
 /**
  * The viewer fit defaults match the native view's own (`DEFAULT_LENS_SPACING`
@@ -31,6 +41,7 @@ type NumericSetting =
  */
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
   eyeSeparation: 1.0,
+  cameraHeight: 1.0,
   trackingSensitivity: 1.0,
   miniatureIntensity: 0.6,
   mode: 'stereo',
@@ -42,6 +53,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
 /** Allowed range for each slider. Setters clamp to these. */
 export const SETTING_RANGES: Readonly<Record<NumericSetting, { min: number; max: number }>> = {
   eyeSeparation: { min: 0.3, max: 3 },
+  cameraHeight: { min: 0.4, max: 3 },
   trackingSensitivity: { min: 0.5, max: 2 },
   miniatureIntensity: { min: 0, max: 1 },
   lensSpacing: { min: 55, max: 72 },
@@ -77,9 +89,10 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
 const useSettingsStore = create<Settings>()(
   persist(() => ({ ...DEFAULT_SETTINGS }), {
     name: 'settings',
-    // Still 1: new settings (like the viewer fit) are simply missing from
-    // older saves, and `merge` fills them in from the defaults, while
-    // settings that are gone (the old window width and height) are left out.
+    // Still 1: new settings (like the viewer fit and camera height) are
+    // simply missing from older saves, and `merge` fills them in from the
+    // defaults, while settings that are gone (the old window width and
+    // height) are left out.
     // Bump it only when a saved value changes meaning, with a `migrate` to
     // convert it.
     version: 1,
@@ -108,6 +121,10 @@ export function getSettings(): Settings {
 
 export function setEyeSeparation(value: number): void {
   useSettingsStore.setState({ eyeSeparation: clampSetting('eyeSeparation', value) });
+}
+
+export function setCameraHeight(value: number): void {
+  useSettingsStore.setState({ cameraHeight: clampSetting('cameraHeight', value) });
 }
 
 export function setTrackingSensitivity(value: number): void {

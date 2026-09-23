@@ -36,6 +36,7 @@ describe('settings store', () => {
 
     expect(store.getSettings()).toEqual({
       eyeSeparation: 1.0,
+      cameraHeight: 1.0,
       trackingSensitivity: 1.0,
       miniatureIntensity: 0.6,
       mode: 'stereo',
@@ -58,15 +59,17 @@ describe('settings store', () => {
     const { store, disk } = launch();
 
     store.setEyeSeparation(2);
+    store.setCameraHeight(0.5);
     store.setMode('mono');
 
     const saved = JSON.parse(disk.getString('settings') ?? 'null');
-    expect(saved.state).toMatchObject({ eyeSeparation: 2, mode: 'mono' });
+    expect(saved.state).toMatchObject({ eyeSeparation: 2, cameraHeight: 0.5, mode: 'mono' });
   });
 
   it('rehydrates the saved settings on the next launch', () => {
     const first = launch();
     first.store.setEyeSeparation(2.5);
+    first.store.setCameraHeight(2);
     first.store.setTrackingSensitivity(1.5);
     first.store.setMiniatureIntensity(0.2);
     first.store.setMode('mono');
@@ -79,6 +82,7 @@ describe('settings store', () => {
 
     expect(second.store.getSettings()).toEqual({
       eyeSeparation: 2.5,
+      cameraHeight: 2,
       trackingSensitivity: 1.5,
       miniatureIntensity: 0.2,
       mode: 'mono',
@@ -105,6 +109,7 @@ describe('settings store', () => {
 
     expect(store.getSettings()).toEqual({
       eyeSeparation: 2,
+      cameraHeight: 1,
       trackingSensitivity: 0.8,
       miniatureIntensity: 0.3,
       mode: 'mono',
@@ -143,6 +148,7 @@ describe('settings store', () => {
     // Everything else carries over; the circle starts at the default size.
     expect(store.getSettings()).toEqual({
       eyeSeparation: 1.5,
+      cameraHeight: 1,
       trackingSensitivity: 1.2,
       miniatureIntensity: 0.4,
       mode: 'stereo',
@@ -159,6 +165,7 @@ describe('settings store', () => {
     expect(rewritten).toEqual({
       state: {
         eyeSeparation: 1.5,
+        cameraHeight: 1,
         trackingSensitivity: 1.2,
         miniatureIntensity: 0.4,
         mode: 'mono',
@@ -189,6 +196,7 @@ describe('settings store', () => {
     const saved = JSON.stringify({
       state: {
         eyeSeparation: 'big',
+        cameraHeight: '2x',
         mode: 'hologram',
         miniatureIntensity: 7,
         debugLook: true,
@@ -202,6 +210,7 @@ describe('settings store', () => {
 
     expect(store.getSettings()).toEqual({
       eyeSeparation: 1.0,
+      cameraHeight: 1.0,
       trackingSensitivity: 1.0,
       miniatureIntensity: 1,
       mode: 'stereo',
@@ -215,6 +224,7 @@ describe('settings store', () => {
     const saved = JSON.stringify({
       state: {
         eyeSeparation: -5,
+        cameraHeight: 12,
         trackingSensitivity: 100,
         miniatureIntensity: 0.4,
         lensSpacing: 90,
@@ -227,6 +237,7 @@ describe('settings store', () => {
 
     expect(store.getSettings()).toMatchObject({
       eyeSeparation: store.SETTING_RANGES.eyeSeparation.min,
+      cameraHeight: 3,
       trackingSensitivity: store.SETTING_RANGES.trackingSensitivity.max,
       miniatureIntensity: 0.4,
       lensSpacing: 72,
@@ -285,6 +296,64 @@ describe('settings store', () => {
     expect(store.getSettings().windowDiameter).toBe(35);
   });
 
+  it("gives saves from before camera height the city's own height (1×), keeping the rest", () => {
+    // What a T26 build saved: version 1, round windows, no camera height.
+    const saved = JSON.stringify({
+      state: {
+        eyeSeparation: 0.8,
+        trackingSensitivity: 1.3,
+        miniatureIntensity: 0.5,
+        mode: 'stereo',
+        debugLook: false,
+        lensSpacing: 63,
+        windowDiameter: 36,
+      },
+      version: 1,
+    });
+
+    const { store, disk } = launch(saved);
+
+    expect(store.getSettings()).toEqual({
+      eyeSeparation: 0.8,
+      cameraHeight: 1,
+      trackingSensitivity: 1.3,
+      miniatureIntensity: 0.5,
+      mode: 'stereo',
+      debugLook: false,
+      lensSpacing: 63,
+      windowDiameter: 36,
+    });
+
+    // The next change saves the height too, and the launch after that keeps it.
+    store.setCameraHeight(2.5);
+    const rewritten = disk.getString('settings');
+    expect(JSON.parse(rewritten ?? 'null').state).toMatchObject({
+      cameraHeight: 2.5,
+      windowDiameter: 36,
+    });
+    expect(launch(rewritten).store.getSettings()).toMatchObject({
+      eyeSeparation: 0.8,
+      cameraHeight: 2.5,
+    });
+  });
+
+  it('keeps camera height between 0.4× and 3×', () => {
+    const { store } = launch();
+
+    store.setCameraHeight(0.5);
+    expect(store.getSettings().cameraHeight).toBe(0.5);
+    store.setCameraHeight(0.1);
+    expect(store.getSettings().cameraHeight).toBe(0.4);
+    store.setCameraHeight(8);
+    expect(store.getSettings().cameraHeight).toBe(3);
+    store.setCameraHeight(-1);
+    expect(store.getSettings().cameraHeight).toBe(0.4);
+    store.setCameraHeight(Number.NaN);
+    expect(store.getSettings().cameraHeight).toBe(1);
+    store.setCameraHeight(Number.POSITIVE_INFINITY);
+    expect(store.getSettings().cameraHeight).toBe(1);
+  });
+
   it('accepts the exact ends of each range, and falls back to the default for infinities', () => {
     const { store } = launch();
     const { eyeSeparation, trackingSensitivity } = store.SETTING_RANGES;
@@ -307,6 +376,7 @@ describe('settings store', () => {
   it('resets to the defaults and saves them', () => {
     const { store, disk } = launch();
     store.setEyeSeparation(3);
+    store.setCameraHeight(0.4);
     store.setMode('mono');
     store.setLensSpacing(60);
     store.setWindowDiameter(30);

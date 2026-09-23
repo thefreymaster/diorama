@@ -300,6 +300,20 @@ final class DioramaMapView: ExpoView {
     return camera
   }
 
+  // You stand where the base camera is. From far out (a high Camera height)
+  // MapKit won't tilt as steeply as the props ask, so while tracking you
+  // start from the steepest pitch it draws there, still looking at the model
+  // center: the city stays in the middle and you look more straight down.
+  // (Standing at the props' pitch instead, the gaze could only tilt as far
+  // as MapKit draws, and it would land short of the city.)
+  private func firstPersonCamera(from base: CameraPose) -> FirstPersonCamera {
+    var start = base
+    if headTracker.isRunning, let steepest = rig.steepestPitch(lookingAt: base) {
+      start.pitch = min(start.pitch, steepest)
+    }
+    return FirstPersonCamera(base: start)
+  }
+
   // Where the head looks this frame, turned from the base camera's gaze, or
   // nil when not tracking. The pitch stops, smoothly, where MapKit stops
   // drawing (it caps pitch lower the farther out it looks).
@@ -322,7 +336,7 @@ final class DioramaMapView: ExpoView {
 
   private func applyCamera(animated: Bool) {
     let base = baseCamera
-    let firstPerson = FirstPersonCamera(base: base)
+    let firstPerson = firstPersonCamera(from: base)
     let gaze = liveGaze(from: firstPerson)
     let camera = gaze.map { firstPerson.camera(for: $0) } ?? base
     let roll = liveRoll
@@ -348,7 +362,7 @@ final class DioramaMapView: ExpoView {
       look = headTracker.update(screen: screenAxes, seconds: seconds)
     }
     let base = baseCamera
-    let gaze = liveGaze(from: FirstPersonCamera(base: base))
+    let gaze = liveGaze(from: firstPersonCamera(from: base))
     let baseMoved = appliedBase.map { !$0.isWithin(Self.minFrameChange, of: base) } ?? true
     let gazeMoved = !Self.isWithin(Self.minFrameChange, gaze, appliedGaze)
     let rollMoved = abs(liveRoll - appliedRoll) >= Self.minFrameChange

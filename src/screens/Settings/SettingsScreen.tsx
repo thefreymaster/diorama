@@ -23,6 +23,7 @@ export function SettingsScreen() {
         <MiniatureSection />
         <StereoSection />
         <SliderSection setting="eyeSeparation" />
+        <SliderSection setting="cameraHeight" />
         <SliderSection setting="trackingSensitivity" />
         <ViewerFitSection />
         <DeveloperSection />

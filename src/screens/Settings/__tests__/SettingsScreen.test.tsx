@@ -8,6 +8,7 @@ import {
   DEFAULT_SETTINGS,
   getSettings,
   resetSettings,
+  setCameraHeight,
   setDebugLook,
   setEyeSeparation,
   setLensSpacing,
@@ -24,7 +25,7 @@ import * as IndexRoute from '../../../../app/index';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
-import type { FitSetting, SliderSetting } from '../sliderSettings';
+import { SLIDER_SETTINGS, type FitSetting, type SliderSetting } from '../sliderSettings';
 
 // The native map becomes a plain view that keeps its props (so tests can read
 // them and play MapKit's part by calling `onReady`) and a ref for the Viewer.
@@ -159,6 +160,7 @@ describe('settings', () => {
     for (const title of [
       'Miniature effect',
       'Model size',
+      'Camera height',
       'Tracking sensitivity',
       'Lens spacing',
       'Diameter',
@@ -166,6 +168,9 @@ describe('settings', () => {
       expect(screen.getByText(title)).toBeOnTheScreen();
       expect(screen.getByLabelText(title)).toBeOnTheScreen();
     }
+    expect(
+      screen.getByText('How high above the city you are. Higher views look more straight down.'),
+    ).toBeOnTheScreen();
     expect(screen.getByText('Viewer fit')).toBeOnTheScreen();
     expect(screen.getByText("Match the circles to your viewer's lenses.")).toBeOnTheScreen();
     // The old rectangular window's sliders are gone.
@@ -178,6 +183,7 @@ describe('settings', () => {
 
   it('shows what the store holds', async () => {
     setEyeSeparation(0.3);
+    setCameraHeight(3);
     setTrackingSensitivity(1);
     setMiniatureIntensity(0.25);
     setMode('mono');
@@ -191,6 +197,7 @@ describe('settings', () => {
     expect(fitValue('lensSpacing')).toBe('72 mm');
     expect(fitValue('windowDiameter')).toBe('25 mm');
     expect(sliderPosition('eyeSeparation')).toBeCloseTo(1);
+    expect(sliderPosition('cameraHeight')).toBeCloseTo(1);
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
     expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.25);
     expect(screen.getByRole('switch', { name: 'Stereo' })).not.toBeChecked();
@@ -224,6 +231,13 @@ describe('settings', () => {
     slideTo('eyeSeparation', 0);
     expect(getSettings().eyeSeparation).toBeCloseTo(3);
     expect(savedSettings().eyeSeparation).toBeCloseTo(3);
+
+    // Right is higher up, left closer to the city.
+    slideTo('cameraHeight', 1);
+    expect(getSettings().cameraHeight).toBeCloseTo(3);
+    slideTo('cameraHeight', 0);
+    expect(getSettings().cameraHeight).toBeCloseTo(0.4);
+    expect(savedSettings().cameraHeight).toBeCloseTo(0.4);
   });
 
   it('keeps every value in range, whatever the slider reports', async () => {
@@ -232,19 +246,23 @@ describe('settings', () => {
     slideTo('miniatureIntensity', 1.4);
     slideTo('trackingSensitivity', -0.5);
     slideTo('eyeSeparation', 2);
+    slideTo('cameraHeight', 1.5);
     expect(getSettings()).toMatchObject({
       miniatureIntensity: 1,
       trackingSensitivity: 0.5,
       eyeSeparation: 0.3,
+      cameraHeight: 3,
     });
 
     slideTo('miniatureIntensity', -1);
     slideTo('trackingSensitivity', 3);
     slideTo('eyeSeparation', -1);
+    slideTo('cameraHeight', -0.2);
     expect(getSettings()).toMatchObject({
       miniatureIntensity: 0,
       trackingSensitivity: 2,
       eyeSeparation: 3,
+      cameraHeight: 0.4,
     });
   });
 
@@ -279,6 +297,8 @@ describe('settings', () => {
     fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
 
     expect(slider('eyeSeparation').props.disabled).toBe(true);
+    // Mono has a camera too.
+    expect(slider('cameraHeight').props.disabled).toBe(false);
     expect(slider('trackingSensitivity').props.disabled).toBe(false);
     expect(slider('miniatureIntensity').props.disabled).toBe(false);
   });
@@ -388,10 +408,12 @@ describe('settings', () => {
     slideTo('miniatureIntensity', 0.1);
     slideTo('trackingSensitivity', 0.9);
     slideTo('eyeSeparation', 0.2);
+    slideTo('cameraHeight', 0.9);
     slideTo('lensSpacing', 0);
     slideTo('windowDiameter', 1);
     fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
+    expect(previewMap().altitude).not.toBe(1200);
 
     fireEvent.press(screen.getByRole('button', { name: 'Reset to defaults' }));
 
@@ -403,6 +425,10 @@ describe('settings', () => {
     expect(screen.getByRole('switch', { name: 'Stereo' })).toBeChecked();
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
     expect(previewMap().miniatureIntensity).toBe(0.6);
+    expect(getSettings().cameraHeight).toBe(1);
+    expect(savedSettings().cameraHeight).toBe(1);
+    expect(sliderPosition('cameraHeight')).toBeCloseTo(0.45, 2);
+    expect(previewMap().altitude).toBe(1200);
     expect(fitValue('lensSpacing')).toBe('64 mm');
     expect(fitValue('windowDiameter')).toBe('35 mm');
   });
@@ -446,6 +472,25 @@ describe('settings preview', () => {
       heading: 137,
     });
     expect(screen.getByLabelText('Preview of Paris')).toBeOnTheScreen();
+  });
+
+  it('moves closer or higher up live with Camera height', async () => {
+    await openSettings();
+    // New York's own framing: 1,200 m out.
+    expect(previewMap().altitude).toBe(1200);
+
+    slideTo('cameraHeight', SLIDER_SETTINGS.cameraHeight.scale.toPosition(0.5));
+    expect(previewMap().altitude).toBeCloseTo(600);
+
+    slideTo('cameraHeight', SLIDER_SETTINGS.cameraHeight.scale.toPosition(2));
+    expect(previewMap().altitude).toBeCloseTo(2400);
+
+    // Only the distance changes: same place, same framing.
+    expect(previewMap()).toMatchObject({
+      center: { latitude: 40.7549, longitude: -73.984 },
+      pitch: 60,
+      heading: 29,
+    });
   });
 
   it('turns slowly, and keeps still under Reduce Motion', async () => {
@@ -494,6 +539,40 @@ describe('settings in the Viewer', () => {
     expect(viewerMap).not.toHaveProperty('windowHeight');
   });
 
+  it('stands the camera at the height set here, in stereo and mono', async () => {
+    await openSettings();
+    slideTo('cameraHeight', SLIDER_SETTINGS.cameraHeight.scale.toPosition(2));
+    screen.unmount();
+
+    renderRouter(routes, { initialUrl: '/view/paris' });
+
+    const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
+    await screen.findByTestId('viewer-map');
+    // Paris is framed from 1,000 m.
+    expect(viewerMap()).toMatchObject({ mode: 'stereo', pitch: 60, heading: 137 });
+    expect(viewerMap().altitude).toBeCloseTo(2000);
+
+    act(() => setMode('mono'));
+    expect(viewerMap().mode).toBe('mono');
+    expect(viewerMap().altitude).toBeCloseTo(2000);
+  });
+
+  it('moves the camera live while the Viewer is open, within 300 m to 5 km', async () => {
+    renderRouter(routes, { initialUrl: '/view/paris' });
+    const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
+    await screen.findByTestId('viewer-map');
+    expect(viewerMap().altitude).toBe(1000);
+
+    act(() => setCameraHeight(0.5));
+    expect(viewerMap().altitude).toBe(500);
+
+    act(() => setCameraHeight(3));
+    expect(viewerMap().altitude).toBe(3000);
+
+    act(() => resetSettings());
+    expect(viewerMap().altitude).toBe(1000);
+  });
+
   it('resizes the circles live while the Viewer is open', async () => {
     renderRouter(routes, { initialUrl: '/view/paris' });
     const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
@@ -506,5 +585,19 @@ describe('settings in the Viewer', () => {
     });
 
     expect(viewerMap()).toMatchObject({ lensSpacing: 66, windowDiameter: 30 });
+  });
+});
+
+describe('settings in the city preview', () => {
+  it('orbits from the height set here, and follows it live', async () => {
+    setCameraHeight(0.5);
+    renderRouter(routes, { initialUrl: '/city/paris' });
+
+    const map = () => screen.getByTestId('diorama-map').props as DioramaMapViewProps;
+    await screen.findByTestId('diorama-map');
+    expect(map()).toMatchObject({ altitude: 500, pitch: 60, heading: 137 });
+
+    act(() => setCameraHeight(2));
+    expect(map().altitude).toBe(2000);
   });
 });

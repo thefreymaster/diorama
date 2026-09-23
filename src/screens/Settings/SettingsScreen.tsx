@@ -7,7 +7,7 @@ import { DeveloperSection } from './DeveloperSection';
 import { MiniatureSection } from './MiniatureSection';
 import { ResetSection } from './ResetSection';
 import { SliderSection } from './SliderSection';
-import { StereoSection } from './StereoSection';
+import { TwoEyeSection } from './TwoEyeSection';
 import { ViewerFitSection } from './ViewerFitSection';
 
 /**
@@ -21,7 +21,7 @@ export function SettingsScreen() {
       <Stack.Screen options={{ headerLargeTitleEnabled: true }} />
       <View testID="settings-screen">
         <MiniatureSection />
-        <StereoSection />
+        <TwoEyeSection />
         <SliderSection setting="eyeSeparation" />
         <SliderSection setting="cameraHeight" />
         <SliderSection setting="trackingSensitivity" />

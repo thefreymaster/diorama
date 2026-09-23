@@ -6,6 +6,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import { flyoverCoverageAt, type DioramaMapViewProps } from '@diorama/native';
 import { addRecent, clearRecents, type RecentCity } from '@/features/cities/recentsStore';
+import { resetSettings, setTwoEyeLandscape } from '@/features/settings/store';
 import { queryClient } from '@/providers/queryClient';
 
 import * as CityRoute from '../../../../app/city/[cityId]';
@@ -82,9 +83,12 @@ const HEADER_CONFIG: string = 'RNSScreenStackHeaderConfig';
 
 let reduceMotionListener: ((enabled: boolean) => void) | undefined;
 
+const HEADSET_GUIDANCE = 'Turn your iPhone sideways and place it in your viewer.';
+
 beforeEach(() => {
   queryClient.clear();
   clearRecents();
+  resetSettings();
   mockImpact.mockClear();
   reduceMotionListener = undefined;
   jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
@@ -110,7 +114,7 @@ describe('city preview', () => {
     expect(screen.getByRole('header', { name: 'Paris' })).toBeOnTheScreen();
     expect(screen.getByText('France')).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Enter Diorama' })).toBeOnTheScreen();
-    expect(screen.getByText('Place your iPhone in your viewer.')).toBeOnTheScreen();
+    expect(screen.getByText(HEADSET_GUIDANCE)).toBeOnTheScreen();
 
     expect(mapProps()).toMatchObject({
       center: { latitude: 48.8575, longitude: 2.2957 },
@@ -121,6 +125,21 @@ describe('city preview', () => {
     });
     expect(mapProps().mode ?? 'mono').toBe('mono');
     expect(mapProps().headTracking).toBeFalsy();
+  });
+
+  it('says the headset view is the sideways one, unless the two-eye view is off', async () => {
+    renderRouter(routes, { initialUrl: '/city/paris' });
+    await screen.findByTestId('city-preview-screen');
+    expect(screen.getByText(HEADSET_GUIDANCE)).toBeOnTheScreen();
+    expect(screen.queryByText('Place your iPhone in your viewer.')).toBeNull();
+
+    // No headset view, so no word about one.
+    act(() => setTwoEyeLandscape(false));
+    expect(screen.queryByText(HEADSET_GUIDANCE)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Enter Diorama' })).toBeOnTheScreen();
+
+    act(() => setTwoEyeLandscape(true));
+    expect(screen.getByText(HEADSET_GUIDANCE)).toBeOnTheScreen();
   });
 
   it('names the screen after the city but keeps the see-through header clear', async () => {
@@ -231,7 +250,7 @@ describe('city preview, VoiceOver', () => {
 
     expect(screen.getByRole('image', { name: '3D map of Paris' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Enter Diorama' }).props.accessibilityHint).toBe(
-      'Opens the city full screen, in landscape.',
+      'Opens the city full screen.',
     );
   });
 });

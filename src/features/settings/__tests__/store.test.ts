@@ -6,7 +6,7 @@ import {
   resetSettings,
   setEyeSeparation,
   setMiniatureIntensity,
-  setMode,
+  setTwoEyeLandscape,
   useSetting,
   useSettings,
 } from '../store';
@@ -39,7 +39,7 @@ describe('settings store', () => {
       cameraHeight: 1.0,
       trackingSensitivity: 1.0,
       miniatureIntensity: 0.6,
-      mode: 'stereo',
+      twoEyeLandscape: true,
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -60,10 +60,14 @@ describe('settings store', () => {
 
     store.setEyeSeparation(2);
     store.setCameraHeight(0.5);
-    store.setMode('mono');
+    store.setTwoEyeLandscape(false);
 
     const saved = JSON.parse(disk.getString('settings') ?? 'null');
-    expect(saved.state).toMatchObject({ eyeSeparation: 2, cameraHeight: 0.5, mode: 'mono' });
+    expect(saved.state).toMatchObject({
+      eyeSeparation: 2,
+      cameraHeight: 0.5,
+      twoEyeLandscape: false,
+    });
   });
 
   it('rehydrates the saved settings on the next launch', () => {
@@ -72,7 +76,7 @@ describe('settings store', () => {
     first.store.setCameraHeight(2);
     first.store.setTrackingSensitivity(1.5);
     first.store.setMiniatureIntensity(0.2);
-    first.store.setMode('mono');
+    first.store.setTwoEyeLandscape(false);
     first.store.setDebugLook(true);
     first.store.setLensSpacing(62);
     first.store.setWindowDiameter(38);
@@ -85,7 +89,7 @@ describe('settings store', () => {
       cameraHeight: 2,
       trackingSensitivity: 1.5,
       miniatureIntensity: 0.2,
-      mode: 'mono',
+      twoEyeLandscape: false,
       debugLook: true,
       lensSpacing: 62,
       windowDiameter: 38,
@@ -112,7 +116,7 @@ describe('settings store', () => {
       cameraHeight: 1,
       trackingSensitivity: 0.8,
       miniatureIntensity: 0.3,
-      mode: 'mono',
+      twoEyeLandscape: false,
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -151,7 +155,7 @@ describe('settings store', () => {
       cameraHeight: 1,
       trackingSensitivity: 1.2,
       miniatureIntensity: 0.4,
-      mode: 'stereo',
+      twoEyeLandscape: true,
       debugLook: false,
       lensSpacing: 62,
       windowDiameter: 35,
@@ -160,7 +164,7 @@ describe('settings store', () => {
     expect(store.getSettings()).not.toHaveProperty('windowHeight');
 
     // The next save leaves the old keys behind for good.
-    store.setMode('mono');
+    store.setTwoEyeLandscape(false);
     const rewritten = JSON.parse(disk.getString('settings') ?? 'null');
     expect(rewritten).toEqual({
       state: {
@@ -168,7 +172,7 @@ describe('settings store', () => {
         cameraHeight: 1,
         trackingSensitivity: 1.2,
         miniatureIntensity: 0.4,
-        mode: 'mono',
+        twoEyeLandscape: false,
         debugLook: false,
         lensSpacing: 62,
         windowDiameter: 35,
@@ -197,6 +201,7 @@ describe('settings store', () => {
       state: {
         eyeSeparation: 'big',
         cameraHeight: '2x',
+        twoEyeLandscape: 'sideways',
         mode: 'hologram',
         miniatureIntensity: 7,
         debugLook: true,
@@ -213,11 +218,83 @@ describe('settings store', () => {
       cameraHeight: 1.0,
       trackingSensitivity: 1.0,
       miniatureIntensity: 1,
-      mode: 'stereo',
+      twoEyeLandscape: true,
       debugLook: true,
       lensSpacing: 64,
       windowDiameter: 35,
     });
+  });
+
+  describe('the old Stereo switch', () => {
+    /** What a build before T32 saved: version 1, with the Stereo switch as `mode`. */
+    function savedWithMode(mode?: unknown) {
+      return JSON.stringify({
+        state: { eyeSeparation: 1.4, miniatureIntensity: 0.5, debugLook: false, mode },
+        version: 1,
+      });
+    }
+
+    it('turns "Two-eye view in landscape" off when mono was chosen', () => {
+      const { store } = launch(savedWithMode('mono'));
+
+      expect(store.getSettings()).toMatchObject({
+        eyeSeparation: 1.4,
+        miniatureIntensity: 0.5,
+        twoEyeLandscape: false,
+      });
+      expect(store.getSettings()).not.toHaveProperty('mode');
+    });
+
+    it('leaves it on when stereo was chosen, or nothing, or nonsense', () => {
+      expect(launch(savedWithMode('stereo')).store.getSettings().twoEyeLandscape).toBe(true);
+      expect(launch(savedWithMode()).store.getSettings().twoEyeLandscape).toBe(true);
+      expect(launch(savedWithMode('hologram')).store.getSettings().twoEyeLandscape).toBe(true);
+      expect(launch(savedWithMode(false)).store.getSettings().twoEyeLandscape).toBe(true);
+    });
+
+    it('leaves the old key behind with the next save, keeping the choice', () => {
+      const first = launch(savedWithMode('mono'));
+
+      first.store.setEyeSeparation(2);
+      const rewritten = JSON.parse(first.disk.getString('settings') ?? 'null');
+      expect(rewritten.state).toMatchObject({ eyeSeparation: 2, twoEyeLandscape: false });
+      expect(rewritten.state).not.toHaveProperty('mode');
+      expect(rewritten.version).toBe(1);
+
+      // And the launch after that reads it back the same.
+      const second = launch(JSON.stringify(rewritten));
+      expect(second.store.getSettings()).toMatchObject({
+        eyeSeparation: 2,
+        twoEyeLandscape: false,
+      });
+    });
+
+    it('goes by the new setting when both are on disk', () => {
+      const saved = JSON.stringify({
+        state: { twoEyeLandscape: true, mode: 'mono' },
+        version: 1,
+      });
+
+      expect(launch(saved).store.getSettings().twoEyeLandscape).toBe(true);
+    });
+
+    it('falls back to the old switch when the new setting on disk is invalid', () => {
+      const saved = JSON.stringify({
+        state: { twoEyeLandscape: 'off', mode: 'mono' },
+        version: 1,
+      });
+
+      expect(launch(saved).store.getSettings().twoEyeLandscape).toBe(false);
+    });
+  });
+
+  it('turns the two-eye view on and off', () => {
+    const { store } = launch();
+
+    store.setTwoEyeLandscape(false);
+    expect(store.getSettings().twoEyeLandscape).toBe(false);
+    store.setTwoEyeLandscape(true);
+    expect(store.getSettings().twoEyeLandscape).toBe(true);
   });
 
   it('clamps out-of-range values on disk instead of dropping them', () => {
@@ -259,10 +336,13 @@ describe('settings store', () => {
   it('replaces corrupt data on disk with the next change', () => {
     const { store, disk } = launch('not json at all');
 
-    store.setMode('mono');
+    store.setTwoEyeLandscape(false);
 
     const saved = JSON.parse(disk.getString('settings') ?? 'null');
-    expect(saved).toEqual({ state: { ...store.DEFAULT_SETTINGS, mode: 'mono' }, version: 1 });
+    expect(saved).toEqual({
+      state: { ...store.DEFAULT_SETTINGS, twoEyeLandscape: false },
+      version: 1,
+    });
   });
 
   it('clamps sliders to their ranges', () => {
@@ -318,7 +398,7 @@ describe('settings store', () => {
       cameraHeight: 1,
       trackingSensitivity: 1.3,
       miniatureIntensity: 0.5,
-      mode: 'stereo',
+      twoEyeLandscape: true,
       debugLook: false,
       lensSpacing: 63,
       windowDiameter: 36,
@@ -377,7 +457,7 @@ describe('settings store', () => {
     const { store, disk } = launch();
     store.setEyeSeparation(3);
     store.setCameraHeight(0.4);
-    store.setMode('mono');
+    store.setTwoEyeLandscape(false);
     store.setLensSpacing(60);
     store.setWindowDiameter(30);
 
@@ -405,16 +485,16 @@ describe('settings store', () => {
     let renders = 0;
     const { result } = renderHook(() => {
       renders += 1;
-      return useSetting('mode');
+      return useSetting('twoEyeLandscape');
     });
     const initialRenders = renders;
 
     act(() => setEyeSeparation(2));
     expect(renders).toBe(initialRenders);
 
-    act(() => setMode('mono'));
+    act(() => setTwoEyeLandscape(false));
     expect(renders).toBeGreaterThan(initialRenders);
-    expect(result.current).toBe('mono');
+    expect(result.current).toBe(false);
     act(() => resetSettings());
   });
 });

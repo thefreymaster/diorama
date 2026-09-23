@@ -3,8 +3,6 @@ import { persist } from 'zustand/middleware';
 
 import { createPersistStorage } from '@/providers/storage';
 
-export type ViewMode = 'mono' | 'stereo';
-
 export type Settings = {
   /** Multiplier on the altitude-derived stereo baseline ("model size"). */
   eyeSeparation: number;
@@ -17,7 +15,12 @@ export type Settings = {
   trackingSensitivity: number;
   /** Tilt-shift blur and saturation strength, 0 to 1. */
   miniatureIntensity: number;
-  mode: ViewMode;
+  /**
+   * The Viewer turned sideways shows a round picture for each eye, for a
+   * headset viewer. Off, sideways is one full-screen picture, like upright
+   * (which always is).
+   */
+  twoEyeLandscape: boolean;
   /** Simulator only: drag to look around instead of using the gyro. */
   debugLook: boolean;
   /** Viewer fit: millimeters between the centers of the headset's two lenses. */
@@ -44,7 +47,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   cameraHeight: 1.0,
   trackingSensitivity: 1.0,
   miniatureIntensity: 0.6,
-  mode: 'stereo',
+  twoEyeLandscape: true,
   debugLook: false,
   lensSpacing: 64,
   windowDiameter: 35,
@@ -69,19 +72,32 @@ function clampSetting(key: NumericSetting, value: number): number {
 }
 
 /**
+ * Saved by older builds and read once, to carry the choice over. `mode` was
+ * the Stereo switch (`'stereo'` or `'mono'`), before the phone's orientation
+ * picked the view.
+ */
+type LegacySetting = 'mode';
+
+/**
  * Keeps only valid, current fields from whatever was on disk. Anything else
  * is dropped, like the separate window width and height saved before the
- * windows were round: those saves get the default diameter.
+ * windows were round: those saves get the default diameter. The old Stereo
+ * switch becomes "Two-eye view in landscape": mono turns it off, and stereo
+ * (or nothing saved) leaves it on.
  */
 function sanitizePersisted(persisted: unknown): Partial<Settings> {
   if (typeof persisted !== 'object' || persisted === null) return {};
-  const saved = persisted as Partial<Record<keyof Settings, unknown>>;
+  const saved = persisted as Partial<Record<keyof Settings | LegacySetting, unknown>>;
   const clean: Partial<Settings> = {};
   for (const key of NUMERIC_SETTINGS) {
     const value = saved[key];
     if (typeof value === 'number') clean[key] = clampSetting(key, value);
   }
-  if (saved.mode === 'mono' || saved.mode === 'stereo') clean.mode = saved.mode;
+  if (typeof saved.twoEyeLandscape === 'boolean') {
+    clean.twoEyeLandscape = saved.twoEyeLandscape;
+  } else if (saved.mode === 'mono' || saved.mode === 'stereo') {
+    clean.twoEyeLandscape = saved.mode === 'stereo';
+  }
   if (typeof saved.debugLook === 'boolean') clean.debugLook = saved.debugLook;
   return clean;
 }
@@ -92,7 +108,8 @@ const useSettingsStore = create<Settings>()(
     // Still 1: new settings (like the viewer fit and camera height) are
     // simply missing from older saves, and `merge` fills them in from the
     // defaults, while settings that are gone (the old window width and
-    // height) are left out.
+    // height) are left out, and the old Stereo switch (`mode`) is carried
+    // over into `twoEyeLandscape` (see `sanitizePersisted`).
     // Bump it only when a saved value changes meaning, with a `migrate` to
     // convert it.
     version: 1,
@@ -135,8 +152,8 @@ export function setMiniatureIntensity(value: number): void {
   useSettingsStore.setState({ miniatureIntensity: clampSetting('miniatureIntensity', value) });
 }
 
-export function setMode(mode: ViewMode): void {
-  useSettingsStore.setState({ mode });
+export function setTwoEyeLandscape(twoEyeLandscape: boolean): void {
+  useSettingsStore.setState({ twoEyeLandscape });
 }
 
 export function setDebugLook(debugLook: boolean): void {

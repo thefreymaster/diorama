@@ -40,7 +40,7 @@ type SliderConfig = {
   scale: SliderScale;
   /** Stores a new value (clamped by the store). */
   set: (value: number) => void;
-  /** Does nothing in mono, so it dims there. */
+  /** Only matters in the two-eye view, so it dims while that's off. */
   stereoOnly?: boolean;
 };
 
@@ -64,7 +64,8 @@ const { lensSpacing, windowDiameter } = SETTING_RANGES;
 export const SLIDER_SETTINGS: Readonly<Record<GlyphSliderSetting, GlyphSliderConfig>> = {
   eyeSeparation: {
     title: 'Model size',
-    footer: 'How big the city looks in stereo. Smaller feels more like a model on a table.',
+    footer:
+      'How big the city looks in the two-eye view. Smaller feels more like a model on a table.',
     // Eyes farther apart make the city look smaller, so the widest separation
     // sits at the small end. By ratio, so the default (1×) lands mid-track.
     scale: logScale(eyeSeparation.max, eyeSeparation.min),

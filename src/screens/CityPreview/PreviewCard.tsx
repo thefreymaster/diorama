@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import type { City } from '@/features/cities/queries';
+import { useSetting } from '@/features/settings/store';
 import { spacing } from '@/theme';
 import { GlassSurface, PrimaryButton, Text } from '@/ui';
 
@@ -17,11 +18,14 @@ type PreviewCardProps = {
 
 /**
  * The glass card floating over the bottom of the map: where you are, and
- * the one thing to do here.
+ * the one thing to do here. Under the button, how to get to the headset
+ * view (it's the sideways one); with the two-eye view off in Settings
+ * there's no headset view, so no word about one.
  */
 export function PreviewCard({ city, showTerrainNote }: PreviewCardProps) {
   const frame = useCardFrame();
   const enterDiorama = useEnterDiorama(city.id);
+  const twoEyeLandscape = useSetting('twoEyeLandscape');
 
   return (
     <GlassSurface style={[styles.card, frame]}>
@@ -41,11 +45,13 @@ export function PreviewCard({ city, showTerrainNote }: PreviewCardProps) {
           title="Enter Diorama"
           symbol={ENTER_DIORAMA_SYMBOL}
           onPress={enterDiorama}
-          accessibilityHint="Opens the city full screen, in landscape."
+          accessibilityHint="Opens the city full screen."
         />
-        <Text variant="footnote" color="secondaryLabel" style={styles.guidance}>
-          Place your iPhone in your viewer.
-        </Text>
+        {twoEyeLandscape ? (
+          <Text variant="footnote" color="secondaryLabel" style={styles.guidance}>
+            Turn your iPhone sideways and place it in your viewer.
+          </Text>
+        ) : null}
       </View>
     </GlassSurface>
   );

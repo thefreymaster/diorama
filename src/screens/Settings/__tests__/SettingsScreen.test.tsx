@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, Dimensions } from 'react-native';
 
 import type { DioramaMapViewProps } from '@diorama/native';
 import { addRecent, clearRecents, type RecentCity } from '@/features/cities/recentsStore';
@@ -13,8 +13,8 @@ import {
   setEyeSeparation,
   setLensSpacing,
   setMiniatureIntensity,
-  setMode,
   setTrackingSensitivity,
+  setTwoEyeLandscape,
   setWindowDiameter,
 } from '@/features/settings/store';
 import { queryClient } from '@/providers/queryClient';
@@ -79,6 +79,22 @@ const PARIS: RecentCity = {
 /** The native stack's header settings for one screen (react-native-screens). */
 const HEADER_CONFIG: string = 'RNSScreenStackHeaderConfig';
 
+const TWO_EYE = { name: 'Two-eye view in landscape' };
+const TWO_EYE_FOOTER =
+  'Shows a picture for each eye when your iPhone is sideways, for a headset viewer. Upright, the city always fills the screen.';
+
+// Jest's window is upright; the Viewer's two-eye view is the sideways one.
+const UPRIGHT = Dimensions.get('window');
+
+/** Turns the phone: the window takes on its new shape. */
+function holdPhone(orientation: 'sideways' | 'upright') {
+  const [short, long] = [UPRIGHT.width, UPRIGHT.height].sort((a, b) => a - b);
+  const size =
+    orientation === 'sideways' ? { width: long, height: short } : { width: short, height: long };
+  const window = { ...Dimensions.get('window'), ...size };
+  act(() => Dimensions.set({ window, screen: window }));
+}
+
 /** RN types `__DEV__` as a constant; under Jest it's a plain global, so a test can flip it. */
 function setDevBuild(isDev: boolean) {
   Reflect.set(globalThis, '__DEV__', isDev);
@@ -104,6 +120,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  holdPhone('upright');
   jest.restoreAllMocks();
 });
 
@@ -176,7 +193,10 @@ describe('settings', () => {
     // The old rectangular window's sliders are gone.
     expect(screen.queryByText('Window width')).toBeNull();
     expect(screen.queryByText('Window height')).toBeNull();
-    expect(screen.getByRole('switch', { name: 'Stereo' })).toBeOnTheScreen();
+    expect(screen.getByRole('switch', TWO_EYE)).toBeOnTheScreen();
+    expect(screen.getByText(TWO_EYE_FOOTER)).toBeOnTheScreen();
+    // The Stereo switch is gone: how the phone is held picks the view.
+    expect(screen.queryByRole('switch', { name: 'Stereo' })).toBeNull();
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeOnTheScreen();
   });
@@ -186,7 +206,7 @@ describe('settings', () => {
     setCameraHeight(3);
     setTrackingSensitivity(1);
     setMiniatureIntensity(0.25);
-    setMode('mono');
+    setTwoEyeLandscape(false);
     setDebugLook(true);
     setLensSpacing(72);
     setWindowDiameter(25);
@@ -200,8 +220,8 @@ describe('settings', () => {
     expect(sliderPosition('cameraHeight')).toBeCloseTo(1);
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
     expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.25);
-    expect(screen.getByRole('switch', { name: 'Stereo' })).not.toBeChecked();
-    expect(screen.getByTestId('stereo-switch').props.value).toBe(false);
+    expect(screen.getByRole('switch', TWO_EYE)).not.toBeChecked();
+    expect(screen.getByTestId('two-eye-switch').props.value).toBe(false);
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeChecked();
     expect(screen.getByTestId('debug-look-switch').props.value).toBe(true);
   });
@@ -274,33 +294,38 @@ describe('settings', () => {
     expect(getSettings().miniatureIntensity).toBeCloseTo(0.9);
   });
 
-  it('flips between stereo and mono', async () => {
+  it('turns the two-eye view in landscape off and on, and saves it', async () => {
     await openSettings();
-    const row = screen.getByRole('switch', { name: 'Stereo' });
+    const row = screen.getByRole('switch', TWO_EYE);
     expect(row).toBeChecked();
 
-    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
-    expect(getSettings().mode).toBe('mono');
+    fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
+    expect(getSettings().twoEyeLandscape).toBe(false);
     expect(row).not.toBeChecked();
-    expect(savedSettings().mode).toBe('mono');
+    expect(savedSettings().twoEyeLandscape).toBe(false);
+    expect(savedSettings()).not.toHaveProperty('mode');
 
     // VoiceOver: a double-tap anywhere on the row flips it back.
     fireEvent(row, 'accessibilityTap');
-    expect(getSettings().mode).toBe('stereo');
+    expect(getSettings().twoEyeLandscape).toBe(true);
     expect(row).toBeChecked();
+    expect(savedSettings().twoEyeLandscape).toBe(true);
   });
 
-  it('dims model size in mono, where it does nothing', async () => {
+  it('dims model size when the two-eye view is off, where it does nothing', async () => {
     await openSettings();
     expect(slider('eyeSeparation').props.disabled).toBe(false);
 
-    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
 
     expect(slider('eyeSeparation').props.disabled).toBe(true);
     // Mono has a camera too.
     expect(slider('cameraHeight').props.disabled).toBe(false);
     expect(slider('trackingSensitivity').props.disabled).toBe(false);
     expect(slider('miniatureIntensity').props.disabled).toBe(false);
+
+    fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', true);
+    expect(slider('eyeSeparation').props.disabled).toBe(false);
   });
 
   it('shows the viewer fit in millimeters, the defaults to start with', async () => {
@@ -363,11 +388,11 @@ describe('settings', () => {
     expect(getSettings().windowDiameter).toBe(44);
   });
 
-  it('dims the viewer fit in mono, where there are no windows', async () => {
+  it('dims the viewer fit when the two-eye view is off, where there are no windows', async () => {
     await openSettings();
     expect(slider('lensSpacing').props.disabled).toBe(false);
 
-    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
 
     for (const setting of ['lensSpacing', 'windowDiameter'] as const) {
       expect(slider(setting).props.disabled).toBe(true);
@@ -397,7 +422,7 @@ describe('settings', () => {
       expect(screen.queryByText('Look around by dragging')).toBeNull();
       expect(screen.queryByText('Developer')).toBeNull();
       expect(screen.queryByTestId('debug-look-switch')).toBeNull();
-      expect(screen.getByRole('switch', { name: 'Stereo' })).toBeOnTheScreen();
+      expect(screen.getByRole('switch', TWO_EYE)).toBeOnTheScreen();
     } finally {
       setDevBuild(true);
     }
@@ -411,7 +436,7 @@ describe('settings', () => {
     slideTo('cameraHeight', 0.9);
     slideTo('lensSpacing', 0);
     slideTo('windowDiameter', 1);
-    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
     expect(previewMap().altitude).not.toBe(1200);
 
@@ -422,7 +447,7 @@ describe('settings', () => {
     expect(savedSettings()).toEqual(DEFAULT_SETTINGS);
     expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.6);
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
-    expect(screen.getByRole('switch', { name: 'Stereo' })).toBeChecked();
+    expect(screen.getByRole('switch', TWO_EYE)).toBeChecked();
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
     expect(previewMap().miniatureIntensity).toBe(0.6);
     expect(getSettings().cameraHeight).toBe(1);
@@ -514,9 +539,11 @@ describe('settings in the Viewer', () => {
     await openSettings();
     slideTo('miniatureIntensity', 0.2);
     slideTo('trackingSensitivity', 1);
-    fireEvent(screen.getByTestId('stereo-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
     screen.unmount();
 
+    // Sideways, but with the two-eye view off: one full-screen picture.
+    holdPhone('sideways');
     renderRouter(routes, { initialUrl: '/view/paris' });
 
     const viewerMap = (await screen.findByTestId('viewer-map')).props as DioramaMapViewProps;
@@ -531,6 +558,7 @@ describe('settings in the Viewer', () => {
     slideTo('windowDiameter', 0.2);
     screen.unmount();
 
+    holdPhone('sideways');
     renderRouter(routes, { initialUrl: '/view/paris' });
 
     const viewerMap = (await screen.findByTestId('viewer-map')).props as DioramaMapViewProps;
@@ -544,6 +572,7 @@ describe('settings in the Viewer', () => {
     slideTo('cameraHeight', SLIDER_SETTINGS.cameraHeight.scale.toPosition(2));
     screen.unmount();
 
+    holdPhone('sideways');
     renderRouter(routes, { initialUrl: '/view/paris' });
 
     const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
@@ -552,7 +581,12 @@ describe('settings in the Viewer', () => {
     expect(viewerMap()).toMatchObject({ mode: 'stereo', pitch: 60, heading: 137 });
     expect(viewerMap().altitude).toBeCloseTo(2000);
 
-    act(() => setMode('mono'));
+    act(() => setTwoEyeLandscape(false));
+    expect(viewerMap().mode).toBe('mono');
+    expect(viewerMap().altitude).toBeCloseTo(2000);
+
+    act(() => setTwoEyeLandscape(true));
+    holdPhone('upright');
     expect(viewerMap().mode).toBe('mono');
     expect(viewerMap().altitude).toBeCloseTo(2000);
   });

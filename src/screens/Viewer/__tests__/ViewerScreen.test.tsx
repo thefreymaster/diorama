@@ -12,10 +12,12 @@ import {
 import {
   AccessibilityInfo,
   AppState,
+  Dimensions,
   StatusBar,
   StyleSheet,
   type AppStateStatus,
 } from 'react-native';
+import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { getAnimatedStyle } from 'react-native-reanimated';
 
@@ -25,11 +27,12 @@ import {
   setDebugLook,
   setEyeSeparation,
   setMiniatureIntensity,
-  setMode,
   setTrackingSensitivity,
+  setTwoEyeLandscape,
 } from '@/features/settings/store';
 import { COUNTDOWN_HINT, COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
 import { EXIT_BUTTON_SHOWN_MS } from '@/features/viewer/useExitButton';
+import { LOOK_DEGREES_PER_POINT } from '@/features/viewer/useLookDrag';
 import { queryClient } from '@/providers/queryClient';
 import { canUseLiquidGlass } from '@/ui/liquidGlass';
 
@@ -42,20 +45,22 @@ import { CIRCLE_MARGIN } from '../useCircleFit';
 import { EXIT_HOLD_DRIFT, EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../ViewerGestures';
 
 const mockRecenter = jest.fn(() => Promise.resolve());
+const mockSetDebugLook = jest.fn((_dx: number, _dy: number) => Promise.resolve());
 // Where the native view says each eye's window is; `null` until it has.
 let mockStereoEyes: DioramaStereoEyes | null = null;
 // Taken before each test swaps in fake timers.
 const realSetImmediate = setImmediate;
 
 // The native map becomes a plain view that keeps its props (so tests can read
-// them and play MapKit's part by calling `onReady`) and a ref with `recenter`.
+// them and play MapKit's part by calling `onReady`) and a ref with `recenter`
+// and `setDebugLook`.
 jest.mock('@diorama/native', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
   function MockDioramaMapView({ ref, ...props }: DioramaMapViewProps) {
     React.useImperativeHandle(ref, () => ({
       recenter: mockRecenter,
-      setDebugLook: () => Promise.resolve(),
+      setDebugLook: mockSetDebugLook,
     }));
     return React.createElement(View, { testID: 'diorama-map', ...props });
   }
@@ -106,13 +111,35 @@ const CIRCLES: DioramaStereoEyes = {
 
 type HudLook = { opacity: number; transform: unknown };
 
+/** Native stack screens (react-native-screens): a modal like the Viewer, and a pushed one. */
+const MODAL_SCREEN: string = 'RNSModalScreen';
+const STACK_SCREEN: string = 'RNSScreen';
+
+// Jest's window is upright (portrait), like the phone on its way in.
+const UPRIGHT = Dimensions.get('window');
+
+/**
+ * Turns the phone: the window takes on its new shape, as it does when iOS
+ * rotates the Viewer. Sideways is the headset's two-eye view.
+ */
+function holdPhone(orientation: 'sideways' | 'upright') {
+  const [short, long] = [UPRIGHT.width, UPRIGHT.height].sort((a, b) => a - b);
+  const size =
+    orientation === 'sideways' ? { width: long, height: short } : { width: short, height: long };
+  const window = { ...Dimensions.get('window'), ...size };
+  act(() => Dimensions.set({ window, screen: window }));
+}
+
 let appStateListeners: ((state: AppStateStatus) => void)[] = [];
 
 beforeEach(() => {
   jest.useFakeTimers();
   queryClient.clear();
   resetSettings();
+  // In the headset unless a test says otherwise.
+  holdPhone('sideways');
   mockRecenter.mockClear();
+  mockSetDebugLook.mockClear();
   mockImpact.mockClear();
   mockLiquidGlass.mockReturnValue(true);
   mockStereoEyes = null;
@@ -127,6 +154,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  holdPhone('upright');
   jest.restoreAllMocks();
   jest.useRealTimers();
 });
@@ -142,9 +170,15 @@ async function openViewer(url = '/view/paris') {
   return router;
 }
 
-/** What the native view reports once both eyes have drawn. */
+/** What the native view reports once every eye has drawn. */
 function finishLoading() {
   act(() => viewerMap().onReady?.({ coverage: 'yes' }));
+}
+
+/** The map's camera: where you stand and look from, which a turn of the phone keeps. */
+function viewerCamera() {
+  const { center, altitude, pitch, heading } = viewerMap();
+  return { center, altitude, pitch, heading };
 }
 
 function wait(ms: number) {
@@ -237,6 +271,26 @@ function layOutHud(eye: 'left' | 'right', width: number, height: number) {
     centered: box.alignItems === 'center' && box.justifyContent === 'center',
     scale,
   };
+}
+
+/** One finger dragged across the view, by `dx` and `dy` points in all. */
+async function dragBy(dx: number, dy: number) {
+  await nextGestureCallbacks();
+  act(() =>
+    fireGestureHandler(getByGestureTestId('viewer-look-drag'), [
+      { state: State.BEGAN, translationX: 0, translationY: 0 },
+      { state: State.ACTIVE, translationX: 0, translationY: 0 },
+      { translationX: dx / 2, translationY: dy / 2 },
+      { translationX: dx, translationY: dy },
+      { state: State.END, translationX: dx, translationY: dy },
+    ]),
+  );
+}
+
+/** The HUD's glass (one copy: held in the hand), materialized or dissolved. */
+function hudGlass() {
+  return within(screen.getByTestId('viewer-hud', HIDDEN)).UNSAFE_getByType(GlassView).props
+    .glassEffectStyle;
 }
 
 async function holdToExit() {
@@ -350,23 +404,21 @@ describe('viewer', () => {
     for (const eye of ['left', 'right'] as const) expect(fitsCircle(eye, 152, 44)).toBe(1);
   });
 
-  it('draws the HUD once in mono', async () => {
-    setMode('mono');
+  it('draws the HUD once held in the hand', async () => {
+    holdPhone('upright');
     await openViewer();
     expect(viewerMap().mode).toBe('mono');
     finishLoading();
 
-    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(1);
-
-    wait(3000);
     await doubleTap();
     expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(1);
+    expect(screen.getByTestId('hud-eye-both', HIDDEN)).toHaveTextContent(RECENTERED);
   });
 
   it('materializes the recenter HUD, then dissolves it on its own', async () => {
     // Mono: under Jest, Reanimated only tracks one view per animated style
     // (on a phone both eye copies follow it).
-    setMode('mono');
+    holdPhone('upright');
     await openViewer();
     enterDiorama();
     wait(1000);
@@ -394,7 +446,7 @@ describe('viewer', () => {
 
   it('fades the whole HUD, blur and all, before iOS 26', async () => {
     mockLiquidGlass.mockReturnValue(false);
-    setMode('mono');
+    holdPhone('upright');
     await openViewer();
     enterDiorama();
     wait(1000);
@@ -411,7 +463,7 @@ describe('viewer', () => {
 
   it('only dissolves the HUD under Reduce Motion, with no overshoot', async () => {
     jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
-    setMode('mono');
+    holdPhone('upright');
     await openViewer();
     enterDiorama();
     wait(1000);
@@ -553,7 +605,7 @@ describe('viewer', () => {
       setEyeSeparation(2);
       setTrackingSensitivity(1.5);
       setMiniatureIntensity(0.2);
-      setMode('mono');
+      setTwoEyeLandscape(false);
       setDebugLook(true);
     });
 
@@ -621,8 +673,8 @@ describe('viewer exit button', () => {
     expect(await screen.findByTestId('city-picker-screen')).toBeOnTheScreen();
   });
 
-  it('waits for a tap in mono, then fades out 3 s later', async () => {
-    setMode('mono');
+  it('waits for a tap held in the hand, then fades out 3 s later', async () => {
+    holdPhone('upright');
     await openViewer();
     enterDiorama();
     const glyph = () => getAnimatedStyle(screen.getByTestId('viewer-exit-glyph', HIDDEN)).opacity;
@@ -650,8 +702,8 @@ describe('viewer exit button', () => {
     expect(glyph()).toBeCloseTo(0, 2);
   });
 
-  it('exits from mono too, once a tap has shown it', async () => {
-    setMode('mono');
+  it('exits held in the hand too, once a tap has shown it', async () => {
+    holdPhone('upright');
     const router = await openViewer();
     enterDiorama();
 
@@ -663,7 +715,7 @@ describe('viewer exit button', () => {
   });
 
   it('never slows or blocks a double-tap recenter', async () => {
-    setMode('mono');
+    holdPhone('upright');
     await openViewer();
     enterDiorama();
     mockRecenter.mockClear();
@@ -680,11 +732,13 @@ describe('viewer exit button', () => {
       tagOf('viewer-double-tap'),
       tagOf('viewer-tap'),
     ]);
+    // A drag to look waits for nothing either.
+    expect(waitsFor('viewer-look-drag')).toEqual([]);
   });
 
   it('only fades under Reduce Motion, with no scale', async () => {
     jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
-    setMode('mono');
+    holdPhone('upright');
     await openViewer();
     enterDiorama();
 
@@ -711,6 +765,292 @@ describe('viewer exit button', () => {
 
     // Once per eye.
     expect(screen.getAllByText(COUNTDOWN_HINT, HIDDEN)).toHaveLength(2);
+  });
+});
+
+describe('viewer orientation', () => {
+  it('turns every way but upside down, while the other screens stay upright', async () => {
+    await openViewer();
+
+    // The Viewer is a full-screen modal; `default` is all but upside down on iOS.
+    const viewer = screen.UNSAFE_root.findAll(
+      (node) => node.type === MODAL_SCREEN && node.props.stackPresentation === 'fullScreenModal',
+    );
+    expect(viewer).toHaveLength(1);
+    expect(viewer[0].props.screenOrientation).toBe('default');
+    // The picker underneath stays portrait, so leaving turns the phone back upright.
+    const picker = screen.UNSAFE_root.findAll(
+      (node) => node.type === STACK_SCREEN && node.props.stackPresentation === 'push',
+    );
+    expect(picker.map((node) => node.props.screenOrientation)).toEqual(['portrait']);
+  });
+
+  it('held upright, fills the screen and follows the phone as soon as it draws', async () => {
+    holdPhone('upright');
+    await openViewer();
+    expect(viewerMap().mode).toBe('mono');
+    expect(viewerMap().headTracking).toBe(false);
+
+    // Still loading behind the black cover.
+    wait(5000);
+    expect(mockRecenter).not.toHaveBeenCalled();
+
+    // No countdown: it recenters and follows the phone at once.
+    finishLoading();
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    wait(5000);
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+
+    // A later render report changes nothing.
+    finishLoading();
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+
+    // Double-tap recenters straight away, and the ✕ waits for a tap.
+    await doubleTap();
+    expect(mockRecenter).toHaveBeenCalledTimes(2);
+    expect(exitButton()).toBeNull();
+    await tap();
+    expect(exitButton()).toBeOnTheScreen();
+  });
+
+  it('sideways, shows the two-eye view with the countdown', async () => {
+    await openViewer();
+    expect(viewerMap().mode).toBe('stereo');
+
+    finishLoading();
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+    expect(viewerMap().headTracking).toBe(false);
+    expect(mockRecenter).not.toHaveBeenCalled();
+    // The ✕ stays up, in the black margin.
+    expect(exitButton()).toBeOnTheScreen();
+
+    wait(3000);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+  });
+
+  it('turned sideways, switches to the two eyes and counts down again once they draw', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+    const camera = viewerCamera();
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+
+    holdPhone('sideways');
+
+    // Same spot; the fresh eyes load behind the black cover, not tracking yet.
+    expect(viewerMap().mode).toBe('stereo');
+    expect(viewerCamera()).toEqual(camera);
+    expect(viewerMap().headTracking).toBe(false);
+    expect(exitButton()).toBeOnTheScreen();
+    wait(5000);
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+
+    // Time to put the phone in the headset, then straight ahead is where you face.
+    finishLoading();
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+    wait(2000);
+    expect(screen.getAllByText('1', HIDDEN)).toHaveLength(2);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    wait(1000);
+    expect(mockRecenter).toHaveBeenCalledTimes(2);
+    expect(viewerMap().headTracking).toBe(true);
+
+    // A later render report in the same view never starts it again.
+    finishLoading();
+    wait(3000);
+    expect(screen.queryAllByText('3', HIDDEN)).toHaveLength(0);
+    expect(mockRecenter).toHaveBeenCalledTimes(2);
+  });
+
+  it('turned back upright, fills the screen and recenters at once', async () => {
+    mockStereoEyes = EYES;
+    await openViewer();
+    enterDiorama();
+    const camera = viewerCamera();
+    mockRecenter.mockClear();
+
+    holdPhone('upright');
+
+    expect(viewerMap().mode).toBe('mono');
+    expect(viewerCamera()).toEqual(camera);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+    // The ✕ goes back to waiting for a tap.
+    expect(exitButton()).toBeNull();
+
+    // No countdown (the HUD stays clear), and no second recenter later.
+    wait(5000);
+    expect(hudGlass()).toMatchObject({ style: 'none' });
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('turned upright mid-countdown, stops it and goes straight in', async () => {
+    await openViewer();
+    finishLoading();
+    wait(1000);
+    expect(screen.getAllByText('2', HIDDEN)).toHaveLength(2);
+
+    holdPhone('upright');
+
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+    // The countdown's glass dissolves, and it never comes back or finishes.
+    wait(1000);
+    expect(hudGlass()).toMatchObject({ style: 'none' });
+    wait(5000);
+    expect(hudGlass()).toMatchObject({ style: 'none' });
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('turned while still loading, waits for the map either way', async () => {
+    holdPhone('upright');
+    await openViewer();
+
+    // Sideways before anything drew: the countdown follows the first draw.
+    holdPhone('sideways');
+    expect(viewerMap().mode).toBe('stereo');
+    finishLoading();
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+    expect(mockRecenter).not.toHaveBeenCalled();
+    wait(3000);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('turned upright while the two eyes load, recenters once the one picture draws', async () => {
+    await openViewer();
+
+    holdPhone('upright');
+    expect(viewerMap().mode).toBe('mono');
+    expect(viewerMap().headTracking).toBe(false);
+    expect(mockRecenter).not.toHaveBeenCalled();
+
+    finishLoading();
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+  });
+
+  it('with "Two-eye view in landscape" off, fills the screen sideways too', async () => {
+    setTwoEyeLandscape(false);
+    await openViewer();
+
+    expect(viewerMap().mode).toBe('mono');
+    finishLoading();
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+    expect(exitButton()).toBeNull();
+
+    // And turning the phone keeps it that way.
+    holdPhone('upright');
+    expect(viewerMap().mode).toBe('mono');
+    holdPhone('sideways');
+    expect(viewerMap().mode).toBe('mono');
+    expect(viewerMap().headTracking).toBe(true);
+  });
+
+  it('lifts a cool-down to one picture with the next turn into the headset', async () => {
+    await openViewer();
+    enterDiorama();
+    act(() => viewerMap().onDegraded?.({ reason: 'thermal' }));
+    expect(screen.getAllByText(COOLING, HIDDEN)).toHaveLength(1);
+
+    holdPhone('upright');
+    holdPhone('sideways');
+    finishLoading();
+
+    // A new mode lifts the native fallback, so the HUD is per eye again.
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+  });
+});
+
+describe('viewer drag to look', () => {
+  it('held upright, turns the view with one finger, the city following it', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+
+    // Left and down: look right and up, as the city moves with the finger.
+    await dragBy(-40, 20);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(
+      40 * LOOK_DEGREES_PER_POINT,
+      20 * LOOK_DEGREES_PER_POINT,
+    );
+    expect(getByGestureTestId('viewer-look-drag').config).toMatchObject({ maxPointers: 1 });
+
+    // The next drag carries on from there.
+    await dragBy(-20, 0);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(
+      60 * LOOK_DEGREES_PER_POINT,
+      20 * LOOK_DEGREES_PER_POINT,
+    );
+
+    // A recenter starts it from straight ahead again.
+    await doubleTap();
+    await dragBy(8, 0);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(-8 * LOOK_DEGREES_PER_POINT, 0);
+  });
+
+  it('stops at straight up and straight down', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+
+    await dragBy(0, 10_000);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(0, 90);
+    await dragBy(0, -20_000);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(0, -90);
+  });
+
+  it('only drags once the view follows the phone, and never in the headset', async () => {
+    holdPhone('upright');
+    await openViewer();
+
+    // Still loading.
+    await dragBy(-40, 0);
+    expect(mockSetDebugLook).not.toHaveBeenCalled();
+
+    // In the headset there's nothing to drag.
+    holdPhone('sideways');
+    enterDiorama();
+    await dragBy(-40, 0);
+    expect(mockSetDebugLook).not.toHaveBeenCalled();
+
+    // Back upright, it drags from straight ahead.
+    holdPhone('upright');
+    await dragBy(-40, 0);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(40 * LOOK_DEGREES_PER_POINT, 0);
+  });
+
+  it("leaves dragging to the map's own debug look", async () => {
+    setDebugLook(true);
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+
+    await dragBy(-40, 0);
+
+    expect(mockSetDebugLook).not.toHaveBeenCalled();
+    expect(viewerMap().debugLook).toBe(true);
+  });
+
+  it('still recenters on a double-tap and exits on a hold', async () => {
+    holdPhone('upright');
+    const router = await openViewer();
+    finishLoading();
+    mockRecenter.mockClear();
+
+    await doubleTap();
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+
+    await holdToExit();
+    expect(router.getPathname()).toBe('/city/paris');
+    await landOnPreview();
   });
 });
 

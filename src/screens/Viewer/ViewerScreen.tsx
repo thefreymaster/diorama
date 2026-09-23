@@ -14,11 +14,13 @@ import { ViewerHud } from './ViewerHud';
 import { ViewerMap } from './ViewerMap';
 
 /**
- * The diorama, worn in a viewer. Landscape and the hidden home indicator
- * come from the route options. The screen stays awake, double-tap
- * recenters, a long press exits, and the HUD appears only when it has
- * something to say. The one piece of chrome is a close button: always there
- * in stereo (in the black outside the eye windows), on a tap in mono.
+ * The diorama. Held upright it's one full-screen picture, a window into the
+ * city; turned sideways it's the two-eye view for a headset viewer, and it
+ * switches as the phone turns (the route allows every orientation but
+ * upside down, and hides the home indicator). The screen stays awake,
+ * double-tap recenters, a long press exits, and the HUD appears only when it
+ * has something to say. The one piece of chrome is a close button: always
+ * there in stereo (in the black outside the eye windows), on a tap in mono.
  */
 export function ViewerScreen() {
   useKeepAwake();
@@ -33,6 +35,7 @@ export function ViewerScreen() {
   return (
     <View style={styles.fill}>
       <ViewerGestures
+        lookDrag={viewer.lookDrag}
         onTap={exitButton.reveal}
         onRecenter={viewer.recenter}
         onExit={viewer.exit}
@@ -42,6 +45,7 @@ export function ViewerScreen() {
         <ViewerMap
           ref={mapRef}
           city={city}
+          mode={viewer.mode}
           headTracking={viewer.headTracking}
           onReady={viewer.onReady}
           onDegraded={viewer.onDegraded}

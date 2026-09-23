@@ -11,7 +11,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   return (
     <AppProviders>
-      {/* Portrait everywhere; the Viewer route below is the only landscape screen. */}
+      {/* Portrait everywhere; only the Viewer route below also turns sideways. */}
       <Stack
         screenOptions={{
           orientation: 'portrait',
@@ -29,7 +29,9 @@ export default function RootLayout() {
           options={{
             presentation: 'fullScreenModal',
             headerShown: false,
-            orientation: 'landscape',
+            // Every way but upside down: upright is full screen, sideways the
+            // two-eye view. Leaving it, the preview turns the phone back upright.
+            orientation: 'default',
             autoHideHomeIndicator: true,
           }}
         />

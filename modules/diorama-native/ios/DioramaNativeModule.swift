@@ -60,6 +60,9 @@ public class DioramaNativeModule: Module {
         // Guard against nonsense; the settings screen keeps it in 0.3...3.
         view.eyeSeparation = separation.isFinite ? min(max(separation, 0), 5) : 1
       }
+      Prop("miniatureIntensity", 0.0) { (view: DioramaMapView, intensity: Double) in
+        view.miniatureIntensity = intensity.isFinite ? min(max(intensity, 0), 1) : 0
+      }
       Prop("debugThermalState") { (view: DioramaMapView, state: ThermalStateName?) in
         view.debugThermalState = state?.processInfoState
       }

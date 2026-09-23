@@ -101,14 +101,28 @@ export type DioramaStereoProps = {
 };
 
 /**
+ * The miniature look, drawn natively and identically in every eye.
+ */
+export type DioramaMiniatureProps = {
+  /**
+   * Tilt-shift strength, 0 to 1: blurs bands at the top and bottom of each
+   * eye, leaving a sharp strip in the middle, and adds a faint warm tint
+   * that gives the gray city a little more color. Higher means taller bands,
+   * stronger blur and more tint. The bands stay level with the screen under
+   * head tracking. Defaults to 0 (off).
+   */
+  miniatureIntensity?: number;
+};
+
+/**
  * Public props, following the `DioramaMapViewProps` contract in OVERVIEW.md.
- * Later tasks add their props here and in DioramaNativeModule.swift:
- * miniature (T09).
+ * New props go here and in DioramaNativeModule.swift.
  */
 export type DioramaMapViewProps = ViewProps &
   DioramaCameraProps &
   DioramaHeadTrackingProps &
-  DioramaStereoProps & {
+  DioramaStereoProps &
+  DioramaMiniatureProps & {
     /** Slow auto-rotate around `center`. Starts after the first full render. */
     orbit?: boolean;
     /**

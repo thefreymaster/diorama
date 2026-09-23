@@ -33,6 +33,14 @@ final class DioramaMapView: ExpoView {
   var eyeSeparation = 1.0
   // Debug builds only: pretend the phone is this hot (see ThermalMonitor).
   var debugThermalState: ProcessInfo.ThermalState?
+  // The tilt-shift look (MiniatureOverlay), 0 = off. Every eye gets the same.
+  var miniatureIntensity = 0.0 {
+    didSet {
+      for eye in rig.eyes {
+        (eye.overlay as? MiniatureOverlay)?.intensity = miniatureIntensity
+      }
+    }
+  }
 
   // Orbit speed: one full turn every two minutes.
   private static let orbitDegreesPerSecond = 3.0
@@ -81,6 +89,10 @@ final class DioramaMapView: ExpoView {
     super.init(appContext: appContext)
     clipsToBounds = true
     rig.onRendered = { [weak self] in self?.eyesDidRender() }
+    // Each eye (including one added later) gets its own tilt-shift overlay.
+    rig.makeOverlay = { [weak self] in
+      MiniatureOverlay(intensity: self?.miniatureIntensity ?? 0)
+    }
     addSubview(rig.view)
     loadingCover.backgroundColor = .black
     loadingCover.isUserInteractionEnabled = false

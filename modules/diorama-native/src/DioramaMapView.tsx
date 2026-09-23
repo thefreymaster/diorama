@@ -6,7 +6,7 @@ import { NativeDioramaMapView, type NativeDegradedEvent } from './NativeDioramaM
 
 /**
  * A photoreal 3D Apple Maps view with a camera driven by props. All
- * per-frame work (orbit, head tracking, stereo eyes) runs natively.
+ * per-frame work (orbit, head tracking, stereo eyes, tilt-shift) runs natively.
  */
 export function DioramaMapView({
   ref,
@@ -18,6 +18,7 @@ export function DioramaMapView({
   trackingSensitivity = 1,
   mode = 'mono',
   eyeSeparation = 1,
+  miniatureIntensity = 0,
   ...props
 }: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
@@ -50,6 +51,7 @@ export function DioramaMapView({
       trackingSensitivity={trackingSensitivity}
       mode={mode}
       eyeSeparation={eyeSeparation}
+      miniatureIntensity={miniatureIntensity}
       onReady={handleReady}
       onDegraded={handleDegraded}
     />

@@ -6,6 +6,7 @@ export type {
   DioramaHeadTrackingProps,
   DioramaMapViewProps,
   DioramaMapViewRef,
+  DioramaMiniatureProps,
   DioramaReadyEvent,
   DioramaStereoProps,
   DioramaThermalState,

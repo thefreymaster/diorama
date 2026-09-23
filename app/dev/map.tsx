@@ -24,6 +24,7 @@ type MapParams = {
   mode?: string;
   eyeSeparation?: string;
   thermal?: string;
+  miniature?: string;
 };
 
 type ScreenOrientation = 'portrait' | 'landscape' | 'landscape_left' | 'landscape_right';
@@ -65,19 +66,20 @@ function orientationParam(value: string | undefined, fallback: boolean): ScreenO
  * Dev-only map check:
  * diorama://dev/map?lat=&lon=&altitude=&pitch=&heading=&orbit=1
  *   &headTracking=1&debugLook=1&sensitivity=1.5&landscape=left|right|1
- *   &mode=mono|stereo&eyeSeparation=1&thermal=serious|critical
+ *   &mode=mono|stereo&eyeSeparation=1&thermal=serious|critical&miniature=0.6
  * "Turn" changes the heading prop from JS; "Recenter" and "Peek" call the
  * ref methods. With `headTracking=1&debugLook=1`, dragging looks around
  * (the Simulator has no gyro); on a device, drop `debugLook` to use motion.
  * `mode=stereo` shows two eyes (landscape unless `landscape=0`); `thermal` pretends
- * the phone is that hot. Unset params default to the Settings values
- * (`mode` defaults to mono here).
+ * the phone is that hot. `miniature` is the tilt-shift strength (0 = off, 1 = max).
+ * Unset params default to the Settings values (`mode` defaults to mono here).
  */
 export default function DevMapRoute() {
   const params = useLocalSearchParams<MapParams>();
   const savedSensitivity = useSetting('trackingSensitivity');
   const savedDebugLook = useSetting('debugLook');
   const savedEyeSeparation = useSetting('eyeSeparation');
+  const savedMiniature = useSetting('miniatureIntensity');
   const mapRef = useRef<DioramaMapViewRef>(null);
   const [turn, setTurn] = useState(0);
   const [flyover, setFlyover] = useState<boolean | null>(null);
@@ -127,6 +129,7 @@ export default function DevMapRoute() {
         trackingSensitivity={numberParam(params.sensitivity, savedSensitivity)}
         mode={mode}
         eyeSeparation={numberParam(params.eyeSeparation, savedEyeSeparation)}
+        miniatureIntensity={numberParam(params.miniature, savedMiniature)}
         debugThermalState={thermalParam(params.thermal)}
         onReady={({ flyoverAvailable }) => setFlyover(flyoverAvailable)}
         onDegraded={() => setDegraded(true)}

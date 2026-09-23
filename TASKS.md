@@ -79,11 +79,12 @@ Acceptance: A Simulator screenshot of `diorama://dev/map?mode=stereo` shows two 
 Notes: NEEDS DEVICE CHECK — Cardboard: does `diorama://dev/map?mode=stereo&headTracking=1&eyeSeparation=0.5` (then 1, 2, 3) fuse and read as a tabletop model? Check fps and heat (each eye draws a 618-pt square plus a `CAReplicatorLayer` copy; T09 needs ≥50 fps), real head roll stays fused and level, thermal via Xcode Devices → Condition (serious → 30 fps, critical → mono + `onDegraded`), and that mono (preview, T07 tracking) did not regress. Design: both MapKit cameras look at the same center from eye positions (toe-in), then a per-eye homography warps back to an ideal parallel eye; this also cancels roll and zeroes parallax at the center. Needed because MapKit anchors each camera to the surface under its look-at point. Measured vertical disparity ≈0 pt in every case; horizontal disparity grows linearly with eyeSeparation. Layout margins are equalised (camera now centered on the full view, mono too); pitch cap is learned and shared by both eyes; switching to stereo builds fresh maps; `onReady` falls back after 10 s. T09 overlay slot: `EyeView.overlay` via `StereoRig.makeOverlay`.
 
 ### T09 Miniature (tilt-shift) look
-Status: in-progress
+Status: done
 Depends: T08
 Files: modules/diorama-native/ios/MiniatureOverlay.swift, modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/src/
 Details: Overlay each eye with a tilt-shift effect: stacked `UIVisualEffectView` blur bands at the top and bottom with gradient masks (`CAGradientLayer`), plus a sharp band in the middle. Add a slight saturation/contrast lift with a `CALayer` compositing filter or a tinted overlay. Private `CAFilter` APIs are forbidden (App Store). `miniatureIntensity` 0…1 scales the band size and blur. Keep the effect identical in both eyes.
 Acceptance: At 0.6 intensity the view reads as a tilt-shift photo of a model (Simulator screenshot). No FPS drop below 50 on the target device with stereo on.
+Notes: NEEDS DEVICE CHECK — fps with stereo at miniature 0.6 and 1 must stay ≥50; real head roll keeps the bands level; heat over a few minutes. Blur via the public `UIViewPropertyAnimator.fractionComplete` technique on `.systemUltraThinMaterialDark` (on iOS 26 it must be applied one runloop after the band is on screen; reapplied on foreground); below ~0.2 the bands fade in instead of blurring less. `compositingFilter` is unsupported on iOS, so the lift is a warm tint of up to 8%. Measured sharpness at 0.6: top 0.35×, middle 0.96×, bottom 0.16× of unblurred; the eyes match within 0.02. OPEN QUESTION for owner: the bottom band softens MapKit's Apple logo and Legal link, which Apple asks apps to keep visible.
 
 ## Phase 2 — Screens (React)
 
@@ -112,7 +113,7 @@ Acceptance: Full cycle on a device: enter, wear, look around, recenter, exit. No
 Notes: NEEDS DEVICE CHECK — full cycle: enter, wear, look around, double-tap recenter, hold 1 s to exit; the per-eye HUD copies fuse in the headset; an incoming call or the app switcher stops tracking and it recenters on return; VoiceOver "Exit"/activate actions. Tracking stays off during the 3-s countdown (which starts after `onReady`), then recenters and starts. The HUD is drawn once per eye in stereo. Exit uses `router.dismissTo` the preview (fixes the deep-link large-title collapse). Status bar hidden via expo-status-bar; `useKeepAwake`. No native pause: turning tracking off while inactive stops the per-frame work. Follow-up: `useReduceMotion` lives in CityPreview; move it to `@/ui` (T14).
 
 ### T13 Settings screen
-Status: todo
+Status: in-progress
 Depends: T02, T03, T04, T09
 Files: src/screens/Settings/**
 Details: An inset-grouped list: "Model size" slider (eyeSeparation 0.3–3), "Tracking sensitivity", "Miniature effect", a "Stereo" toggle, and "Look around by dragging" (debugLook, shown in dev builds only). Add a live mini preview at the top (mono DioramaMapView) that reflects the miniature setting. Add "Reset to defaults".

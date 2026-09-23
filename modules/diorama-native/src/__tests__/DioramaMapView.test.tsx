@@ -50,6 +50,16 @@ describe('DioramaMapView', () => {
     });
   });
 
+  it('leaves the miniature look off by default', () => {
+    const view = render(<DioramaMapView {...CAMERA} />);
+    expect(view.toJSON()).toMatchObject({ props: { miniatureIntensity: 0 } });
+  });
+
+  it('passes the miniature intensity to the native view', () => {
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" miniatureIntensity={0.6} />);
+    expect(view.toJSON()).toMatchObject({ props: { mode: 'stereo', miniatureIntensity: 0.6 } });
+  });
+
   it('unwraps the native onDegraded event', () => {
     const onDegraded = jest.fn();
     const view = render(<DioramaMapView {...CAMERA} mode="stereo" onDegraded={onDegraded} />);

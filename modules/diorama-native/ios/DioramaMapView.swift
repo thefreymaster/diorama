@@ -14,8 +14,8 @@ import UIKit
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady([:])` fires the JS `onReady` callback.
   // MapKit can't tell whether a place has photoreal 3D (it accepts a 3D
-  // camera over flat imagery too), so the TS wrapper adds `flyoverAvailable`
-  // from a curated list. See src/flyoverCoverage.ts.
+  // camera over flat imagery too), so the TS wrapper adds `coverage` (yes,
+  // no or unknown) from curated lists. See src/flyoverCoverage.ts.
   let onReady = EventDispatcher()
   // Event prop: the phone got too hot for two maps, so stereo fell back to
   // mono. Payload: `{ reason: "thermal" }`.

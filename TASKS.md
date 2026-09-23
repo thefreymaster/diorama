@@ -168,14 +168,28 @@ Details: The bottom tilt-shift band blurs MapKit's Apple Maps logo and "Legal" l
 Acceptance: The logo and "Legal" are legible in every eye at miniature 1 (screenshots), and the tilt-shift still reads as a model.
 Notes: Waiting on owner decision.
 
-## Backlog (not scheduled)
-
-### T18 Lens distortion correction for Cardboard-style viewers
+### T22 Cardboard-style eye layout (lens-centered viewports)
 Status: todo
-Depends: T08
+Depends: T20
+Files: modules/diorama-native/ios/StereoRig.swift, modules/diorama-native/ios/EyeView.swift, modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/ios/ViewerProfile.swift, modules/diorama-native/ios/DioramaNativeModule.swift, modules/diorama-native/src/, src/screens/Viewer/PerEye.tsx
+Details: The owner tried stereo on an iPhone 14 Pro in a headset and could not fuse the two images. Today each eye fills half the landscape screen edge to edge, so the eye centers sit about 70 mm apart (wider than the ~64 mm between viewer lenses) and the picture runs into the lens edges. Match a Cardboard-style viewer instead (reference: `docs/reference/cardboard-viewer.png`; ignore its green night-vision color): each eye is a smaller viewport centered on its lens, with black around it. Horizontal centers at screen center ± lensSpacing/2 (default 64 mm, Cardboard v2), vertically centered; convert mm to points with a small per-device points-per-mm table (there is no public PPI API; use the `utsname` model id, with a sensible fallback). Viewport size roughly the reference's proportions (each eye ~54% of a half-screen wide, ~48% of the screen tall), clamped so the two never overlap. Expose `lensSpacing` (mm) as an optional prop with that default. Keep T08's per-eye homography/roll pipeline inside each viewport and recompute overscan for the smaller size. Tune the default `eyeSeparation` so both eyes show nearly identical content like the reference (small disparity); measure and report the max edge disparity in points. Emit the two viewport rects to JS (e.g. an `onEyeLayout` event) so `PerEye` centers the countdown/"Recentered" HUD in each viewport instead of each half-screen. Mono stays full screen. No barrel distortion here (that is T18).
+Acceptance: A Simulator screenshot of the stereo Viewer shows two black-surrounded viewports whose centers are lensSpacing apart (measured in points, matching the device table), with the HUD centered in each; stereo vertical alignment still ≈0 pt. NEEDS DEVICE CHECK — the owner fuses the two images in their headset.
+
+### T18 Barrel (lens) distortion pre-correction per eye
+Status: todo
+Depends: T22
 Files: modules/diorama-native/ios/
-Details: Optional barrel-distortion pass per eye. This probably needs rendering MKMapView into a Metal texture, which is expensive. Research first; drop it if the cost is too high.
-Acceptance: Straight lines look straight through a Cardboard lens.
+Details: The reference (`docs/reference/cardboard-viewer.png`) pre-distorts each eye with a barrel warp (bulged edges) so straight lines look straight through the viewer's lenses. Start from Cardboard v2 coefficients (k1 = 0.34, k2 = 0.55). The current per-eye picture is a `CAReplicatorLayer` copy with a projective `CATransform3D`, which can't bend lines, and `CAMeshTransform` is private (forbidden). Research first and pick the cheapest public path, e.g. a grid of clipped replicator tiles each with its own local projective transform (piecewise-projective approximation of the warp) vs capturing the map into a Metal texture and warping it with a mesh. Report the cost before building; drop it if fps falls below 50 with stereo and miniature on.
+Acceptance: Simulator screenshots show the reference's bulged-edge eye shape, and the fps budget holds on device. NEEDS DEVICE CHECK — straight lines look straight through a Cardboard lens.
+
+### T23 First-person head tracking (look around from a fixed vantage point)
+Status: todo
+Depends: T20
+Files: modules/diorama-native/ios/FirstPersonCamera.swift, modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/ios/StereoGeometry.swift, modules/diorama-native/ios/StereoRig.swift, OVERVIEW.md
+Details: The owner says head movement feels like a third-person move. Today head yaw adds to the camera `heading` around the fixed look-at center (`DioramaMapView.swift`, "yaw turns the heading"), so the city spins like a turntable, and head pitch swings the camera over it. Make it first person: the head stays at a fixed vantage point (the eye position of the starting camera, from its center, altitude as camera-to-center distance, pitch and heading), and turning the head rotates the gaze from there, so the city stays world-fixed and the view pans across it. Per frame: gaze heading = base heading + yaw × sensitivity, gaze pitch = base pitch + head pitch; aim point = where the gaze ray meets the ground; place the camera with `MKMapCamera(lookingAtCenter:fromEyeCoordinate:eyeAltitude:)`. Near the horizon the aim point runs away, so clamp to MapKit's pitch cap (T08 learns it) and keep it smooth. Stereo: the eyes sit ±baseline/2 either side of the fixed head position, perpendicular to the current gaze heading, both converging on the aim point; keep T08's homography/roll pipeline and its surface-anchoring notes, with zero vertical disparity. Recenter re-zeroes the head reference; the vantage point does not move. The preview orbit (no tracking) stays as is. Put the math in a pure, commented type and prove it with a scratch `swiftc` harness. Update OVERVIEW.md's motion description.
+Acceptance: In the Simulator (`debugLook`), dragging right pans the view right while the eye coordinate stays constant (temporary log or harness), and landmarks translate across the screen instead of rotating about the center (before/after screenshots); stereo vertical disparity ≈0 pt. NEEDS DEVICE CHECK — turning the head feels like looking around from a fixed spot above the model.
+
+## Backlog (not scheduled)
 
 ### T19 Picker large title collapses after exiting a deep-linked Viewer
 Status: todo

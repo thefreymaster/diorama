@@ -5,6 +5,9 @@ export const COUNTDOWN_SECONDS = 3;
 
 export const COUNTDOWN_TITLE = 'Put on your viewer';
 
+/** Under the countdown: the one exit that works once the viewer is on. */
+export const COUNTDOWN_HINT = 'Hold anywhere to exit';
+
 /** A short message that fades in over the view, then fades out on its own. */
 export type HudNotice = 'recentered' | 'cooling';
 

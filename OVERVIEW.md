@@ -89,7 +89,7 @@ modules/diorama-native/  # Expo Module (Swift + TS wrapper)
 - Native stack navigation (expo-router `Stack`): real large titles, header search bar, edge swipe-back. Inset-grouped lists, materials (blur) in place of flat fills, haptics on meaningful actions.
 - Motion: spring animations (Reanimated), no linear fades. Respect Reduce Motion.
 - Copy: short, sentence case, no exclamation marks.
-- Viewer: no chrome. A brief HUD fades in on recenter, then fades out.
+- Viewer: no chrome over the eyes. A brief HUD fades in on recenter, then fades out. The only control is a small glass close button in the black margin outside the eye windows (invisible through the lenses); holding anywhere for a second also exits.
 
 ## Known risks
 

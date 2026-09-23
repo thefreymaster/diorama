@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { COUNTDOWN_TITLE } from '@/features/viewer/hud';
+import { COUNTDOWN_HINT, COUNTDOWN_TITLE } from '@/features/viewer/hud';
 import { MAX_GLYPH_SCALE, spacing } from '@/theme';
 import { Text } from '@/ui';
 
@@ -9,8 +9,9 @@ type CountdownHudProps = {
 };
 
 /**
- * "3 / Put on your viewer", for the HUD's glass tile. Text grows with
- * Dynamic Type, but only as far as still fits in one eye's lens window.
+ * "3 / Put on your viewer / Hold anywhere to exit", for the HUD's glass
+ * tile. Text grows with Dynamic Type, but only as far as still fits in one
+ * eye's lens window; the hint wraps there rather than widen the tile.
  */
 export function CountdownHud({ secondsLeft }: CountdownHudProps) {
   return (
@@ -25,6 +26,14 @@ export function CountdownHud({ secondsLeft }: CountdownHudProps) {
       </Text>
       <Text variant="headline" maxFontSizeMultiplier={MAX_GLYPH_SCALE} style={styles.center}>
         {COUNTDOWN_TITLE}
+      </Text>
+      <Text
+        variant="footnote"
+        color="secondaryLabel"
+        maxFontSizeMultiplier={MAX_GLYPH_SCALE}
+        style={styles.center}
+      >
+        {COUNTDOWN_HINT}
       </Text>
     </View>
   );

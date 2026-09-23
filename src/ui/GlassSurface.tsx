@@ -18,6 +18,11 @@ export type GlassSurfaceProps = {
    * no such animation and ignores this; fade a parent there. Default true.
    */
   visible?: boolean;
+  /**
+   * `dark` keeps the dark material in light mode too, for controls over
+   * black, like a video player's (put light content on it). Default `auto`.
+   */
+  colorScheme?: 'auto' | 'dark';
 };
 
 /**
@@ -30,12 +35,14 @@ export function GlassSurface({
   style,
   interactive = false,
   visible = true,
+  colorScheme = 'auto',
 }: GlassSurfaceProps) {
   if (canUseLiquidGlass()) {
     return (
       <GlassView
         glassEffectStyle={{ style: visible ? 'regular' : 'none', animate: true }}
         isInteractive={interactive}
+        colorScheme={colorScheme}
         style={style}
       >
         {children}
@@ -44,7 +51,11 @@ export function GlassSurface({
   }
 
   return (
-    <BlurView tint="systemMaterial" intensity={100} style={[styles.clip, style]}>
+    <BlurView
+      tint={colorScheme === 'dark' ? 'systemMaterialDark' : 'systemMaterial'}
+      intensity={100}
+      style={[styles.clip, style]}
+    >
       {children}
     </BlurView>
   );

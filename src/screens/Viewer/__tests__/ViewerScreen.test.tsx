@@ -1,12 +1,25 @@
 import { GlassView } from 'expo-glass-effect';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
-import { act, fireEvent, renderRouter, screen, testRouter } from 'expo-router/testing-library';
-import { AccessibilityInfo, AppState, StatusBar, type AppStateStatus } from 'react-native';
+import {
+  act,
+  fireEvent,
+  renderRouter,
+  screen,
+  testRouter,
+  within,
+} from 'expo-router/testing-library';
+import {
+  AccessibilityInfo,
+  AppState,
+  StatusBar,
+  StyleSheet,
+  type AppStateStatus,
+} from 'react-native';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { getAnimatedStyle } from 'react-native-reanimated';
 
-import type { DioramaMapViewProps } from '@diorama/native';
+import type { DioramaMapViewProps, DioramaRect, DioramaStereoEyes } from '@diorama/native';
 import {
   resetSettings,
   setDebugLook,
@@ -15,7 +28,8 @@ import {
   setMode,
   setTrackingSensitivity,
 } from '@/features/settings/store';
-import { COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
+import { COUNTDOWN_HINT, COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
+import { EXIT_BUTTON_SHOWN_MS } from '@/features/viewer/useExitButton';
 import { queryClient } from '@/providers/queryClient';
 import { canUseLiquidGlass } from '@/ui/liquidGlass';
 
@@ -24,9 +38,11 @@ import * as IndexRoute from '../../../../app/index';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
-import { EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../ViewerGestures';
+import { EXIT_HOLD_DRIFT, EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../ViewerGestures';
 
 const mockRecenter = jest.fn(() => Promise.resolve());
+// Where the native view says each eye's window is; `null` until it has.
+let mockStereoEyes: DioramaStereoEyes | null = null;
 // Taken before each test swaps in fake timers.
 const realSetImmediate = setImmediate;
 
@@ -42,7 +58,11 @@ jest.mock('@diorama/native', () => {
     }));
     return React.createElement(View, { testID: 'diorama-map', ...props });
   }
-  return { ...jest.requireActual<object>('@diorama/native'), DioramaMapView: MockDioramaMapView };
+  return {
+    ...jest.requireActual<object>('@diorama/native'),
+    DioramaMapView: MockDioramaMapView,
+    useStereoEyes: () => mockStereoEyes,
+  };
 });
 
 jest.mock('expo-haptics', () => ({
@@ -70,6 +90,13 @@ const RECENTERED = HUD_NOTICES.recentered.text;
 const COOLING = HUD_NOTICES.cooling.text;
 // The HUD is hidden from VoiceOver (it announces itself), so look past that.
 const HIDDEN = { includeHiddenElements: true };
+const EXIT = { name: 'Exit' };
+
+// T24's default windows on an iPhone 14 Pro in landscape (852 × 393 pt).
+const EYES: DioramaStereoEyes = {
+  left: { x: 133.33, y: 70, width: 199, height: 253 },
+  right: { x: 519.67, y: 70, width: 199, height: 253 },
+};
 
 type HudLook = { opacity: number; transform: unknown };
 
@@ -82,6 +109,7 @@ beforeEach(() => {
   mockRecenter.mockClear();
   mockImpact.mockClear();
   mockLiquidGlass.mockReturnValue(true);
+  mockStereoEyes = null;
   appStateListeners = [];
   const addEventListener = (event: string, listener: (state: AppStateStatus) => void) => {
     if (event === 'change') appStateListeners.push(listener);
@@ -147,6 +175,42 @@ async function doubleTap() {
   act(() => fireGestureHandler(getByGestureTestId('viewer-double-tap')));
 }
 
+/** A single tap, once the double-tap window has passed. */
+async function tap() {
+  await nextGestureCallbacks();
+  act(() => fireGestureHandler(getByGestureTestId('viewer-tap')));
+}
+
+/** The exit button, while it's up (hidden, VoiceOver can't find it either). */
+function exitButton() {
+  return screen.queryByRole('button', EXIT);
+}
+
+/** Where the exit button is, in screen points. */
+function exitFrame(): DioramaRect {
+  const { left, top, width, height } = StyleSheet.flatten(
+    screen.getByTestId('viewer-exit', HIDDEN).props.style,
+  );
+  return { x: Number(left), y: Number(top), width: Number(width), height: Number(height) };
+}
+
+function overlaps(a: DioramaRect, b: DioramaRect): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/**
+ * The gestures that must fail before this one may start, by handler tag
+ * (the detector turns each relation into its tag when it attaches).
+ */
+function waitsFor(testId: string): number[] {
+  const refs = getByGestureTestId(testId).config.requireToFail ?? [];
+  return refs.flatMap((ref) => (typeof ref === 'number' ? [ref] : []));
+}
+
+function tagOf(testId: string): number {
+  return getByGestureTestId(testId).handlerTag;
+}
+
 async function holdToExit() {
   await nextGestureCallbacks();
   // Async, so the preview it lands on can settle inside act.
@@ -168,8 +232,8 @@ describe('viewer', () => {
       debugLook: false,
     });
     expect(viewerMap().orbit).toBeFalsy();
-    // No chrome while it's worn.
-    expect(screen.queryByRole('button')).toBeNull();
+    // No chrome while it's worn, but a way out.
+    expect(screen.getAllByRole('button')).toEqual([screen.getByRole('button', EXIT)]);
   });
 
   it('hides the status bar and keeps the screen awake', async () => {
@@ -214,8 +278,9 @@ describe('viewer', () => {
     finishLoading();
 
     expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
-    expect(screen.getByTestId('hud-eye-left', HIDDEN)).toHaveTextContent(`3${COUNTDOWN_TITLE}`);
-    expect(screen.getByTestId('hud-eye-right', HIDDEN)).toHaveTextContent(`3${COUNTDOWN_TITLE}`);
+    const countdown = `3${COUNTDOWN_TITLE}${COUNTDOWN_HINT}`;
+    expect(screen.getByTestId('hud-eye-left', HIDDEN)).toHaveTextContent(countdown);
+    expect(screen.getByTestId('hud-eye-right', HIDDEN)).toHaveTextContent(countdown);
 
     wait(3000);
     await doubleTap();
@@ -244,7 +309,9 @@ describe('viewer', () => {
     wait(1000);
     const look = (testID: string) =>
       getAnimatedStyle(screen.getByTestId(testID, HIDDEN)) as HudLook;
-    const glass = () => screen.UNSAFE_getByType(GlassView).props.glassEffectStyle;
+    const glass = () =>
+      within(screen.getByTestId('viewer-hud', HIDDEN)).UNSAFE_getByType(GlassView).props
+        .glassEffectStyle;
     expect(glass()).toMatchObject({ style: 'none', animate: true });
 
     await doubleTap();
@@ -341,10 +408,13 @@ describe('viewer', () => {
     await screen.findByTestId('viewer-map');
     mockImpact.mockClear();
 
+    // A second, and a finger may drift a little (in the hand or a headset).
     expect(getByGestureTestId('viewer-long-press').config).toMatchObject({
       minDurationMs: EXIT_HOLD_MS,
+      maxDist: EXIT_HOLD_DRIFT,
     });
     expect(EXIT_HOLD_MS).toBe(1000);
+    expect(EXIT_HOLD_DRIFT).toBe(30);
     await holdToExit();
 
     expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Medium);
@@ -444,3 +514,143 @@ describe('viewer', () => {
     expect(screen.queryByTestId('viewer-map')).toBeNull();
   });
 });
+
+describe('viewer exit button', () => {
+  it('stays up in stereo, in the black outside both eye windows', async () => {
+    mockStereoEyes = EYES;
+    await openViewer();
+
+    expect(exitButton()).toBeOnTheScreen();
+    const frame = exitFrame();
+    expect(frame.width).toBeGreaterThanOrEqual(44);
+    expect(frame.height).toBeGreaterThanOrEqual(44);
+    expect(overlaps(frame, EYES.left)).toBe(false);
+    expect(overlaps(frame, EYES.right)).toBe(false);
+
+    // Still there with the viewer on, however long it's worn.
+    enterDiorama();
+    await tap();
+    wait(EXIT_BUTTON_SHOWN_MS * 2);
+    expect(exitButton()).toBeOnTheScreen();
+  });
+
+  it('sits in the top-left corner until the map reports its windows', async () => {
+    await openViewer();
+
+    expect(exitButton()).toBeOnTheScreen();
+    expect(exitFrame()).toMatchObject({ x: 16, y: 16 });
+  });
+
+  it('goes back to the preview when pressed, with a firm tap', async () => {
+    mockStereoEyes = EYES;
+    const router = await openViewer('/view/paris');
+    mockImpact.mockClear();
+
+    await act(async () => fireEvent.press(screen.getByRole('button', EXIT)));
+
+    expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Medium);
+    expect(router.getPathname()).toBe('/city/paris');
+    await landOnPreview();
+    expect(screen.queryByTestId('viewer-screen')).toBeNull();
+    // Opened from a link, the picker is still under the preview.
+    act(() => testRouter.back());
+    expect(router.getPathname()).toBe('/');
+    expect(await screen.findByTestId('city-picker-screen')).toBeOnTheScreen();
+  });
+
+  it('waits for a tap in mono, then fades out 3 s later', async () => {
+    setMode('mono');
+    await openViewer();
+    enterDiorama();
+    const glyph = () => getAnimatedStyle(screen.getByTestId('viewer-exit-glyph', HIDDEN)).opacity;
+    const takesTouches = () =>
+      StyleSheet.flatten(screen.getByTestId('viewer-exit', HIDDEN).props.style).pointerEvents;
+
+    expect(exitButton()).toBeNull();
+    expect(glyph()).toBe(0);
+    expect(takesTouches()).toBe('none');
+
+    await tap();
+    wait(800);
+    expect(exitButton()).toBeOnTheScreen();
+    expect(glyph()).toBeCloseTo(1, 2);
+    expect(takesTouches()).toBe('auto');
+
+    // Another tap keeps it up for 3 s more.
+    await tap();
+    wait(EXIT_BUTTON_SHOWN_MS - 1);
+    expect(exitButton()).toBeOnTheScreen();
+    wait(1);
+    expect(exitButton()).toBeNull();
+    expect(takesTouches()).toBe('none');
+    wait(1000);
+    expect(glyph()).toBeCloseTo(0, 2);
+  });
+
+  it('exits from mono too, once a tap has shown it', async () => {
+    setMode('mono');
+    const router = await openViewer();
+    enterDiorama();
+
+    await tap();
+    await act(async () => fireEvent.press(screen.getByRole('button', EXIT)));
+
+    expect(router.getPathname()).toBe('/city/paris');
+    await landOnPreview();
+  });
+
+  it('never slows or blocks a double-tap recenter', async () => {
+    setMode('mono');
+    await openViewer();
+    enterDiorama();
+    mockRecenter.mockClear();
+
+    await doubleTap();
+
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(exitButton()).toBeNull();
+    // A double-tap wins at once; a single tap waits for it to fail, and a
+    // hold waits for both.
+    expect(waitsFor('viewer-double-tap')).toEqual([]);
+    expect(waitsFor('viewer-tap')).toEqual([tagOf('viewer-double-tap')]);
+    expect(waitsFor('viewer-long-press')).toEqual([
+      tagOf('viewer-double-tap'),
+      tagOf('viewer-tap'),
+    ]);
+  });
+
+  it('only fades under Reduce Motion, with no scale', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    setMode('mono');
+    await openViewer();
+    enterDiorama();
+
+    await tap();
+    const frames: { opacity: number; transform: unknown }[] = [];
+    for (let elapsed = 0; elapsed < 800; elapsed += 16) {
+      wait(16);
+      const container = getAnimatedStyle(screen.getByTestId('viewer-exit', HIDDEN));
+      frames.push({ opacity: glyphOpacity(), transform: container.transform });
+    }
+
+    expect(frames[0]?.opacity).toBeGreaterThan(0);
+    expect(frames[0]?.opacity).toBeLessThan(1);
+    frames.forEach(({ opacity, transform }, index) => {
+      expect(transform).toEqual([{ scale: 1 }]);
+      if (index > 0) expect(opacity).toBeGreaterThanOrEqual(frames[index - 1]!.opacity);
+    });
+    expect(frames.at(-1)?.opacity).toBeCloseTo(1, 2);
+  });
+
+  it('tells you how to exit under the countdown', async () => {
+    await openViewer();
+    finishLoading();
+
+    // Once per eye.
+    expect(screen.getAllByText(COUNTDOWN_HINT, HIDDEN)).toHaveLength(2);
+  });
+});
+
+function glyphOpacity(): number {
+  return getAnimatedStyle(screen.getByTestId('viewer-exit-glyph', HIDDEN)).opacity as number;
+}

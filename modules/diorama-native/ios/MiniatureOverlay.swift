@@ -52,6 +52,15 @@ final class MiniatureOverlay: UIView {
     didSet { if intensity != oldValue { update() } }
   }
 
+  // How much of the eye shows the city rather than sky, 0...1 (T31: set by
+  // EyeView as you look up past what MapKit draws). The bands and tint fade
+  // with it, so plain sky isn't blurred or tinted. Fading the band masks,
+  // not this view, keeps the blur working (a blur under a see-through view
+  // breaks).
+  var mapShare: CGFloat = 1 {
+    didSet { if mapShare != oldValue { update() } }
+  }
+
   init(intensity: Double) {
     self.intensity = intensity
     super.init(frame: .zero)
@@ -72,15 +81,16 @@ final class MiniatureOverlay: UIView {
   private var amount: CGFloat { CGFloat(min(max(intensity, 0), 1)) }
 
   private func update() {
-    isHidden = amount == 0
+    let share = min(max(mapShare, 0), 1)
+    isHidden = amount == 0 || share == 0
     let strength = Self.blurStrength.lowerBound
       + (Self.blurStrength.upperBound - Self.blurStrength.lowerBound) * amount
-    let bandOpacity = min(amount / Self.fadeInBelow, 1)
+    let bandOpacity = min(amount / Self.fadeInBelow, 1) * share
     for band in [topBand, bottomBand] {
       band.strength = strength
       band.opacity = bandOpacity
     }
-    tint.alpha = Self.maxTintOpacity * amount
+    tint.alpha = Self.maxTintOpacity * amount * share
     setNeedsLayout()
   }
 

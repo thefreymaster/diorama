@@ -1,6 +1,6 @@
-import { useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 
-import type { DioramaMapViewRef } from '@diorama/native';
+import type { DioramaMapViewRef, DioramaReadyEvent } from '@diorama/native';
 import { useSetting } from '@/features/settings/store';
 import { actionHaptic, exitHaptic } from '@/ui';
 
@@ -40,6 +40,9 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   const debugLook = useSetting('debugLook');
   const { phase, setPhase } = useViewerPhase(mode);
   const [isDegraded, setDegraded] = useState(false);
+  // The same, but set at once: the map can report `onReady` right behind
+  // `onDegraded`, before React renders again.
+  const degraded = useRef(false);
   const { hud, showCountdown, showNotice, hide } = useViewerHud();
   const lookDrag = useLookDrag(mapRef);
   const exitViewer = useExitViewer();
@@ -63,6 +66,7 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   // view, and out of the headset, face wherever the phone faces now.
   useOnChange(mode, () => {
     // A new `mode` also lifts the native thermal fallback.
+    degraded.current = false;
     setDegraded(false);
     hide();
     if (phase === 'viewing') recenterMap();
@@ -81,7 +85,12 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
      * with debug look, whose own drag stands in for the phone's motion.
      */
     lookDrag: !inHeadset && headTracking && !debugLook ? lookDrag.handlers : null,
-    onReady: () => {
+    onReady: (event: DioramaReadyEvent) => {
+      // A report from the other view is stale (the one picture finished just
+      // as the phone turned sideways): the eyes on screen still have to
+      // draw. Too hot for two eyes, the map draws one picture on purpose.
+      const drawing = degraded.current ? 'mono' : mode;
+      if (event.mode !== drawing) return;
       const next = phaseWhenReady(phase, mode);
       if (next === phase) return;
       setPhase(next);
@@ -89,6 +98,7 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
     },
     /** The phone got too hot and the view went mono on its own. Say so; don't undo it. */
     onDegraded: () => {
+      degraded.current = true;
       setDegraded(true);
       showNotice('cooling');
     },

@@ -21,7 +21,12 @@ import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { getAnimatedStyle } from 'react-native-reanimated';
 
-import type { DioramaMapViewProps, DioramaRect, DioramaStereoEyes } from '@diorama/native';
+import type {
+  DioramaMapViewProps,
+  DioramaRect,
+  DioramaStereoEyes,
+  DioramaViewMode,
+} from '@diorama/native';
 import {
   resetSettings,
   setDebugLook,
@@ -170,9 +175,9 @@ async function openViewer(url = '/view/paris') {
   return router;
 }
 
-/** What the native view reports once every eye has drawn. */
-function finishLoading() {
-  act(() => viewerMap().onReady?.({ coverage: 'yes' }));
+/** What the native view reports once every eye has drawn: the view it was asked for, unless told. */
+function finishLoading(mode: DioramaViewMode = viewerMap().mode ?? 'mono') {
+  act(() => viewerMap().onReady?.({ coverage: 'yes', mode }));
 }
 
 /** The map's camera: where you stand and look from, which a turn of the phone keeps. */
@@ -919,6 +924,34 @@ describe('viewer orientation', () => {
     expect(mockRecenter).not.toHaveBeenCalled();
     wait(3000);
     expect(mockRecenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a late report from the one picture once turned sideways', async () => {
+    holdPhone('upright');
+    await openViewer();
+
+    // The one picture finishes just as the phone turns: its report lands late.
+    holdPhone('sideways');
+    finishLoading('mono');
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    expect(viewerMap().headTracking).toBe(false);
+
+    // The countdown waits for the two eyes.
+    finishLoading('stereo');
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+  });
+
+  it('counts down on one picture when too hot for two while loading', async () => {
+    await openViewer();
+
+    // The native view falls back to one picture, then reports it drawn.
+    act(() => viewerMap().onDegraded?.({ reason: 'thermal' }));
+    finishLoading('mono');
+
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(1);
+    wait(3000);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
   });
 
   it('turned upright while the two eyes load, recenters once the one picture draws', async () => {

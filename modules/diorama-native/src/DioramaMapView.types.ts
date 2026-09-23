@@ -20,6 +20,13 @@ export type DioramaReadyEvent = {
    * terrain only; treat `unknown` as "probably fine" and say nothing.
    */
   coverage: FlyoverCoverage;
+  /**
+   * The view that just finished drawing: `stereo` (both eyes) or `mono`.
+   * Usually the `mode` prop, but a mono report can land just after `mode`
+   * turned to `stereo` (ignore it: the eyes still have to draw), and a view
+   * too hot for two eyes draws `mono` on its own (see `onDegraded`).
+   */
+  mode: DioramaViewMode;
 };
 
 /** One picture, or one per eye side by side for a head-mounted viewer. */
@@ -65,8 +72,9 @@ export type DioramaMapViewRef = {
    */
   recenter: () => Promise<void>;
   /**
-   * Debug look only: sets the fake head angle, in degrees from straight
-   * ahead. `dx` > 0 looks right, `dy` > 0 looks up. `recenter()` zeroes it.
+   * Sets a dragged look, in degrees from straight ahead: `dx` > 0 looks
+   * right, `dy` > 0 looks up. With debug look it's the whole look;
+   * otherwise it adds to the motion look. `recenter()` zeroes it.
    */
   setDebugLook: (dx: number, dy: number) => Promise<void>;
 };
@@ -96,8 +104,10 @@ export type DioramaCameraProps = {
 export type DioramaHeadTrackingProps = {
   /**
    * Turn the camera with the wearer's head: turning turns the city, looking
-   * down tilts you over it, and tilting your head keeps the city level.
-   * Where you face when tracking starts (or on `recenter()`) is straight ahead.
+   * down tilts you over it, looking up carries on past the city's far edge
+   * into haze and sky, all the way to straight up, and tilting your head
+   * keeps the city level. Where you face when tracking starts (or on
+   * `recenter()`) is straight ahead.
    */
   headTracking?: boolean;
   /**

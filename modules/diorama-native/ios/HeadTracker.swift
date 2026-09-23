@@ -14,6 +14,8 @@ import simd
 //   horizon level even if the phone sits a little crooked in the mount.
 //
 // In debug-look mode (the Simulator has no gyro) drags stand in for the head.
+// Otherwise a drag (setDebugLook, e.g. the Viewer's one-finger drag held
+// upright) adds to what the sensors say, so you can look around by hand too.
 final class HeadTracker {
   // Degrees the fake head turns per point dragged in debug-look mode.
   private static let debugDegreesPerPoint = 0.25
@@ -57,7 +59,8 @@ final class HeadTracker {
   private var turnedYaw = 0.0
   private var lastYaw = 0.0
 
-  // Debug look: fake yaw and pitch in degrees.
+  // Dragged look, in degrees: the whole look in debug-look mode, added to
+  // the sensors' look otherwise.
   private var debugYaw = 0.0
   private var debugPitch = 0.0
 
@@ -100,7 +103,9 @@ final class HeadTracker {
     debugPitch = 0
   }
 
-  // Debug look: sets the fake head angle, in degrees (+yaw = right, +pitch = up).
+  // Sets the dragged look, in degrees (+yaw = right, +pitch = up): the whole
+  // look in debug-look mode, otherwise added to the sensors' look.
+  // recenter() zeroes it.
   func setDebugLook(yaw: Double, pitch: Double) {
     debugYaw = yaw
     debugPitch = min(max(pitch, -Self.debugPitchLimit), Self.debugPitchLimit)
@@ -154,7 +159,12 @@ final class HeadTracker {
     turnedYaw += HeadPose.wrapDegrees(head.yaw - lastYaw)
     lastYaw = head.yaw
 
-    return HeadPose(yaw: turnedYaw, pitch: head.pitch - (referencePitch ?? head.pitch), roll: head.roll)
+    // Plus any dragged look (see setDebugLook). The pitch isn't limited
+    // here: FirstPersonCamera takes it from straight down to straight up.
+    return HeadPose(
+      yaw: turnedYaw + debugYaw,
+      pitch: head.pitch - (referencePitch ?? head.pitch) + debugPitch,
+      roll: head.roll)
   }
 
   private static func makeFilter() -> OneEuroFilter {

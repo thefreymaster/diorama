@@ -9,13 +9,18 @@ import UIKit
 // Every frame (orbit, head tracking) runs here on a display link, never
 // through JS: props + orbit → the base camera; with head tracking, you stand
 // where the base camera is and the head look turns your gaze from there
-// (FirstPersonCamera) → StereoRig, which gives each eye (one in mono, two in
-// stereo) its own MapKit camera.
+// (FirstPersonCamera), anywhere from straight down to straight up → MapKit's
+// camera follows the gaze as far up as MapKit draws → StereoRig, which gives
+// each eye (one in mono, two in stereo) its own MapKit camera and warps its
+// picture the rest of the way up, sky and all (T31).
 final class DioramaMapView: ExpoView {
-  // Event prop. Calling `onReady([:])` fires the JS `onReady` callback.
-  // MapKit can't tell whether a place has photoreal 3D (it accepts a 3D
-  // camera over flat imagery too), so the TS wrapper adds `coverage` (yes,
-  // no or unknown) from curated lists. See src/flyoverCoverage.ts.
+  // Event prop. Calling `onReady(...)` fires the JS `onReady` callback.
+  // Payload: `{ mode }`, the eyes that just finished drawing ("mono" or
+  // "stereo"), so JS can tell a late mono report from the stereo one it
+  // waits for after the phone turns. MapKit can't tell whether a place has
+  // photoreal 3D (it accepts a 3D camera over flat imagery too), so the TS
+  // wrapper adds `coverage` (yes, no or unknown) from curated lists. See
+  // src/flyoverCoverage.ts.
   let onReady = EventDispatcher()
   // Event prop: the phone got too hot for two maps, so stereo fell back to
   // mono. Payload: `{ reason: "thermal" }`.
@@ -60,18 +65,22 @@ final class DioramaMapView: ExpoView {
 
   // Orbit speed: one full turn every two minutes.
   private static let orbitDegreesPerSecond = 3.0
-  // Head roll is cancelled up to this angle; past it the city tilts with you.
-  // Bigger costs more: the overscanned maps are larger to draw, and MapKit
-  // spreads its field of view over the larger height (see
-  // StereoRig.distanceScale), so less of the city fits on screen.
-  private static let maxRollDegrees = 20.0
+  // Mono only: head roll is cancelled up to this angle; past it the city
+  // tilts with you. A full-screen rectangle isn't round, so turning it
+  // needs a map that covers its corners (overscan), and turning it any
+  // amount would need a square map as wide as the screen's diagonal: 42%
+  // more to draw than now, and MapKit spreads its 30° over that height, so
+  // the camera backs off farther (see StereoRig.distanceScale). Stereo's
+  // round eyes need none of that (a circle turned is the same circle), so
+  // their roll is free.
+  private static let maxMonoRollDegrees = 20.0
   // Per-frame changes smaller than this (degrees) are skipped, so a still
   // head lets MapKit finish rendering and rest.
   private static let minFrameChange = 0.01
-  // Degrees the gaze stays under MapKit's steepest pitch: with head roll the
-  // two eyes sit a little higher and lower than the head, and tilt a
-  // little more or less.
-  private static let pitchCapMargin = 0.5
+  // Degrees MapKit's camera stays under the steepest pitch MapKit draws
+  // (on top of the tilt a rolled head gives each eye; see
+  // `steepestDrawnPitch`).
+  private static let pitchCapMargin = 0.25
   // Fade from the loading cover to the city (stereo; mono lifts at once).
   private static let revealSeconds = 0.3
 
@@ -100,8 +109,8 @@ final class DioramaMapView: ExpoView {
   private var appliedEyeSeparation = 1.0
   // What the rig was last handed: the base camera (props plus orbit), the
   // gaze turned from it (nil when not tracking), and the head roll (degrees)
-  // the pictures were turned against so the city stays level. Roll past
-  // `maxRollDegrees` tilts the city with you.
+  // the pictures were turned against so the city stays level. In mono, roll
+  // past `maxMonoRollDegrees` tilts the city with you.
   private var appliedBase: CameraPose?
   private var appliedGaze: FirstPersonCamera.Gaze?
   private var appliedRoll = 0.0
@@ -196,7 +205,7 @@ final class DioramaMapView: ExpoView {
 
   // Sizes the eyes; overscan (room to turn against roll) only while tracking.
   private func layoutEyes() {
-    let maxRoll = headTracker.isRunning ? Self.maxRollDegrees : 0
+    let maxRoll = headTracker.isRunning ? Self.maxMonoRollDegrees : 0
     let profile = viewerProfile
     let changed = rig.layout(
       in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: profile)
@@ -315,35 +324,59 @@ final class DioramaMapView: ExpoView {
   }
 
   // Where the head looks this frame, turned from the base camera's gaze, or
-  // nil when not tracking. The pitch stops, smoothly, where MapKit stops
-  // drawing (it caps pitch lower the farther out it looks).
+  // nil when not tracking: anywhere from straight down to straight up, and
+  // round and round.
   private func liveGaze(from firstPerson: FirstPersonCamera) -> FirstPersonCamera.Gaze? {
     guard headTracker.isRunning else { return nil }
-    let start = firstPerson.base.pitch
-    // Until the map can be asked, don't look up past the start.
-    let steepest = rig.steepestPitch(from: firstPerson) ?? start
-    // A little under MapKit's steepest, but never under a starting pitch it
-    // draws: with the head still you see exactly the starting camera.
-    let upper = max(steepest - Self.pitchCapMargin, min(start, steepest))
-    let limits = CameraPose.pitchRange.lowerBound...max(upper, CameraPose.pitchRange.lowerBound)
-    return firstPerson.gaze(for: look, gain: lookGain * trackingSensitivity, pitchLimits: limits)
+    return firstPerson.gaze(for: look, gain: lookGain * trackingSensitivity)
   }
 
-  // The head roll to cancel, capped at `maxRollDegrees`.
+  // The steepest pitch MapKit's camera takes from `firstPerson`'s vantage
+  // point (MapKit caps pitch lower the farther out it looks). A little
+  // under the steepest it draws, but never under a starting pitch it
+  // draws, so with the head still you see exactly the starting camera.
+  // Until the map can be asked, the starting pitch. The eyes look higher
+  // than this whenever the gaze does; their warp turns the picture the
+  // rest of the way (StereoGeometry).
+  private func steepestDrawnPitch(
+    from firstPerson: FirstPersonCamera, baseline: Double, roll: Double
+  ) -> Double {
+    let start = firstPerson.base.pitch
+    let steepest = rig.steepestPitch(from: firstPerson) ?? start
+    let upper = max(steepest - Self.pitchCapMargin, min(start, steepest))
+    guard rig.isStereo else { return upper }
+    // A rolled head puts one eye lower than the other, and the lower eye
+    // looks at the aim point less steeply: up to half the eyes' spacing
+    // seen from there (0.6° with the head on its side). Keep it under too.
+    let reach = firstPerson.reach(for: .init(heading: firstPerson.base.heading, pitch: upper))
+    let lift = baseline / 2 * abs(sin(roll * .pi / 180)) / max(reach, 1)
+    return max(upper - atan(lift) * 180 / .pi, CameraPose.pitchRange.lowerBound)
+  }
+
+  // The head roll to cancel: all of it in stereo, up to
+  // `maxMonoRollDegrees` in mono.
   private var liveRoll: Double {
-    min(max(look.roll, -Self.maxRollDegrees), Self.maxRollDegrees)
+    guard !rig.isStereo else { return look.roll }
+    return min(max(look.roll, -Self.maxMonoRollDegrees), Self.maxMonoRollDegrees)
   }
 
   private func applyCamera(animated: Bool) {
     let base = baseCamera
     let firstPerson = firstPersonCamera(from: base)
     let gaze = liveGaze(from: firstPerson)
-    let camera = gaze.map { firstPerson.camera(for: $0) } ?? base
     let roll = liveRoll
     // The eyes' spacing follows the base camera's distance from the model
     // center (fixed while you stand still), not how far away you look.
     let baseline = StereoGeometry.baseline(distance: base.altitude, eyeSeparation: eyeSeparation)
-    rig.apply(camera, roll: roll, baseline: baseline, animated: animated)
+    var camera = base
+    if let gaze {
+      // MapKit looks along the gaze, but no steeper than it draws.
+      var drawn = gaze
+      drawn.pitch = min(
+        gaze.pitch, steepestDrawnPitch(from: firstPerson, baseline: baseline, roll: roll))
+      camera = firstPerson.camera(for: drawn)
+    }
+    rig.apply(camera, lookPitch: gaze?.pitch, roll: roll, baseline: baseline, animated: animated)
     appliedBase = base
     appliedGaze = gaze
     appliedRoll = roll
@@ -418,7 +451,7 @@ final class DioramaMapView: ExpoView {
     // before React Native had hooked up this view's events (it drops them
     // then): whatever JS draws once per eye goes up now.
     reportEyeLayout(force: true)
-    onReady([:])
+    onReady(["mode": rig.isStereo ? ViewMode.stereo.rawValue : ViewMode.mono.rawValue])
     updateTicker()
   }
 
@@ -448,17 +481,18 @@ final class DioramaMapView: ExpoView {
     fallBackToMonoIfTooHot()
   }
 
-  // Too hot for two maps: drop the right eye and tell JS. Stays mono until
-  // the `mode` prop is set again. Mid-load, the cover stays up until the
-  // remaining eye has drawn and onReady fires.
+  // Too hot for two maps: tell JS, then drop the right eye. Stays mono
+  // until the `mode` prop is set again. Mid-load, the cover stays up until
+  // the remaining eye has drawn and onReady fires (at once if it already
+  // has, which is why JS hears onDegraded first).
   private func fallBackToMonoIfTooHot() {
     guard mode == .stereo, !isDegraded, !thermal.budget.allowsStereo else { return }
     isDegraded = true
+    onDegraded(["reason": "thermal"])
     if rig.isStereo {
       rig.setStereo(false)
       setNeedsLayout()
     }
-    onDegraded(["reason": "thermal"])
   }
 }
 

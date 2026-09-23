@@ -1,7 +1,12 @@
 import type { Ref } from 'react';
 import { StyleSheet } from 'react-native';
 
-import { DioramaMapView, type DioramaMapViewRef, type DioramaViewMode } from '@diorama/native';
+import {
+  DioramaMapView,
+  type DioramaMapViewRef,
+  type DioramaReadyEvent,
+  type DioramaViewMode,
+} from '@diorama/native';
 import type { City } from '@/features/cities/queries';
 import { useCameraAltitude } from '@/features/map/cameraHeight';
 import { useSettings } from '@/features/settings/store';
@@ -11,7 +16,8 @@ type ViewerMapProps = {
   /** One full-screen picture, or one per eye for the headset (from how the phone is held). */
   mode: DioramaViewMode;
   headTracking: boolean;
-  onReady: () => void;
+  /** Every eye has drawn; `event.mode` says which view drew. */
+  onReady: (event: DioramaReadyEvent) => void;
   onDegraded: () => void;
   ref: Ref<DioramaMapViewRef>;
 };

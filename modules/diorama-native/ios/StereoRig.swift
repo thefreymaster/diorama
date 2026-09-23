@@ -203,11 +203,16 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // match (StereoGeometry). The caller picks the baseline from where the
   // head is, so it stays the same while the gaze moves (with head tracking
   // the camera's distance changes as you look nearer or farther, but your
-  // eyes don't move apart). `roll` is the head roll to cancel, in degrees.
-  // Only mono glides: `animated` would let the two eyes drift apart
-  // mid-glide.
-  func apply(_ camera: CameraPose, roll: Double, baseline: Double, animated: Bool) {
-    let poses = eyePoses(for: camera, roll: roll, baseline: baseline)
+  // eyes don't move apart). `lookPitch` is where a tracked head really
+  // looks (degrees from straight down, up to 180), often higher than
+  // `camera.pitch` (MapKit won't draw it), which the warp makes up; nil
+  // means the eyes look where the camera does. `roll` is the head roll to
+  // cancel, in degrees. Only mono glides: `animated` would let the two eyes
+  // drift apart mid-glide.
+  func apply(
+    _ camera: CameraPose, lookPitch: Double?, roll: Double, baseline: Double, animated: Bool
+  ) {
+    let poses = eyePoses(for: camera, lookPitch: lookPitch, roll: roll, baseline: baseline)
     let glide = animated && !isStereo
     for (eye, pose) in zip(eyes, poses) {
       if eye.appliedCamera != pose.camera {
@@ -221,7 +226,7 @@ final class StereoRig: NSObject, MKMapViewDelegate {
           }
         }
       }
-      eye.pictureTransform = pose.pictureTransform
+      eye.show(pose)
     }
     if isStereo { learnPitchCap(from: poses, altitude: camera.altitude) }
   }
@@ -263,17 +268,24 @@ final class StereoRig: NSObject, MKMapViewDelegate {
 
   // Each eye's camera and picture warp. MapKit caps high pitches (lower
   // the farther out it is), and a capped eye would no longer match its warp,
-  // so in stereo the whole camera stops tilting at the cap instead. (Head
-  // tracking keeps its gaze under the cap in the first place; see
-  // `steepestPitch(from:)`. This is the safety net.)
-  private func eyePoses(for camera: CameraPose, roll: Double, baseline: Double) -> [EyePose] {
+  // so in stereo MapKit's camera tilts less instead: a tracked head's warp
+  // turns the picture the rest of the way to `lookPitch`, and without one
+  // the whole view stops at the cap. (Head tracking keeps MapKit's camera
+  // under the cap in the first place; see `steepestPitch(from:)`. This is
+  // the safety net.)
+  private func eyePoses(
+    for camera: CameraPose, lookPitch: Double?, roll: Double, baseline: Double
+  ) -> [EyePose] {
     var base = camera
     var poses: [EyePose] = []
+    let mapSize = eyes.first?.mapSize ?? .zero
     // Twice, because tilting less also changes how far each eye tilts.
     for _ in 0..<2 {
       poses = Self.sides.prefix(eyes.count).map { side in
         StereoGeometry.eyePose(
-          of: base, side: isStereo ? side : 0, baseline: baseline, roll: roll, focal: focalLength)
+          of: base, lookPitch: max(lookPitch ?? base.pitch, base.pitch),
+          side: isStereo ? side : 0, baseline: baseline, roll: roll, focal: focalLength,
+          mapSize: mapSize)
       }
       guard isStereo, let cap = pitchCap, cap.altitude == camera.altitude,
         let steepest = poses.map(\.camera.pitch).max(), steepest > cap.pitch

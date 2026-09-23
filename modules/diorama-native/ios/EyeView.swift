@@ -1,22 +1,41 @@
 import MapKit
 import UIKit
+import simd
 
 // One eye's picture. Mono shows one EyeView filling the component; stereo
 // shows two round ones, one per headset lens (see StereoRig). Think of it as
 // a small component with this tree:
 //
-//   EyeView        clips to its frame, like `overflow: hidden`, and when
-//   │              `isRound` to the circle inside it (`border-radius: 50%`)
-//   ├─ warpView    shows its content turned (and in stereo slightly warped
-//   │  │           and shrunk) so this eye sees what it should; see
-//   │  │           StereoGeometry and `pictureScale`
-//   │  └─ mapView  Apple's map, usually larger than the eye (see `mapSize`)
-//   └─ overlay     optional, on top and not turned (T09: tilt-shift)
+//   EyeView         clips to its frame, like `overflow: hidden`, and when
+//   │               `isRound` to the circle inside it (`border-radius: 50%`)
+//   ├─ sky          haze and sky where MapKit drew nothing, shown only when
+//   │               looking higher than MapKit draws (T31, SkyBackdrop)
+//   ├─ warpView     shows its content turned (and in stereo slightly warped
+//   │  │            and shrunk) so this eye sees what it should; see
+//   │  │            StereoGeometry and `pictureScale`
+//   │  ├─ mapView   Apple's map, usually larger than the eye (see `mapSize`)
+//   │  └─ hazeEdge  fades the map's top edge into the haze (T31)
+//   └─ overlay      optional, on top and not turned (T09: tilt-shift)
 final class EyeView: UIView {
   let mapView = MKMapView()
   // Each eye is turned on its own: turning the pair as one would move one
   // eye up and the other down, and the two pictures would no longer line up.
   private let warpView = WarpView()
+  private let sky = SkyBackdrop()
+  private let hazeEdge = HazeEdge()
+
+  // Degrees past MapKit's pitch cap over which the haze edge fades in:
+  // done before the map's top edge (a few points outside the circle at the
+  // cap) comes into view.
+  private static let hazeEdgeFadeIn = 0.5
+  // Points (in the eye) kept between a round eye's edge and MapKit's logo
+  // or Legal link, as StereoRig does.
+  private static let attributionPadding = 2.0
+  // Half the smallest box (map points) left between the map's margins when
+  // MapKit's logo and Legal link are lifted (see `attributionLift`). MapKit
+  // hides its logo when that box is under 100 points tall or about 110 to
+  // 135 wide (measured, iOS 26).
+  private static let minAttributionBox = CGSize(width: 70, height: 52)
 
   // The map's size. Larger than the eye whenever the map is turned, so
   // turning it never shows a corner.
@@ -25,8 +44,8 @@ final class EyeView: UIView {
   }
 
   // How the map's picture is turned and warped onto the eye, about its
-  // center. Identity = drawn as is. Set every frame by StereoRig.
-  var pictureTransform = CATransform3DIdentity {
+  // center. Identity = drawn as is. Set every frame by StereoRig (`show`).
+  private var pictureTransform = CATransform3DIdentity {
     didSet { updateWarp() }
   }
 
@@ -74,6 +93,13 @@ final class EyeView: UIView {
     didSet { if attributionInsets != oldValue { setNeedsLayout() } }
   }
 
+  // The map's layout margins with the picture in place (see layoutMap), in
+  // map points: each side, and top and bottom. And how far MapKit's logo
+  // and Legal link are lifted from there while you look past MapKit's cap
+  // (see `attributionLift`): in from each side, and up.
+  private var restMargins = CGSize.zero
+  private var attributionLift = CGSize.zero
+
   // Set by StereoRig once MapKit has drawn this eye's first full picture,
   // and the pending "call it drawn anyway" timer if some tiles failed.
   var hasRendered = false
@@ -89,7 +115,11 @@ final class EyeView: UIView {
     layer.cornerCurve = .circular
     isUserInteractionEnabled = false
     configureMap()
+    sky.isHidden = true
+    addSubview(sky)
     warpView.addSubview(mapView)
+    hazeEdge.alpha = 0
+    warpView.addSubview(hazeEdge)
     addSubview(warpView)
   }
 
@@ -131,6 +161,135 @@ final class EyeView: UIView {
     }
   }
 
+  // Shows this frame's `pose` (StereoGeometry.eyePose): the map warped into
+  // place, and when looking higher than MapKit draws, the sky above it,
+  // the map's top edge faded into the haze, MapKit's logo kept in view, and
+  // the tilt-shift bands fading out as sky replaces city. Called every
+  // frame the camera moves.
+  func show(_ pose: EyePose) {
+    // Not even inside someone else's animation (a screen rotation).
+    UIView.performWithoutAnimation {
+      pictureTransform = pose.pictureTransform
+      // Far out of view the map isn't drawn at all (see StereoGeometry).
+      warpView.alpha = pose.showsMap ? 1 : 0
+      hazeEdge.alpha = CGFloat(min(max(pose.beyondCap / Self.hazeEdgeFadeIn, 0), 1))
+      // The haze the map's top edge fades into: the sky's color just there.
+      hazeEdge.elevation = pose.camera.pitch + StereoGeometry.verticalFieldOfView / 2 - 90
+      let lift = attributionLift(for: pose)
+      let moved = abs(lift.width - attributionLift.width) >= 0.5
+        || abs(lift.height - attributionLift.height) >= 0.5
+      if moved || (lift == .zero) != (attributionLift == .zero) {
+        attributionLift = lift
+        applyMargins()
+      }
+      // Below MapKit's cap the map covers the whole eye, so the sky costs
+      // nothing until you look past it.
+      sky.isHidden = pose.beyondCap <= 0 && pose.showsMap
+      if !sky.isHidden {
+        sky.show(look: pose.look, focal: pose.focal, slide: pose.slide, scale: pictureScale)
+      }
+      (overlay as? MiniatureOverlay)?.mapShare = mapShare(of: pose)
+    }
+  }
+
+  // Roughly how much of this eye the map fills, 0...1: 1 while it covers the
+  // eye, easing to 0 as its top edge slides down past the eye's bottom.
+  private func mapShare(of pose: EyePose) -> CGFloat {
+    guard pose.showsMap else { return 0 }
+    guard pose.beyondCap > 0 else { return 1 }
+    let size = mapSize == .zero ? bounds.size : mapSize
+    let halfWidth = Double(size.width) / 2
+    let halfHeight = Double(size.height) / 2
+    // The map's top corners and bottom middle, in the eye's picture (map
+    // points from the eye's center, before the shrink).
+    func place(_ x: Double, _ y: Double) -> simd_double2 {
+      let point = pose.picture * simd_double3(x, y, 1)
+      return simd_double2(point.x, point.y) / point.z
+    }
+    let left = place(-halfWidth, -halfHeight)
+    let right = place(halfWidth, -halfHeight)
+    let bottom = place(0, halfHeight)
+    // How far the eye's center is below the top edge (toward the map), in
+    // eye radii.
+    let edge = right - left
+    guard simd_length(edge) > 0 else { return 1 }
+    var normal = simd_normalize(simd_double2(-edge.y, edge.x))
+    if simd_dot(bottom - left, normal) < 0 { normal = -normal }
+    let radius = Double(min(bounds.width, bounds.height)) / 2 / Double(max(pictureScale, 0.01))
+    guard radius > 0 else { return 1 }
+    let depth = simd_dot(-left, normal) / radius
+    // Smoothstep from the edge at the eye's bottom (0) to its top (1).
+    let t = min(max((depth + 1) / 2, 0), 1)
+    return CGFloat(t * t * (3 - 2 * t))
+  }
+
+  // Where MapKit's logo and Legal link go while you look past MapKit's cap:
+  // how far to pull them in from each side and up (map points), zero
+  // otherwise. The picture slides down the eye as you look up, and they sit
+  // in its bottom corners, so they would slide out of the eye. MapKit puts
+  // them in the bottom corners of the map's layout margins, so this grows
+  // the margins, evenly top and bottom and left and right (uneven margins
+  // would move MapKit's camera off the map's center): first up, then in
+  // from the sides, just enough to keep both corners where they rest
+  // (inside the circle, or on screen in mono). Once the city fills less
+  // than about half the eye there's no room left, and they slide on out
+  // with it.
+  private func attributionLift(for pose: EyePose) -> CGSize {
+    guard pose.showsMap, pose.beyondCap > 0, bounds.width > 0 else { return .zero }
+    let size = mapSize == .zero ? bounds.size : mapSize
+    let halfWidth = Double(size.width) / 2
+    let halfHeight = Double(size.height) / 2
+    let scale = Double(max(pictureScale, 0.01))
+    let angle = pose.roll * .pi / 180
+    // True when both bottom corners of the margins sit where they may.
+    func fits(_ lift: CGSize) -> Bool {
+      let y = halfHeight - Double(restMargins.height + lift.height)
+      let x = halfWidth - Double(restMargins.width + lift.width)
+      for corner in [simd_double3(-x, y, 1), simd_double3(x, y, 1)] {
+        let point = pose.picture * corner
+        guard point.z > 0 else { return false }
+        let eye = simd_double2(point.x, point.y) / point.z * scale
+        if isRound {
+          let radius = Double(min(bounds.width, bounds.height)) / 2 - Self.attributionPadding
+          if simd_length(eye) > radius + 0.5 { return false }
+        } else {
+          // Mono: on screen as at rest, measured with the head roll undone.
+          let level = simd_double2(
+            cos(angle) * eye.x - sin(angle) * eye.y, sin(angle) * eye.x + cos(angle) * eye.y)
+          let limit = Double(bounds.height) / 2 - Double(attributionInsets.height)
+          if level.y > limit + 0.5 { return false }
+        }
+      }
+      return true
+    }
+    if fits(.zero) { return .zero }
+    let box = Self.minAttributionBox
+    let up = max(halfHeight - Double(restMargins.height) - Double(box.height), 0)
+    let inward = max(halfWidth - Double(restMargins.width) - Double(box.width), 0)
+    // Halves the gap between a lift that's too small and one that fits
+    // (lifting more only ever helps).
+    func search(_ make: (Double) -> CGSize, upTo most: Double) -> CGSize {
+      var low = 0.0
+      var high = most
+      while high - low > 0.25 {
+        let middle = (low + high) / 2
+        if fits(make(middle)) { high = middle } else { low = middle }
+      }
+      return make(high)
+    }
+    if fits(CGSize(width: 0, height: up)) {
+      return search({ CGSize(width: 0, height: $0) }, upTo: up)
+    }
+    return search({ CGSize(width: $0, height: up) }, upTo: inward)
+  }
+
+  // The map's layout margins: at rest, plus the attribution's lift.
+  private func applyMargins() {
+    let side = restMargins.width + attributionLift.width
+    let end = restMargins.height + attributionLift.height
+    mapView.layoutMargins = UIEdgeInsets(top: end, left: side, bottom: end, right: side)
+  }
+
   // The warp, then the shrink (like CSS `transform: <warp> scale(s)` read
   // right to left).
   private func updateWarp() {
@@ -143,6 +302,12 @@ final class EyeView: UIView {
     // `bounds` + `center` (not `frame`) stay valid while warpView is turned.
     warpView.bounds = CGRect(origin: .zero, size: size)
     warpView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    // The sky: a square around the eye, big enough for any turn.
+    let skySide = hypot(bounds.width, bounds.height)
+    sky.bounds = CGRect(x: 0, y: 0, width: skySide, height: skySide)
+    sky.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    hazeEdge.frame = CGRect(
+      x: 0, y: 0, width: size.width, height: (size.height * HazeEdge.share).rounded())
     let oldMapSize = mapView.bounds.size
     mapView.frame = warpView.bounds
     if mapView.bounds.size != oldMapSize {
@@ -158,14 +323,13 @@ final class EyeView: UIView {
     // eye shows (in map points: the eye's size before the shrink), plus
     // `attributionInsets` (so the top grows with the bottom).
     let scale = max(pictureScale, 0.01)
-    let sideMargin = max((size.width - bounds.width / scale) / 2, 0) + attributionInsets.width / scale
-    let endMargin = max((size.height - bounds.height / scale) / 2, 0) + attributionInsets.height / scale
-    mapView.layoutMargins = UIEdgeInsets(
-      top: endMargin, left: sideMargin, bottom: endMargin, right: sideMargin)
+    restMargins = CGSize(
+      width: max((size.width - bounds.width / scale) / 2, 0) + attributionInsets.width / scale,
+      height: max((size.height - bounds.height / scale) / 2, 0) + attributionInsets.height / scale)
+    applyMargins()
     overlay?.frame = bounds
   }
 }
-
 
 // Shows its content turned and warped by `pictureTransform`, without
 // actually moving it. Like a live mirror: the real map stays where UIKit

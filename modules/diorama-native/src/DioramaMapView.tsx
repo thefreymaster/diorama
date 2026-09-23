@@ -7,6 +7,7 @@ import {
   NativeDioramaMapView,
   type NativeDegradedEvent,
   type NativeEyeLayoutEvent,
+  type NativeReadyEvent,
 } from './NativeDioramaMapView';
 
 /** Millimeters between Google Cardboard v2's lens centers. */
@@ -49,9 +50,9 @@ export function DioramaMapView({
     },
   }));
 
-  // Native reports "rendered"; 3D coverage comes from the hand-checked lists.
-  const handleReady = () => {
-    onReady?.({ coverage: flyoverCoverageAt(props.center) });
+  // Native reports what it drew; 3D coverage comes from the hand-checked lists.
+  const handleReady = ({ nativeEvent }: NativeReadyEvent) => {
+    onReady?.({ coverage: flyoverCoverageAt(props.center), mode: nativeEvent.mode });
   };
 
   const handleDegraded = ({ nativeEvent }: NativeDegradedEvent) => {

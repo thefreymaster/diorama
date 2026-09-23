@@ -33,14 +33,18 @@ import simd
 //   x = east, y = north, z = up.
 //   heading: compass degrees, 0 = north, 90 = east (clockwise from above).
 //   pitch: degrees from straight down (0) toward the horizon (90), as in
-//     MapKit.
+//     MapKit, and on past it to straight up (180).
 // Head look (HeadPose): +yaw = turned right, +pitch = looking up.
 //
 // Every frame:
 //   gaze heading = base heading + head yaw × gain
-//   gaze pitch   = base pitch + head pitch × gain, eased to a stop at the
-//                  pitches MapKit will draw from here (see `gaze(for:)`)
-//   aim point    = vantage point + (height ÷ cos(gaze pitch)) × gaze direction
+//   gaze pitch   = base pitch + head pitch × gain, bending to reach
+//                  straight up and straight down (see `gazePitch`)
+//   MapKit's pitch = the gaze pitch, but no steeper than MapKit draws from
+//                  here (DioramaMapView); each eye's warp turns the picture
+//                  the rest of the way up (StereoGeometry)
+//   aim point    = vantage point + (height ÷ cos(MapKit's pitch)) × its
+//                  direction
 //   camera       = looking at the aim point from the vantage point, i.e.
 //                  MKMapCamera(lookingAtCenter: aim, fromEyeCoordinate:
 //                  vantage, eyeAltitude: height)
@@ -57,6 +61,14 @@ import simd
 //   gain = tracking sensitivity × rendered ÷ perceived
 // (see ViewerProfile.lookGain). Head roll isn't scaled: turning a picture
 // by an angle turns it by that same angle through a lens.
+//
+// Looking all the way up: at the default gain (~0.6) a head can't reach
+// straight up that way. From a start 30° below the horizon it would take a
+// 200° nod. So the gain holds exactly for the first `kneeDegrees` of nod
+// either way (where you look over the city), then bends smoothly so that
+// nodding 90° up from where you faced at recenter looks straight up, and
+// 90° down looks straight down. Past the knee the view turns faster than
+// the head, mostly over sky, where there is nothing to swim.
 //
 // Stereo: StereoGeometry puts the two eyes baseline/2 either side of the
 // vantage point along the ear-to-ear line (perpendicular to the gaze), both
@@ -78,9 +90,11 @@ struct FirstPersonCamera {
     var pitch: Double
   }
 
-  // How many degrees of gaze pitch the soft stop at MapKit's steepest pitch
-  // (and at straight down) eases over.
-  static let pitchEasing = 5.0
+  // Degrees of head nod, up or down from where you faced at recenter, over
+  // which the gaze turns exactly `gain` times as far (see `gazePitch`).
+  static let kneeDegrees = 30.0
+  // Degrees of head nod that reach straight up (or straight down).
+  static let fullNodDegrees = 90.0
 
   // The starting camera: props plus orbit, backed off for overscan.
   let base: CameraPose
@@ -107,13 +121,13 @@ struct FirstPersonCamera {
   }
 
   // The gaze for a head `look`, turned `gain` times as far as the head (see
-  // the gain above). The pitch stays within `pitchLimits` (straight down up
-  // to the steepest pitch MapKit will draw from here), easing to a stop over
-  // the last few degrees instead of hitting a wall.
-  func gaze(for look: HeadPose, gain: Double, pitchLimits: ClosedRange<Double>) -> Gaze {
-    let pitch = Self.softLimit(
-      base.pitch + look.pitch * gain, to: pitchLimits, rest: base.pitch, easing: Self.pitchEasing)
-    return Gaze(heading: CameraPose.normalizedHeading(base.heading + look.yaw * gain), pitch: pitch)
+  // the gain above). The heading turns freely, round and round; the pitch
+  // runs from straight down (0) to straight up (180), with no stop at
+  // MapKit's cap (see `gazePitch`).
+  func gaze(for look: HeadPose, gain: Double) -> Gaze {
+    Gaze(
+      heading: CameraPose.normalizedHeading(base.heading + look.yaw * gain),
+      pitch: Self.gazePitch(rest: base.pitch, nod: look.pitch, gain: gain))
   }
 
   // The aim point for `gaze`, in meters from the model center: walk from
@@ -138,8 +152,8 @@ struct FirstPersonCamera {
   }
 
   // Meters from the vantage point to the aim point along `gaze`. It grows
-  // without end toward the horizon (pitch 90), which the pitch limits keep
-  // well clear of.
+  // without end toward the horizon (pitch 90), so only MapKit's own
+  // (capped) pitch comes here, never the gaze past it.
   func reach(for gaze: Gaze) -> Double {
     let descent = cos(min(max(gaze.pitch, 0), 89) * .pi / 180)
     return eyeHeight / descent
@@ -147,27 +161,55 @@ struct FirstPersonCamera {
 
   // MARK: - Helpers
 
-  // `value` kept inside `limits`, easing in over the last `easing` degrees
-  // at each end (like a rubber band that stiffens) so it slows to a stop
-  // rather than stopping dead. The easing never starts before `rest` (the
-  // starting pitch), so with the head still the result is exactly `rest`.
-  // Past a limit it approaches that limit without ever reaching it.
-  static func softLimit(
-    _ value: Double, to limits: ClosedRange<Double>, rest: Double, easing: Double
-  ) -> Double {
-    let upperEasing = min(easing, max(limits.upperBound - rest, 0))
-    let upperStart = limits.upperBound - upperEasing
-    if value > upperStart {
-      guard upperEasing > 0 else { return limits.upperBound }
-      return limits.upperBound - upperEasing * exp(-(value - upperStart) / upperEasing)
+  // The gaze pitch (degrees from straight down) for a head `nod` (degrees,
+  // + up, from where you faced at recenter) from a `rest` pitch. Within
+  // `kneeDegrees` of nod it's exactly rest + nod × gain, so the city holds
+  // still through the lens. Past the knee it bends smoothly (a curve with
+  // no kink and no wobble, like CSS's cubic-bezier easing, only fitted to
+  // both ends) to reach straight up (180) at 90° of nod up, and straight
+  // down (0) at 90° down. Beyond 90° it stays there.
+  static func gazePitch(rest: Double, nod: Double, gain: Double) -> Double {
+    let up = nod >= 0
+    let end = up ? 180.0 : 0.0
+    // Degrees of gaze left between rest and straight up (or down).
+    let room = abs(end - rest)
+    let slope = max(gain, 0)
+    let head = min(abs(nod), fullNodDegrees)
+    guard room > 0, slope > 0 else { return rest }
+    // The knee comes early if a high gain would reach the end too soon.
+    let knee = min(kneeDegrees, room / slope / 2)
+    let turned: Double
+    if head <= knee {
+      turned = slope * head
+    } else {
+      turned = bend(
+        at: (head - knee) / (fullNodDegrees - knee), from: slope * knee, to: room,
+        slope: slope * (fullNodDegrees - knee))
     }
-    let lowerEasing = min(easing, max(rest - limits.lowerBound, 0))
-    let lowerStart = limits.lowerBound + lowerEasing
-    if value < lowerStart {
-      guard lowerEasing > 0 else { return limits.lowerBound }
-      return limits.lowerBound + lowerEasing * exp(-(lowerStart - value) / lowerEasing)
+    return up ? rest + turned : rest - turned
+  }
+
+  // A curve from `start` to `end` as `t` goes from 0 to 1, leaving `start`
+  // at `slope` (per unit of t) with no bend at first, and never turning
+  // back (a monotone cubic Hermite spline).
+  private static func bend(at t: Double, from start: Double, to end: Double, slope: Double)
+    -> Double
+  {
+    let rise = end - start
+    guard rise > 0 else { return end }
+    var startSlope = slope
+    // The end slope that keeps the curve straight as it leaves the knee.
+    var endSlope = max(3 * rise - 2 * slope, 0)
+    // Keeps it from overshooting and turning back (Fritsch–Carlson).
+    let size = hypot(startSlope / rise, endSlope / rise)
+    if size > 3 {
+      startSlope *= 3 / size
+      endSlope *= 3 / size
     }
-    return value
+    let t2 = t * t
+    let t3 = t2 * t
+    return (2 * t3 - 3 * t2 + 1) * start + (t3 - 2 * t2 + t) * startSlope
+      + (-2 * t3 + 3 * t2) * end + (t3 - t2) * endSlope
   }
 
   // The coordinate `offset` meters (east, north) from `origin`. Uses the
@@ -215,6 +257,7 @@ extension CameraPose {
   // Straight down (0) to MapKit's steepest pitch, the same range makeCamera()
   // allows. MapKit may cap it lower still, depending on how far out the
   // camera is; StereoRig asks MapKit where (see `steepestPitch(from:)`).
+  // The eyes can look past it (see StereoGeometry); MapKit's camera can't.
   static let pitchRange = 0.0...85.0
 
   // Wraps a heading into 0..<360 (MapKit headings are compass degrees).

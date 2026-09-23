@@ -148,7 +148,9 @@ describe('DioramaMapView', () => {
     const view = render(
       <DioramaMapView {...CAMERA} center={center} mode="stereo" onReady={onReady} />,
     );
-    fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'ready', { nativeEvent: {} });
-    expect(onReady).toHaveBeenCalledWith({ coverage });
+    fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'ready', {
+      nativeEvent: { mode: 'stereo' },
+    });
+    expect(onReady).toHaveBeenCalledWith({ coverage, mode: 'stereo' });
   });
 });

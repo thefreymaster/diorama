@@ -24,9 +24,11 @@ import simd
 //   yaw    + = turned right (clockwise seen from above, like a compass heading)
 //   pitch  + = looking up, - = looking down, 0 = level
 //   roll   + = right ear toward right shoulder (clockwise as the wearer sees it)
-// They are applied yaw first (about world up), then roll (about the gaze),
-// then pitch (about the ear-to-ear line). With that order, looking straight
-// down (this app's main pose) is well defined. The only blind spot is a head
+// Yaw is read from the ear-to-ear line and pitch is the nod about it, so
+// looking straight down (this app's main pose) or straight up is well
+// defined. Roll is the turn about the line of sight: how far the world's
+// "up" appears turned in the wearer's view, which is what the picture has
+// to turn back to keep the horizon level. The only blind spot is a head
 // rolled 90° onto a shoulder, which nobody does in a head mount.
 
 // Which device directions point to the screen's right and up, for each way
@@ -54,6 +56,14 @@ struct HeadPose: Equatable {
 
   static let zero = HeadPose(yaw: 0, pitch: 0, roll: 0)
 
+  // How much the roll leans on the ear's own tilt near straight up and
+  // down, where a turn about the line of sight is the same as a yaw and
+  // "level" stops meaning anything. 0 would be the exact turn everywhere
+  // but jumpy right at straight up. This keeps it within 1% of exact up to
+  // 50° above or below level (2% at 60°, for a head turned up to 45°) and
+  // brings it smoothly to 0 at straight up and down.
+  static let rollSteadiness = 0.01
+
   // The head pose for a phone attitude, given how the interface is rotated.
   // A pure function: no sensors, no state.
   static func measure(attitude: simd_quatd, screen: ScreenAxes) -> HeadPose {
@@ -67,8 +77,14 @@ struct HeadPose: Equatable {
     // straight down, where the gaze has no horizontal direction. atan2 is
     // counterclockwise-positive; flip it so turning right is positive.
     let yaw = -atan2(right.y, right.x)
-    // Roll: how far the right ear has dropped below level.
-    let roll = asin(min(max(-right.z, -1), 1))
+    // Roll: the angle between the head's up and the world's up, both seen
+    // along the line of sight. How far the ear has dropped (-right.z)
+    // against how upright the head still is (up.z); looking level that's
+    // simply the ear's drop. `rollSteadiness` steadies it near straight up
+    // and down (see above). It stays within ±90°: bending back past
+    // straight up is a pitch past 90, not an upside-down roll.
+    let steadiness = rollSteadiness * forward.z * forward.z
+    let roll = atan2(-right.z, (up.z * up.z + steadiness).squareRoot())
     // Pitch: the gaze's height against the head-up's height. This is the
     // nod angle, and it keeps working past straight down.
     let pitch = atan2(forward.z, up.z)

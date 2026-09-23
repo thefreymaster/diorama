@@ -7,10 +7,11 @@ import type {
   DioramaEyeLayout,
   DioramaMapViewProps,
   DioramaMapViewRef,
+  DioramaViewMode,
 } from './DioramaMapView.types';
 
-/** Native `onReady` payload: none. It only means "first full render done". */
-export type NativeReadyEvent = NativeSyntheticEvent<Record<string, never>>;
+/** Native `onReady` payload: which view ("first full render done") just drew. */
+export type NativeReadyEvent = NativeSyntheticEvent<{ mode: DioramaViewMode }>;
 
 /** Native `onDegraded` payload: the public event, wrapped by React Native. */
 export type NativeDegradedEvent = NativeSyntheticEvent<DioramaDegradedEvent>;

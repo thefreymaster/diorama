@@ -75,7 +75,7 @@ function mapProps(): DioramaMapViewProps {
  * 3D coverage the real wrapper works out for the map's center.
  */
 function finishRendering() {
-  act(() => mapProps().onReady?.({ coverage: flyoverCoverageAt(mapProps().center) }));
+  act(() => mapProps().onReady?.({ coverage: flyoverCoverageAt(mapProps().center), mode: 'mono' }));
 }
 
 /** The native stack's header settings for one screen (react-native-screens). */

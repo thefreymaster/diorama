@@ -1,5 +1,7 @@
+export { ControlRow, type ControlRowProps } from './ControlRow';
 export { GlassButton, type GlassButtonProps } from './GlassButton';
 export { GlassSurface, type GlassSurfaceProps } from './GlassSurface';
+export { actionHaptic, exitHaptic, selectionHaptic } from './haptics';
 export { InsetGroupedSection, type InsetGroupedSectionProps } from './InsetGroupedSection';
 export { ListRow, type ListRowProps } from './ListRow';
 export { PrimaryButton, type PrimaryButtonProps } from './PrimaryButton';
@@ -7,5 +9,6 @@ export { Screen, type ScreenProps } from './Screen';
 export { SkeletonRow, type SkeletonRowProps } from './SkeletonRow';
 export { SymbolIcon, type SymbolIconProps } from './SymbolIcon';
 export { Text, type TextProps } from './Text';
+export { ToggleRow, type ToggleRowProps } from './ToggleRow';
 export { canUseLiquidGlass } from './liquidGlass';
 export { usePressScale } from './usePressScale';

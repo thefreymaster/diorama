@@ -1,7 +1,4 @@
-import { Pressable, View } from 'react-native';
-
-import { InsetGroupedSection, Text } from '@/ui';
-import { rowStyles } from '@/ui/rowStyles';
+import { InsetGroupedSection, ListRow } from '@/ui';
 
 import { useResetSettings } from './useResetSettings';
 
@@ -11,18 +8,13 @@ export function ResetSection() {
 
   return (
     <InsetGroupedSection>
-      <Pressable
+      <ListRow
+        title="Reset to defaults"
+        destructive
+        chevron={false}
         onPress={reset}
-        accessibilityRole="button"
         accessibilityHint="Puts every setting on this screen back the way it started."
-        style={({ pressed }) => [rowStyles.row, rowStyles.textOnly, pressed && rowStyles.pressed]}
-      >
-        <View style={rowStyles.content}>
-          <Text color="systemRed" style={rowStyles.text}>
-            Reset to defaults
-          </Text>
-        </View>
-      </Pressable>
+      />
     </InsetGroupedSection>
   );
 }

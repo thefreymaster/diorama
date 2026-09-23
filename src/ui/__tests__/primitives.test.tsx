@@ -7,6 +7,8 @@ import {
 import { SymbolView } from 'expo-symbols';
 import { ScrollView, Text as NativeText } from 'react-native';
 
+import { colors } from '@/theme';
+
 import * as ui from '..';
 import { UIGalleryScreen } from '../dev/UIGalleryScreen';
 import { GlassButton } from '../GlassButton';
@@ -18,6 +20,7 @@ import { RowSeparator } from '../RowSeparator';
 import { Screen } from '../Screen';
 import { SkeletonRow } from '../SkeletonRow';
 import { SymbolIcon } from '../SymbolIcon';
+import { ToggleRow } from '../ToggleRow';
 
 /** Shows what its section told it about its position. */
 function PositionProbe({ label }: { label: string }) {
@@ -42,6 +45,55 @@ describe('ListRow', () => {
 
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByText('1.0×')).toBeOnTheScreen();
+  });
+
+  it('reads as one button, title and subtitle together, with its icons hidden', () => {
+    render(
+      <ListRow
+        title="Paris"
+        subtitle="France"
+        symbol="building.columns.fill"
+        onPress={() => {}}
+        accessibilityHint="Shows a preview."
+      />,
+    );
+
+    // One element for the whole row: VoiceOver reads its texts together.
+    const row = screen.getByRole('button');
+    expect(row).toHaveTextContent(/Paris.*France/);
+    expect(row.props.accessibilityHint).toBe('Shows a preview.');
+    for (const symbol of screen.UNSAFE_getAllByType(SymbolView)) {
+      expect(isHiddenFromAccessibility(symbol)).toBe(true);
+    }
+  });
+
+  it('draws a destructive action in red, without a chevron', () => {
+    render(<ListRow title="Reset to defaults" destructive chevron={false} onPress={() => {}} />);
+
+    expect(screen.getByText('Reset to defaults')).toHaveStyle({ color: colors.systemRed });
+    expect(screen.UNSAFE_queryByType(SymbolView)).toBeNull();
+  });
+});
+
+describe('ToggleRow', () => {
+  it('reads as one switch that VoiceOver can flip from anywhere on the row', () => {
+    const onValueChange = jest.fn();
+    render(
+      <InsetGroupedSection>
+        <ToggleRow title="Stereo" value onValueChange={onValueChange} testID="stereo" />
+      </InsetGroupedSection>,
+    );
+
+    const row = screen.getByRole('switch', { name: 'Stereo' });
+    expect(row).toBeChecked();
+    // The row is the accessible element, so iOS folds the UISwitch into it.
+    expect(row).toContainElement(screen.getByTestId('stereo'));
+
+    fireEvent(row, 'accessibilityTap');
+    expect(onValueChange).toHaveBeenCalledWith(false);
+
+    fireEvent(screen.getByTestId('stereo'), 'valueChange', false);
+    expect(onValueChange).toHaveBeenLastCalledWith(false);
   });
 });
 
@@ -187,6 +239,8 @@ describe('UI gallery', () => {
     expect(screen.getAllByLabelText('Loading')).toHaveLength(3);
     expect(screen.getByLabelText('Recenter')).toBeOnTheScreen();
     expect(screen.getByLabelText('Close')).toBeOnTheScreen();
+    expect(screen.getByRole('switch', { name: 'Stereo' })).toBeChecked();
+    expect(screen.getByText('Reset to defaults')).toBeOnTheScreen();
     expect(screen.getByText('Large title')).toBeOnTheScreen();
   });
 });

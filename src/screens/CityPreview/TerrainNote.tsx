@@ -2,10 +2,8 @@ import { useEffect } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { spacing, springs } from '@/theme';
+import { spacing, springConfig, springs, useReduceMotion } from '@/theme';
 import { Text } from '@/ui';
-
-import { useReduceMotion } from './useReduceMotion';
 
 export const TERRAIN_NOTE = "3D buildings aren't available here. Terrain only.";
 
@@ -21,7 +19,7 @@ export function TerrainNote() {
   const progress = useSharedValue(0);
 
   useEffect(() => {
-    progress.set(reduceMotion ? 1 : withSpring(1, springs.gentle));
+    progress.set(reduceMotion ? 1 : withSpring(1, springConfig(springs.gentle, reduceMotion)));
   }, [reduceMotion, progress]);
 
   const revealStyle = useAnimatedStyle(() => ({

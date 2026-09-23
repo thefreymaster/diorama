@@ -1,8 +1,11 @@
+import { useState } from 'react';
+
 import { InsetGroupedSection } from '../InsetGroupedSection';
 import { ListRow } from '../ListRow';
 import { PrimaryButton } from '../PrimaryButton';
 import { Screen } from '../Screen';
 import { SkeletonRow } from '../SkeletonRow';
+import { ToggleRow } from '../ToggleRow';
 import { DemoBlock } from './DemoBlock';
 import { GlassDemo } from './GlassDemo';
 import { noop, sampleFeatured, sampleRecents } from './sampleData';
@@ -11,6 +14,8 @@ import { TypeRampCard } from './TypeRampCard';
 
 /** Dev-only gallery of every UI primitive, for light/dark screenshot checks. */
 export function UIGalleryScreen() {
+  const [stereo, setStereo] = useState(true);
+
   return (
     <Screen background="grouped">
       <InsetGroupedSection title="Featured" footer="Cities with 3D buildings in Apple Maps.">
@@ -58,6 +63,11 @@ export function UIGalleryScreen() {
           symbolTile="systemGray"
           onPress={noop}
         />
+      </InsetGroupedSection>
+
+      <InsetGroupedSection title="Controls" footer="A switch row reads as one switch to VoiceOver.">
+        <ToggleRow title="Stereo" value={stereo} onValueChange={setStereo} />
+        <ListRow title="Reset to defaults" destructive chevron={false} onPress={noop} />
       </InsetGroupedSection>
 
       <DemoBlock title="Buttons">

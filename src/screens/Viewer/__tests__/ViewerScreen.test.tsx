@@ -6,7 +6,14 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { getAnimatedStyle } from 'react-native-reanimated';
 
 import type { DioramaMapViewProps } from '@diorama/native';
-import { resetSettings, setMode } from '@/features/settings/store';
+import {
+  resetSettings,
+  setDebugLook,
+  setEyeSeparation,
+  setMiniatureIntensity,
+  setMode,
+  setTrackingSensitivity,
+} from '@/features/settings/store';
 import { COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
 import { queryClient } from '@/providers/queryClient';
 
@@ -15,7 +22,7 @@ import * as IndexRoute from '../../../../app/index';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
-import { EXIT_HOLD_MS } from '../ViewerGestures';
+import { EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../ViewerGestures';
 
 const mockRecenter = jest.fn(() => Promise.resolve());
 // Taken before each test swaps in fake timers.
@@ -237,7 +244,7 @@ describe('viewer', () => {
     expect(opacity()).toBeCloseTo(0, 2);
   });
 
-  it('only dissolves the HUD under Reduce Motion', async () => {
+  it('only dissolves the HUD under Reduce Motion, with no overshoot', async () => {
     jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
     setMode('mono');
     await openViewer();
@@ -245,11 +252,22 @@ describe('viewer', () => {
     wait(1000);
 
     await doubleTap();
-    wait(100);
-    const style = getAnimatedStyle(screen.getByTestId('viewer-hud', HIDDEN));
-    expect(style.opacity).toBeGreaterThan(0);
-    expect(style.opacity).toBeLessThan(1);
-    expect(style.transform).toEqual([{ scale: 1 }]);
+    type HudLook = { opacity: number; transform: unknown };
+    const frames: HudLook[] = [];
+    for (let elapsed = 0; elapsed < 800; elapsed += 16) {
+      wait(16);
+      frames.push(getAnimatedStyle(screen.getByTestId('viewer-hud', HIDDEN)) as HudLook);
+    }
+
+    // A fade, not a pop, that never grows and never flickers past fully shown.
+    expect(frames[0]?.opacity).toBeGreaterThan(0);
+    expect(frames[0]?.opacity).toBeLessThan(1);
+    frames.forEach(({ opacity, transform }, index) => {
+      expect(transform).toEqual([{ scale: 1 }]);
+      expect(opacity).toBeLessThanOrEqual(1);
+      if (index > 0) expect(opacity).toBeGreaterThanOrEqual(frames[index - 1]!.opacity);
+    });
+    expect(frames.at(-1)?.opacity).toBeCloseTo(1, 2);
   });
 
   it('says so when the phone gets too hot for stereo, and leaves the fallback alone', async () => {
@@ -338,6 +356,14 @@ describe('viewer', () => {
     mockRecenter.mockClear();
     const view = screen.getByTestId('viewer-screen');
     expect(view).toHaveAccessibleName('3D view of Paris');
+    expect(view.props.accessibilityHint).toBe(VIEWER_ACCESSIBILITY_HINT);
+    // The rotor lists Recenter and Exit.
+    expect(view.props.accessibilityActions).toEqual(
+      expect.arrayContaining([
+        { name: 'recenter', label: 'Recenter' },
+        { name: 'exit', label: 'Exit' },
+      ]),
+    );
 
     fireEvent(view, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
     expect(mockRecenter).toHaveBeenCalledTimes(1);
@@ -347,6 +373,31 @@ describe('viewer', () => {
     );
     expect(router.getPathname()).toBe('/city/paris');
     await landOnPreview();
+  });
+
+  it('follows Settings changes while it is open', async () => {
+    await openViewer();
+    enterDiorama();
+    expect(screen.getAllByTestId(/hud-eye-/, HIDDEN)).toHaveLength(2);
+
+    act(() => {
+      setEyeSeparation(2);
+      setTrackingSensitivity(1.5);
+      setMiniatureIntensity(0.2);
+      setMode('mono');
+      setDebugLook(true);
+    });
+
+    expect(viewerMap()).toMatchObject({
+      mode: 'mono',
+      eyeSeparation: 2,
+      trackingSensitivity: 1.5,
+      miniatureIntensity: 0.2,
+      debugLook: true,
+    });
+    // The HUD follows too: one copy in mono.
+    await doubleTap();
+    expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(1);
   });
 
   it('quietly goes back to the city list for a city it does not know', async () => {

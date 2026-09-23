@@ -5,6 +5,9 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 /** How long to hold anywhere to leave the diorama. */
 export const EXIT_HOLD_MS = 1000;
 
+/** What VoiceOver says a double-tap on the view does. */
+export const VIEWER_ACCESSIBILITY_HINT = "Recenters the view on where you're facing.";
+
 // VoiceOver: double-tap (activate) recenters, like a double-tap without it;
 // the rotor offers Recenter and Exit, and the two-finger scrub (escape) exits.
 const ACCESSIBILITY_ACTIONS = [
@@ -67,6 +70,7 @@ export function ViewerGestures({
         style={styles.fill}
         accessible
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={VIEWER_ACCESSIBILITY_HINT}
         accessibilityActions={ACCESSIBILITY_ACTIONS}
         onAccessibilityAction={onAccessibilityAction}
       >

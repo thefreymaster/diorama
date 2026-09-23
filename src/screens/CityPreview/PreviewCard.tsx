@@ -41,7 +41,7 @@ export function PreviewCard({ city, showTerrainNote }: PreviewCardProps) {
           title="Enter Diorama"
           symbol={ENTER_DIORAMA_SYMBOL}
           onPress={enterDiorama}
-          accessibilityHint="Opens the city in stereo 3D."
+          accessibilityHint="Opens the city full screen, in landscape."
         />
         <Text variant="footnote" color="secondaryLabel" style={styles.guidance}>
           Place your iPhone in your viewer.

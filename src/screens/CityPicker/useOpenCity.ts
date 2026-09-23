@@ -1,12 +1,7 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 
 import { addRecent, type RecentCity } from '@/features/cities/recentsStore';
-
-/** The light tick UIKit plays when you pick something from a list. */
-export function playSelectionHaptic(): void {
-  void Haptics.selectionAsync();
-}
+import { selectionHaptic } from '@/ui';
 
 /**
  * Shows a city's preview. Every city you open becomes the newest recent,
@@ -27,7 +22,7 @@ export function useOpenCity() {
   const showCity = useShowCity();
 
   return (city: RecentCity) => {
-    playSelectionHaptic();
+    selectionHaptic();
     showCity(city);
   };
 }

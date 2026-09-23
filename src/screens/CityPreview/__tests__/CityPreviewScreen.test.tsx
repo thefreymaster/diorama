@@ -178,6 +178,18 @@ describe('city preview', () => {
   });
 });
 
+describe('city preview, VoiceOver', () => {
+  it('names the map, and says where Enter Diorama goes', async () => {
+    renderRouter(routes, { initialUrl: '/city/paris' });
+    await screen.findByTestId('city-preview-screen');
+
+    expect(screen.getByRole('image', { name: '3D map of Paris' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Enter Diorama' }).props.accessibilityHint).toBe(
+      'Opens the city full screen, in landscape.',
+    );
+  });
+});
+
 describe('city preview, unknown city', () => {
   it('says so quietly and offers a way back to the list', async () => {
     const router = renderRouter(routes, { initialUrl: '/city/atlantis' });

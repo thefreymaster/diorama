@@ -29,6 +29,8 @@ export type ListRowProps = {
   symbolTile?: ColorToken;
   /** Trailing chevron. Defaults to shown when the row is tappable. */
   chevron?: boolean;
+  /** Red title, for an action that erases or resets (SwiftUI's destructive role). */
+  destructive?: boolean;
   onPress?: () => void;
   accessibilityHint?: string;
 };
@@ -42,6 +44,7 @@ export function ListRow({
   symbol,
   symbolTile,
   chevron,
+  destructive = false,
   onPress,
   accessibilityHint,
 }: ListRowProps) {
@@ -54,7 +57,7 @@ export function ListRow({
       <View style={rowStyles.content}>
         <RowSeparator />
         <View style={rowStyles.text}>
-          <Text>
+          <Text color={destructive ? 'systemRed' : 'label'}>
             {titleHighlights?.length
               ? titleRuns(title, titleHighlights).map((run, index) =>
                   run.highlighted ? (

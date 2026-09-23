@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { AccessibilityInfo } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { autocomplete, resolve, type Completion, type ResolvedCity } from '@diorama/native';
@@ -292,6 +293,7 @@ describe('city picker, opening a search result', () => {
   });
 
   it('stays put and says so quietly when it fails to open', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     mockAutocomplete.mockResolvedValue([HOBOKEN_RESULT]);
     mockResolve.mockRejectedValue(new Error('MKErrorDomain error 4'));
     const router = renderRouter(routes, { initialUrl: '/?q=hob' });
@@ -299,8 +301,11 @@ describe('city picker, opening a search result', () => {
     fireEvent.press(await screen.findByText('NJ, United States'));
 
     expect(await screen.findByText("Couldn't open Hoboken. Try again.")).toBeOnTheScreen();
+    // VoiceOver is on the row, far from the footer, so it hears it too.
+    expect(announce).toHaveBeenCalledWith("Couldn't open Hoboken. Try again.");
     expect(router.getPathname()).toBe('/');
     expect(getRecents()).toEqual([]);
+    announce.mockRestore();
   });
 
   it('does not open the preview if you left while it resolved', async () => {

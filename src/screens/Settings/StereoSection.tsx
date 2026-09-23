@@ -1,7 +1,5 @@
 import { setMode, useSetting } from '@/features/settings/store';
-import { InsetGroupedSection } from '@/ui';
-
-import { ToggleRow } from './ToggleRow';
+import { InsetGroupedSection, ToggleRow } from '@/ui';
 
 /** Stereo (a picture per eye, for a headset) or mono (one picture). */
 export function StereoSection() {

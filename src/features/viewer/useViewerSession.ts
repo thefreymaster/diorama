@@ -1,8 +1,8 @@
-import * as Haptics from 'expo-haptics';
 import { useState, type RefObject } from 'react';
 
 import type { DioramaMapViewRef } from '@diorama/native';
 import { useSetting } from '@/features/settings/store';
+import { actionHaptic, exitHaptic } from '@/ui';
 
 import { useExitViewer } from './useExitViewer';
 import { useStartupCountdown } from './useStartupCountdown';
@@ -56,12 +56,12 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
     /** Straight ahead is wherever the wearer faces now. Waits for the countdown. */
     recenter: () => {
       if (!countdown.isDone) return;
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      actionHaptic();
       recenterMap();
       showNotice('recentered');
     },
     exit: () => {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      exitHaptic();
       exitViewer();
     },
   };

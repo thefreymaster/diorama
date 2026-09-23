@@ -50,7 +50,7 @@ export function PrimaryButton({
       ) : (
         <>
           {symbol ? <SymbolIcon name={symbol} weight="semibold" color={foreground} /> : null}
-          <Text variant="headline" color={foreground}>
+          <Text variant="headline" color={foreground} style={styles.label}>
             {title}
           </Text>
         </>
@@ -73,5 +73,10 @@ const styles = StyleSheet.create({
   },
   disabled: {
     backgroundColor: colors.tertiarySystemFill,
+  },
+  // At the largest text sizes the label wraps inside the capsule, which grows.
+  label: {
+    flexShrink: 1,
+    textAlign: 'center',
   },
 });

@@ -3,10 +3,9 @@ import Animated from 'react-native-reanimated';
 
 import { DioramaMapView, type DioramaReadyEvent } from '@diorama/native';
 import type { City } from '@/features/cities/queries';
+import { useMapReveal } from '@/features/map/useMapReveal';
+import { usePreviewOrbit } from '@/features/map/usePreviewOrbit';
 import { colors } from '@/theme';
-
-import { useMapReveal } from './useMapReveal';
-import { usePreviewOrbit } from './usePreviewOrbit';
 
 type PreviewMapProps = {
   city: City;

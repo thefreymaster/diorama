@@ -4,7 +4,7 @@ import { useCitySearch } from '@/features/cities/queries';
 import { InsetGroupedSection, ListRow, SkeletonRow } from '@/ui';
 
 import { PickerMessage } from './PickerMessage';
-import { useOpenSearchResult } from './useOpenSearchResult';
+import { openFailedMessage, useOpenSearchResult } from './useOpenSearchResult';
 import { usePickerQuery } from './usePickerQuery';
 
 /** Rows to hold the place of results that haven't arrived yet. */
@@ -54,7 +54,7 @@ export function SearchResults() {
   const failed = completions.find((completion) => completion.id === failedId);
 
   return (
-    <InsetGroupedSection footer={failed ? `Couldn't open ${failed.title}. Try again.` : undefined}>
+    <InsetGroupedSection footer={failed ? openFailedMessage(failed.title) : undefined}>
       {completions.map((completion) => (
         <ListRow
           key={completion.id}

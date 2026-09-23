@@ -1,14 +1,7 @@
 import { useEffect } from 'react';
-import {
-  ReduceMotion,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { useReduceMotion } from '@/screens/CityPreview/useReduceMotion';
-import { springs } from '@/theme';
+import { springConfig, springs, useReduceMotion } from '@/theme';
 
 /** The HUD grows from this scale as it appears, like a system HUD. */
 const HIDDEN_SCALE = 0.9;
@@ -16,16 +9,16 @@ const HIDDEN_SCALE = 0.9;
 /**
  * Style for the HUD: it springs in (fading up and growing a little) while
  * `visible`, and springs back out after. Under Reduce Motion it only
- * dissolves, which the setting allows, so it never pops.
+ * dissolves, which the setting allows, with no overshoot, so it never pops
+ * or flickers.
  */
 export function useHudFade(visible: boolean) {
   const reduceMotion = useReduceMotion();
   const shown = useSharedValue(0);
 
   useEffect(() => {
-    // Reanimated would skip the spring under Reduce Motion; the dissolve stays.
-    shown.set(withSpring(visible ? 1 : 0, { ...springs.gentle, reduceMotion: ReduceMotion.Never }));
-  }, [visible, shown]);
+    shown.set(withSpring(visible ? 1 : 0, springConfig(springs.gentle, reduceMotion)));
+  }, [visible, reduceMotion, shown]);
 
   return useAnimatedStyle(() => {
     const progress = shown.get();

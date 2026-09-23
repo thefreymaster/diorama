@@ -2,7 +2,7 @@ import type { SFSymbol } from 'expo-symbols';
 import { Pressable, StyleSheet } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { metrics, spacing, useScaledSize } from '@/theme';
+import { MAX_GLYPH_SCALE, metrics, spacing, useScaledSize } from '@/theme';
 
 import { GlassSurface } from './GlassSurface';
 import { canUseLiquidGlass } from './liquidGlass';
@@ -51,7 +51,12 @@ export function GlassButton({
     >
       <GlassSurface interactive style={[styles.surface, shape, title ? styles.capsule : null]}>
         {symbol ? <SymbolIcon name={symbol} weight="semibold" /> : null}
-        {title ? <Text variant="headline">{title}</Text> : null}
+        {/* The capsule's height stops growing at MAX_GLYPH_SCALE, so the label does too. */}
+        {title ? (
+          <Text variant="headline" maxFontSizeMultiplier={MAX_GLYPH_SCALE} numberOfLines={1}>
+            {title}
+          </Text>
+        ) : null}
       </GlassSurface>
     </AnimatedPressable>
   );

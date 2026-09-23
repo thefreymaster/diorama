@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { DioramaMapView } from '@diorama/native';
+import { useMapReveal } from '@/features/map/useMapReveal';
+import { usePreviewOrbit } from '@/features/map/usePreviewOrbit';
 import { useSetting } from '@/features/settings/store';
-import { useMapReveal } from '@/screens/CityPreview/useMapReveal';
-import { usePreviewOrbit } from '@/screens/CityPreview/usePreviewOrbit';
 import { colors } from '@/theme';
 
 import { useSampleCity } from './useSampleCity';

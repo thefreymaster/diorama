@@ -1,7 +1,5 @@
 import { setDebugLook, useSetting } from '@/features/settings/store';
-import { InsetGroupedSection } from '@/ui';
-
-import { ToggleRow } from './ToggleRow';
+import { InsetGroupedSection, ToggleRow } from '@/ui';
 
 /**
  * Dev builds only: drag to look around in the Simulator, which has no

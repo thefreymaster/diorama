@@ -1,6 +1,5 @@
-import * as Haptics from 'expo-haptics';
-
 import { resetSettings } from '@/features/settings/store';
+import { actionHaptic } from '@/ui';
 
 /**
  * "Reset to defaults": a light tap, then every setting goes back at once.
@@ -8,7 +7,7 @@ import { resetSettings } from '@/features/settings/store';
  */
 export function useResetSettings() {
   return () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    actionHaptic();
     resetSettings();
   };
 }

@@ -95,11 +95,12 @@ Acceptance: Search, tap a result, and you land on the preview. Recents update.
 Notes: Search text lives in the URL (`?q=`), so `diorama://?q=par` opens with results; `useSeededSearchBarRef` fills the native field on first mount. Gear is a native `Stack.Toolbar` bar button (iOS 26 glass; Expo marks it experimental). Every opened city goes to Recent; a search result matching a featured city (same name, <50 km) opens the tuned featured entry. Leaving mid-resolve cancels the push. `ListRow` gained an optional `titleHighlights` prop. Simulator visual check pending (light/dark, `?q=par` bold matches, search field placement, VoiceOver "Settings").
 
 ### T11 City preview screen
-Status: todo
+Status: done
 Depends: T04, T10
 Files: src/screens/CityPreview/**
 Details: A full-bleed mono `DioramaMapView` with `orbit` on, and the city name and country on a material card at the bottom. A capsule "Enter Diorama" button shows the SF Symbol `visionpro` (or `eyeglasses`) and a line of guidance: "Place your iPhone in your viewer." If the city doesn't have Flyover, show a subtle note: "3D buildings aren't available here. Terrain only."
 Acceptance: Orbit is smooth, and the button navigates to `/view/[cityId]`.
+Notes: Header is transparent; title = city name (so pushed screens read "‹ Paris") but not drawn over the map; blurred bar before iOS 26. Map stays opaque under a cover that fades out once rendered (MapKit may not draw an invisible map). Orbit pauses when the screen loses focus and under Reduce Motion (`useReduceMotion` follows the setting live; T14 could move it to `@/ui`). Terrain note only after `onReady` says no Flyover; unknown id shows an empty state. NEEDS DEVICE CHECK — orbit smoothness, card legibility over bright/dark imagery, 44-pt card radius vs the phone corners, haptic. Simulator visual check pending.
 
 ### T12 Viewer screen
 Status: todo

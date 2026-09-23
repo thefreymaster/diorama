@@ -39,7 +39,7 @@ describe('routes', () => {
     const router = renderRouter(routes, { initialUrl: '/city/paris' });
 
     expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
-    expect(screen.getByText('paris')).toBeOnTheScreen();
+    expect(screen.getByText('Paris')).toBeOnTheScreen();
     expect(router.getSegments()).toEqual(['city', '[cityId]']);
     expect(testRouter.canGoBack()).toBe(true);
   });

@@ -1,33 +1,33 @@
-import { Link, useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { colors } from '@/theme';
 
-/** Placeholder until T11 adds the orbiting 3D preview. */
+import { CityNotFound } from './CityNotFound';
+import { PreviewCard } from './PreviewCard';
+import { PreviewHeader } from './PreviewHeader';
+import { PreviewMap } from './PreviewMap';
+import { usePreviewCity } from './usePreviewCity';
+import { usePreviewMapStatus } from './usePreviewMapStatus';
+
+/**
+ * A city before you put the phone in the viewer: its 3D map slowly turning,
+ * full-bleed, under a glass card with its name and "Enter Diorama".
+ */
 export function CityPreviewScreen() {
-  const { cityId } = useLocalSearchParams<'/city/[cityId]'>();
+  const city = usePreviewCity();
+  const map = usePreviewMapStatus();
+
+  if (!city) return <CityNotFound />;
 
   return (
-    <View testID="city-preview-screen" style={styles.container}>
-      <Text style={styles.title}>{cityId}</Text>
-      <Link href={{ pathname: '/view/[cityId]', params: { cityId } }} style={styles.link}>
-        Enter Diorama
-      </Link>
+    <View testID="city-preview-screen" style={styles.screen}>
+      <PreviewHeader title={city.name} />
+      <PreviewMap city={city} isReady={map.isReady} onReady={map.onReady} />
+      <PreviewCard city={city} showTerrainNote={map.showTerrainNote} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  title: {
-    color: colors.label,
-  },
-  link: {
-    color: colors.tint,
-  },
+  screen: { flex: 1, backgroundColor: colors.systemGroupedBackground },
 });

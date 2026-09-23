@@ -1,11 +1,13 @@
 import {
+  act,
   fireEvent,
   isHiddenFromAccessibility,
   render,
   screen,
 } from '@testing-library/react-native';
 import { SymbolView } from 'expo-symbols';
-import { ScrollView, Text as NativeText } from 'react-native';
+import { Dimensions, ScrollView, Text as NativeText } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 
 import { colors } from '@/theme';
 
@@ -64,6 +66,34 @@ describe('ListRow', () => {
     expect(row.props.accessibilityHint).toBe('Shows a preview.');
     for (const symbol of screen.UNSAFE_getAllByType(SymbolView)) {
       expect(isHiddenFromAccessibility(symbol)).toBe(true);
+    }
+  });
+
+  it('puts a value under the title at accessibility text sizes, not beside it', () => {
+    /** The nearest native view around some text: the row's text column, or the row. */
+    const column = (text: string) => {
+      let node: ReactTestInstance | null = screen.getByText(text).parent;
+      while (node && String(node.type) !== 'View') node = node.parent;
+      return node;
+    };
+    const setFontScale = (fontScale: number) =>
+      act(() =>
+        Dimensions.set({
+          window: { ...Dimensions.get('window'), fontScale },
+          screen: Dimensions.get('screen'),
+        }),
+      );
+
+    const { fontScale } = Dimensions.get('window');
+    try {
+      setFontScale(1); // Large, the default
+      render(<ListRow title="Headset" value="Cardboard" />);
+      expect(column('Cardboard')).not.toBe(column('Headset'));
+
+      setFontScale(53 / 17); // AX5
+      expect(column('Cardboard')).toBe(column('Headset'));
+    } finally {
+      setFontScale(fontScale);
     }
   });
 

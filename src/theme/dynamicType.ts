@@ -6,6 +6,19 @@ import { useWindowDimensions } from 'react-native';
  */
 export const MAX_GLYPH_SCALE = 1.6;
 
+/**
+ * Text-size multiplier past the largest standard size (XXXL, about 1.35):
+ * from here on the accessibility sizes begin, and layouts that sit side by
+ * side stack instead, as UIKit's list cells do.
+ */
+export const ACCESSIBILITY_FONT_SCALE = 1.4;
+
+/** True at the accessibility text sizes (AX1 and up), where rows stack their parts. */
+export function useIsAccessibilitySize(): boolean {
+  const { fontScale } = useWindowDimensions();
+  return fontScale >= ACCESSIBILITY_FONT_SCALE;
+}
+
 /** Scale a size given at the default text size by the user's text-size multiplier. */
 export function scaleForDynamicType(
   size: number,

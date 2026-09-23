@@ -129,15 +129,15 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
     tileColor: 'systemBrown',
   },
   {
-    // From the CBD: Circular Quay, the Opera House on the right, the Harbour Bridge ahead.
+    // From Farm Cove: the Opera House up front, the Harbour Bridge behind it.
     id: 'sydney',
     name: 'Sydney',
     country: 'Australia',
-    lat: -33.857,
-    lon: 151.2125,
+    lat: -33.8565,
+    lon: 151.214,
     altitude: 1300,
     pitch: 60,
-    heading: 340,
+    heading: 310,
     symbol: 'sailboat.fill',
     tileColor: 'systemCyan',
   },
@@ -155,15 +155,15 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
     tileColor: 'systemIndigo',
   },
   {
-    // From the lakefront: Millennium Park, the Michigan Avenue wall, the Loop and Willis Tower.
+    // From Grant Park: Millennium Park and the Bean up front, the Michigan Avenue wall, then the Loop.
     id: 'chicago',
     name: 'Chicago',
     country: 'United States',
-    lat: 41.883,
-    lon: -87.63,
-    altitude: 1400,
-    pitch: 62,
-    heading: 280,
+    lat: 41.8812,
+    lon: -87.625,
+    altitude: 1700,
+    pitch: 58,
+    heading: 262,
     symbol: 'wind',
     tileColor: 'systemTeal',
   },

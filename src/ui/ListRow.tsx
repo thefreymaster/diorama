@@ -1,7 +1,7 @@
 import type { SFSymbol } from 'expo-symbols';
 import { Pressable, View } from 'react-native';
 
-import type { ColorToken } from '@/theme';
+import { useIsAccessibilitySize, type ColorToken } from '@/theme';
 
 import { RowIcon } from './RowIcon';
 import { RowSeparator } from './RowSeparator';
@@ -21,7 +21,7 @@ export type ListRowProps = {
   titleHighlights?: readonly TitleRange[];
   /** Second line in secondary text (e.g. a city's country). */
   subtitle?: string;
-  /** Trailing value in secondary text (e.g. "1.0×"). */
+  /** Trailing value in secondary text (e.g. "1.0×"). Under the title at accessibility text sizes. */
   value?: string;
   /** Leading SF Symbol. */
   symbol?: SFSymbol;
@@ -50,6 +50,8 @@ export function ListRow({
 }: ListRowProps) {
   const showChevron = chevron ?? onPress !== undefined;
   const rowStyle = [rowStyles.row, symbol ? null : rowStyles.textOnly];
+  // Side by side, a big value would squeeze the title to a letter per line.
+  const valueBelow = useIsAccessibilitySize();
 
   const content = (
     <>
@@ -75,8 +77,9 @@ export function ListRow({
               {subtitle}
             </Text>
           ) : null}
+          {value && valueBelow ? <Text color="secondaryLabel">{value}</Text> : null}
         </View>
-        {value ? <Text color="secondaryLabel">{value}</Text> : null}
+        {value && !valueBelow ? <Text color="secondaryLabel">{value}</Text> : null}
         {showChevron ? (
           <SymbolIcon name="chevron.right" size={14} weight="semibold" color="tertiaryLabel" />
         ) : null}

@@ -1,3 +1,4 @@
+import { GlassView } from 'expo-glass-effect';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { act, fireEvent, renderRouter, screen, testRouter } from 'expo-router/testing-library';
@@ -16,6 +17,7 @@ import {
 } from '@/features/settings/store';
 import { COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
 import { queryClient } from '@/providers/queryClient';
+import { canUseLiquidGlass } from '@/ui/liquidGlass';
 
 import * as CityRoute from '../../../../app/city/[cityId]';
 import * as IndexRoute from '../../../../app/index';
@@ -50,7 +52,11 @@ jest.mock('expo-haptics', () => ({
 
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
 
+// iOS 26 (Liquid Glass) unless a test says otherwise.
+jest.mock('@/ui/liquidGlass', () => ({ canUseLiquidGlass: jest.fn(() => true) }));
+
 const mockImpact = jest.mocked(Haptics.impactAsync);
+const mockLiquidGlass = jest.mocked(canUseLiquidGlass);
 
 const routes = {
   _layout: RootLayout,
@@ -65,6 +71,8 @@ const COOLING = HUD_NOTICES.cooling.text;
 // The HUD is hidden from VoiceOver (it announces itself), so look past that.
 const HIDDEN = { includeHiddenElements: true };
 
+type HudLook = { opacity: number; transform: unknown };
+
 let appStateListeners: ((state: AppStateStatus) => void)[] = [];
 
 beforeEach(() => {
@@ -73,6 +81,7 @@ beforeEach(() => {
   resetSettings();
   mockRecenter.mockClear();
   mockImpact.mockClear();
+  mockLiquidGlass.mockReturnValue(true);
   appStateListeners = [];
   const addEventListener = (event: string, listener: (state: AppStateStatus) => void) => {
     if (event === 'change') appStateListeners.push(listener);
@@ -226,9 +235,35 @@ describe('viewer', () => {
     expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(1);
   });
 
-  it('springs the recenter HUD in, then fades it back out on its own', async () => {
+  it('materializes the recenter HUD, then dissolves it on its own', async () => {
     // Mono: under Jest, Reanimated only tracks one view per animated style
     // (on a phone both eye copies follow it).
+    setMode('mono');
+    await openViewer();
+    enterDiorama();
+    wait(1000);
+    const look = (testID: string) =>
+      getAnimatedStyle(screen.getByTestId(testID, HIDDEN)) as HudLook;
+    const glass = () => screen.UNSAFE_getByType(GlassView).props.glassEffectStyle;
+    expect(glass()).toMatchObject({ style: 'none', animate: true });
+
+    await doubleTap();
+    wait(800);
+    // The glass materializes itself and only its words fade: Liquid Glass
+    // isn't drawn under a parent that is being faded.
+    expect(glass()).toMatchObject({ style: 'regular', animate: true });
+    expect(look('viewer-hud-content').opacity).toBeCloseTo(1, 2);
+    expect(look('viewer-hud')).toEqual({ opacity: 1, transform: [{ scale: 1 }] });
+
+    wait(HUD_NOTICES.recentered.holdMs);
+    wait(1000);
+    expect(glass()).toMatchObject({ style: 'none' });
+    expect(look('viewer-hud-content').opacity).toBeCloseTo(0, 2);
+    expect(look('viewer-hud').opacity).toBe(1);
+  });
+
+  it('fades the whole HUD, blur and all, before iOS 26', async () => {
+    mockLiquidGlass.mockReturnValue(false);
     setMode('mono');
     await openViewer();
     enterDiorama();
@@ -252,18 +287,19 @@ describe('viewer', () => {
     wait(1000);
 
     await doubleTap();
-    type HudLook = { opacity: number; transform: unknown };
-    const frames: HudLook[] = [];
+    const frames: { opacity: number; scale: unknown }[] = [];
     for (let elapsed = 0; elapsed < 800; elapsed += 16) {
       wait(16);
-      frames.push(getAnimatedStyle(screen.getByTestId('viewer-hud', HIDDEN)) as HudLook);
+      const container = getAnimatedStyle(screen.getByTestId('viewer-hud', HIDDEN)) as HudLook;
+      const content = getAnimatedStyle(screen.getByTestId('viewer-hud-content', HIDDEN));
+      frames.push({ opacity: content.opacity as number, scale: container.transform });
     }
 
     // A fade, not a pop, that never grows and never flickers past fully shown.
     expect(frames[0]?.opacity).toBeGreaterThan(0);
     expect(frames[0]?.opacity).toBeLessThan(1);
-    frames.forEach(({ opacity, transform }, index) => {
-      expect(transform).toEqual([{ scale: 1 }]);
+    frames.forEach(({ opacity, scale }, index) => {
+      expect(scale).toEqual([{ scale: 1 }]);
       expect(opacity).toBeLessThanOrEqual(1);
       if (index > 0) expect(opacity).toBeGreaterThanOrEqual(frames[index - 1]!.opacity);
     });

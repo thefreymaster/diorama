@@ -1,6 +1,7 @@
 import { Stack, useRouter } from 'expo-router';
 
 import { usePickerQuery } from './usePickerQuery';
+import { useSearchFieldSync } from './useSearchFieldSync';
 import { useSeededSearchBarRef } from './useSeededSearchBarRef';
 
 /**
@@ -12,6 +13,7 @@ export function PickerHeader() {
   const router = useRouter();
   const { query, setQuery } = usePickerQuery();
   const searchBarRef = useSeededSearchBarRef(query);
+  const noteTyped = useSearchFieldSync(searchBarRef, query);
 
   return (
     <>
@@ -23,7 +25,10 @@ export function PickerHeader() {
         hideWhenScrolling={false}
         // Results show in this screen's list, so it must stay visible and tappable.
         obscureBackground={false}
-        onChangeText={(event) => setQuery(event.nativeEvent.text)}
+        onChangeText={({ nativeEvent: { text } }) => {
+          noteTyped(text);
+          setQuery(text);
+        }}
         // Results update as you type, so the Search key just puts the keyboard away.
         onSearchButtonPress={() => searchBarRef.current?.blur()}
       />

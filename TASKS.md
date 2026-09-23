@@ -123,7 +123,7 @@ Notes: Preview card with the Miniature slider directly under it (like Display & 
 ## Phase 3 — Polish and ship
 
 ### T14 Apple polish pass
-Status: todo
+Status: in-progress
 Depends: T10, T11, T12, T13
 Files: src/**, app/**
 Details: Check Dynamic Type at XXL, VoiceOver labels and hints, Reduce Motion (turns off orbit and spring overshoot), dark mode, and haptics consistency. Also check copy and SF Symbol weights against the text weight. Confirm settings changes apply live in the Viewer. Confirm the `app/dev/*` routes redirect outside `__DEV__`.
@@ -145,11 +145,26 @@ Acceptance: `npm test` is green.
 Notes: Coverage of target code 93%→98% statements (features, providers, theme 100%; ui 100% lines). `jest.setup.ts` points expo-router testing-library's reanimated mock at the real Reanimated, so `useReducedMotion` works under `renderRouter`. Dev routes tested to redirect when `__DEV__` is false. Found a bug: malformed persisted recents crashed `getRecent()`, fixed as a T03 follow-up.
 
 ### T17 App icon, launch screen, TestFlight
-Status: todo
+Status: in-progress
 Depends: T14
 Files: app.json, assets/
 Details: Icon (tiny isometric city block, Apple-style), a plain launch screen, Info.plist strings, and an EAS or Xcode archive configuration for TestFlight.
 Acceptance: The build uploads to TestFlight.
+
+### T20 Viewer loading cover lifts before both eyes are ready
+Status: todo
+Depends: T08, T12
+Files: modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/ios/StereoRig.swift
+Details: Found in the T14 visual pass: on a first, uncached visit (e.g. the retuned Sydney framing), the Viewer's black cover lifted and the city was visible for ~6 s with no countdown; `onReady` (and so the countdown) came later. The cover must stay up until the same moment `onReady` fires (both eyes fully rendered, or the 10-s fallback), so the cover, countdown and tracking start stay in sync. Reproduce cold with a cleared tile cache if possible.
+Acceptance: On 5 cold first visits to uncached cities, the cover lifts at the same moment the countdown starts (Simulator screenshots/frame capture). Stereo alignment unchanged.
+
+### T21 Keep MapKit attribution legible under the miniature blur
+Status: blocked
+Depends: T09
+Files: modules/diorama-native/ios/MiniatureOverlay.swift
+Details: The bottom tilt-shift band blurs MapKit's Apple Maps logo and "Legal" link (Viewer, Settings preview, dev map). Apple requires map attribution to stay visible, so this is an App Review risk. Options: keep a small sharp strip at the bottom of each eye where the attribution sits, or move the attribution above the band. Owner decides.
+Acceptance: The logo and "Legal" are legible in every eye at miniature 1 (screenshots), and the tilt-shift still reads as a model.
+Notes: Waiting on owner decision.
 
 ## Backlog (not scheduled)
 
@@ -159,3 +174,10 @@ Depends: T08
 Files: modules/diorama-native/ios/
 Details: Optional barrel-distortion pass per eye. This probably needs rendering MKMapView into a Metal texture, which is expensive. Research first; drop it if the cost is too high.
 Acceptance: Straight lines look straight through a Cardboard lens.
+
+### T19 Picker large title collapses after exiting a deep-linked Viewer
+Status: todo
+Depends: T12
+Files: src/screens/CityPicker/**, app/_layout.tsx
+Details: After opening `diorama://view/<id>` directly and holding to exit, then going back to the picker, its large title is collapsed (scrolling restores it). Cause: the picker is laid out in landscape under the modal, where iPhone hides large titles, and its scroll offset stays at the small-bar position. expo-router renders the picker as focused before pushing the linked route, so JS can't reliably detect the case. Likely needs a tiny native scroll-to-top (react-native-screens) or a react-native-screens fix. Cosmetic and deep-link only; the normal flow is fine.
+Acceptance: After the deep-link flow above, the picker shows its expanded large title (Simulator screenshot).

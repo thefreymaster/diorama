@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { View } from 'react-native';
 
 import { metrics } from '@/theme';
 
@@ -20,7 +21,9 @@ export function PreviewHeader({ title }: PreviewHeaderProps) {
     <Stack.Screen
       options={{
         title,
-        headerTitle: () => null,
+        // An empty title view. Returning null instead leaves UIKit with no
+        // title view, and it falls back to drawing `title` over the map.
+        headerTitle: () => <View />,
         headerTransparent: true,
         headerBlurEffect: metrics.isModernIOS ? undefined : 'systemChromeMaterial',
       }}

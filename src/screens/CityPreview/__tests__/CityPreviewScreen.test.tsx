@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import { AccessibilityInfo } from 'react-native';
+import { getAnimatedStyle } from 'react-native-reanimated';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { DioramaMapViewProps, DioramaReadyEvent } from '@diorama/native';
@@ -131,6 +132,25 @@ describe('city preview', () => {
     finishRendering({ flyoverAvailable: false });
 
     expect(screen.getByText(TERRAIN_NOTE)).toBeOnTheScreen();
+  });
+
+  it('opens the terrain note to the full height of its text', async () => {
+    // Reduce Motion opens it at once, so the height can be read straight away.
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    addRecent(REYKJAVIK);
+    renderRouter(routes, { initialUrl: `/city/${REYKJAVIK.id}` });
+    await screen.findByText('Reykjavík');
+    await act(async () => {});
+
+    finishRendering({ flyoverAvailable: false });
+    const text = screen.getByTestId('terrain-note-text');
+    // Measured on its own: the closed note (0 tall) must not squash the text.
+    expect(text).toHaveStyle({ position: 'absolute' });
+    fireEvent(text, 'layout', { nativeEvent: { layout: { height: 26 } } });
+
+    await waitFor(() =>
+      expect(getAnimatedStyle(screen.getByTestId('terrain-note')).height).toBe(26),
+    );
   });
 
   it('never shows the terrain note where there are 3D buildings', async () => {

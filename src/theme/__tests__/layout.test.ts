@@ -1,4 +1,4 @@
-import { scaleForDynamicType, MAX_GLYPH_SCALE } from '../dynamicType';
+import { ACCESSIBILITY_FONT_SCALE, scaleForDynamicType, MAX_GLYPH_SCALE } from '../dynamicType';
 import { iosMajorVersion, listMetrics } from '../metrics';
 import { GRID, space, spacing } from '../spacing';
 
@@ -62,5 +62,13 @@ describe('scaleForDynamicType', () => {
     expect(MAX_GLYPH_SCALE).toBe(1.6);
     expect(scaleForDynamicType(20, 3.1)).toBe(32);
     expect(scaleForDynamicType(20, 3.1, 2)).toBe(40);
+  });
+});
+
+describe('accessibility text sizes', () => {
+  // Body text is 17 pt at the default size, 23 pt at XXXL and 28 pt at AX1.
+  it('begin after the largest standard size', () => {
+    expect(ACCESSIBILITY_FONT_SCALE).toBeGreaterThan(23 / 17);
+    expect(ACCESSIBILITY_FONT_SCALE).toBeLessThanOrEqual(28 / 17);
   });
 });

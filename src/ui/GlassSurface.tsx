@@ -11,6 +11,13 @@ export type GlassSurfaceProps = {
   style?: StyleProp<ViewStyle>;
   /** Let the glass react to touches (iOS 26). Set for buttons. */
   interactive?: boolean;
+  /**
+   * iOS 26: materializes (true) or dissolves (false) the glass with UIKit's
+   * own animation. Hide glass this way, never by fading a parent: Liquid
+   * Glass under a see-through parent isn't drawn at all. The older blur has
+   * no such animation and ignores this; fade a parent there. Default true.
+   */
+  visible?: boolean;
 };
 
 /**
@@ -18,10 +25,19 @@ export type GlassSurfaceProps = {
  * the system blur material on older iOS. Both adapt to light/dark mode and
  * turn opaque when the user has Reduce Transparency on.
  */
-export function GlassSurface({ children, style, interactive = false }: GlassSurfaceProps) {
+export function GlassSurface({
+  children,
+  style,
+  interactive = false,
+  visible = true,
+}: GlassSurfaceProps) {
   if (canUseLiquidGlass()) {
     return (
-      <GlassView glassEffectStyle="regular" isInteractive={interactive} style={style}>
+      <GlassView
+        glassEffectStyle={{ style: visible ? 'regular' : 'none', animate: true }}
+        isInteractive={interactive}
+        style={style}
+      >
         {children}
       </GlassView>
     );

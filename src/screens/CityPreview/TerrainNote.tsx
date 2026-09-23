@@ -11,7 +11,9 @@ export const TERRAIN_NOTE = "3D buildings aren't available here. Terrain only.";
  * The quiet "no Flyover here" line under the country. It opens up with a
  * spring, so the card grows smoothly instead of jumping (at once under
  * Reduce Motion). The inner view measures the text; the outer one shows
- * `measured height × progress` of it.
+ * `measured height × progress` of it. The inner view is laid out on its own
+ * (absolutely), so the outer one's height, which starts at 0, can't squash
+ * the text it's measuring.
  */
 export function TerrainNote() {
   const reduceMotion = useReduceMotion();
@@ -30,8 +32,8 @@ export function TerrainNote() {
   const onLayout = (event: LayoutChangeEvent) => measured.set(event.nativeEvent.layout.height);
 
   return (
-    <Animated.View style={[styles.clip, revealStyle]}>
-      <View onLayout={onLayout} style={styles.content}>
+    <Animated.View testID="terrain-note" style={[styles.clip, revealStyle]}>
+      <View testID="terrain-note-text" onLayout={onLayout} style={styles.content}>
         <Text variant="footnote" color="secondaryLabel">
           {TERRAIN_NOTE}
         </Text>
@@ -42,5 +44,5 @@ export function TerrainNote() {
 
 const styles = StyleSheet.create({
   clip: { overflow: 'hidden' },
-  content: { paddingTop: spacing.sm },
+  content: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: spacing.sm },
 });

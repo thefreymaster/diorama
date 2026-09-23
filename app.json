@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Diorama",
+    "slug": "diorama",
+    "version": "1.0.0",
+    "platforms": ["ios"],
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "diorama",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.ejf.diorama",
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "EXDevMenuIsOnboardingFinished": true,
+        "EXDevMenuShowsAtLaunch": false,
+        "EXDevMenuShowFloatingActionButton": false
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {}
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

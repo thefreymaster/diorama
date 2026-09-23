@@ -13,11 +13,12 @@ Format rules (the orchestrator and `/add-task` both depend on these):
 ## Phase 0 — Foundation
 
 ### T01 Scaffold the Expo TypeScript app
-Status: todo
+Status: done
 Depends: —
 Files: package.json, package-lock.json, app.json, tsconfig.json, babel.config.js, eslint/prettier config, jest config, app/_layout.tsx, app/index.tsx, src/
 Details: Create a new Expo app (latest SDK) with expo-router and a dev client (`expo-dev-client`), iOS only, New Architecture on, TS `strict`, typed routes on, path aliases (`@/` → `src/`). Bundle id `com.ejf.diorama` (placeholder). URL scheme `diorama`, so `diorama://settings`-style deep links open routes for Simulator checks. iOS deployment target at least 16.0 via `expo-build-properties` (the MKMapConfiguration APIs need iOS 16); keep the SDK default if it's already higher. Set `orientation: "default"` in app.json, **not** `portrait`: with `portrait` iOS can never rotate to landscape. Portrait is locked at runtime in T03. **Install every planned dependency now**, with `npx expo install` so versions match the SDK, so that later parallel tasks never touch package.json: expo-router and its peers (react-native-screens, react-native-safe-area-context, expo-linking, expo-constants, expo-status-bar), @tanstack/react-query, zustand, react-native-mmkv (and its peers), react-native-reanimated (and its peers), react-native-gesture-handler, @react-native-community/slider, expo-symbols, expo-haptics, expo-blur, expo-keep-awake, expo-screen-orientation, expo-build-properties. Dev: jest-expo, @testing-library/react-native, ESLint + Prettier. Set up Jest (`jest-expo` preset) with one smoke test. Add scripts: `typecheck`, `lint`, `test`, `ios`. Create the folder layout from OVERVIEW.md: `app/_layout.tsx` is a bare `Stack` and `app/index.tsx` is a placeholder. Use non-interactive flags for every generator.
 Acceptance: `npm run typecheck && npm run lint && npm test` pass. `npx expo prebuild -p ios` succeeds, and `npx expo run:ios` launches the placeholder in the Simulator.
+Notes: Expo SDK 57 (RN 0.86.3, React 19.2.3, TS 6.0); iOS target 16.4 is the SDK default. `typecheck` regenerates typed routes first (`expo customize tsconfig.json`). @testing-library/react-native pinned to 13.3.x (expo-router's `renderRouter` breaks on v14); `jest.setup.ts` mocks worklets/nitro, MMKV uses its in-memory fallback. `.gitignore` anchors `/ios` so `modules/diorama-native/ios/` stays tracked. After a fresh install, the first `simctl openurl` shows an "Open in 'Diorama'?" alert: press its "Open" button via System Events AXPress.
 
 ### T02 Theme tokens and Apple-style UI primitives
 Status: todo

@@ -1,0 +1,11 @@
+node_modules/
+ios/
+android/
+.expo/
+dist/
+assets/
+package-lock.json
+expo-env.d.ts
+# Planning docs are hand-formatted and parsed by the orchestrator.
+*.md
+.claude/

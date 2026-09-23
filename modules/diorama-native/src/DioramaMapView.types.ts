@@ -81,8 +81,7 @@ export type DioramaHeadTrackingProps = {
 export type DioramaStereoProps = {
   /**
    * `stereo` shows two eyes side by side (landscape, in a viewer), each at
-   * half width. While the eyes load the view stays black, and `onReady`
-   * waits for both. Defaults to `mono`.
+   * half width, and `onReady` waits for both. Defaults to `mono`.
    */
   mode?: DioramaViewMode;
   /**
@@ -127,7 +126,9 @@ export type DioramaMapViewProps = ViewProps &
     orbit?: boolean;
     /**
      * Fires once every eye has fully rendered: after the first render at each
-     * `center`, and again after switching to stereo.
+     * `center`, and again after switching to stereo. Until then the view
+     * stays black, in every mode, and it shows the city at this very moment
+     * (stereo fades in; mono appears at once, ready for a cover of your own).
      */
     onReady?: (event: DioramaReadyEvent) => void;
     ref?: Ref<DioramaMapViewRef>;

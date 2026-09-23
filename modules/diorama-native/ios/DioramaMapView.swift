@@ -52,13 +52,15 @@ final class DioramaMapView: ExpoView {
   // Per-frame changes smaller than this (degrees) are skipped, so a still
   // head lets MapKit finish rendering and rest.
   private static let minFrameChange = 0.01
-  // Fade from the loading cover to the city.
+  // Fade from the loading cover to the city (stereo; mono lifts at once).
   private static let revealSeconds = 0.3
 
   // The eyes (one or two MKMapViews) and their per-eye cameras.
   private let rig = StereoRig()
-  // Black cover over a stereo view until both eyes have fully drawn, so the
-  // wearer never sees one eye ahead of the other.
+  // Black cover over the map while it loads. It lifts at the very moment
+  // onReady fires and not a frame earlier, in every mode, so nobody sees a
+  // half-drawn city (or one eye ahead of the other), and the Viewer's
+  // countdown starts exactly when the city appears.
   private let loadingCover = UIView()
   private let headTracker = HeadTracker()
   private lazy var debugPan = UIPanGestureRecognizer(target: self, action: #selector(handleDebugPan(_:)))
@@ -96,8 +98,7 @@ final class DioramaMapView: ExpoView {
     addSubview(rig.view)
     loadingCover.backgroundColor = .black
     loadingCover.isUserInteractionEnabled = false
-    loadingCover.alpha = 0
-    addSubview(loadingCover)
+    addSubview(loadingCover)  // Up from the start: nothing has loaded yet.
     debugPan.isEnabled = false
     addGestureRecognizer(debugPan)
   }
@@ -134,7 +135,6 @@ final class DioramaMapView: ExpoView {
     let separationChanged = rig.isStereo && appliedEyeSeparation != eyeSeparation
     appliedEyeSeparation = eyeSeparation
     if rig.isStereo != wasStereo || separationChanged { setNeedsLayout() }
-    if !rig.isStereo { updateCover(animated: false) }
     guard appliedPose != pose || newEyes || separationChanged else { return }
     let isNewPlace = appliedPose.map { !$0.hasSameCenter(as: pose) } ?? true
     if isNewPlace {
@@ -269,8 +269,8 @@ final class DioramaMapView: ExpoView {
 
   // MARK: - Loading and ready
 
-  // Something new has to load: hold the ticker, and in stereo hide the eyes
-  // until they have all drawn.
+  // Something new has to load: hold the ticker, and hide the map until
+  // every eye has drawn.
   private func startLoading() {
     isReady = false
     ticker.stop()
@@ -288,18 +288,24 @@ final class DioramaMapView: ExpoView {
       applyCamera(animated: false)
     }
     isReady = true
+    // The cover starts to lift in the same screen update that sends onReady
+    // to JS, so the Viewer's countdown starts as the city appears.
     updateCover(animated: true)
     onReady([:])
     updateTicker()
   }
 
-  // The cover shows while a stereo view is loading.
+  // The cover is up exactly while the map loads (until onReady), in every
+  // mode. Stereo fades it out. Mono lifts it at once: the screens with a
+  // mono map (the preview, Settings) fade their own colored cover over it,
+  // and black fading out underneath would darken theirs.
   private func updateCover(animated: Bool) {
-    let alpha: CGFloat = rig.isStereo && !isReady ? 1 : 0
+    let alpha: CGFloat = isReady ? 0 : 1
     guard loadingCover.alpha != alpha else { return }
-    guard animated else {
+    guard animated, rig.isStereo else {
       loadingCover.layer.removeAllAnimations()
-      loadingCover.alpha = alpha
+      // Not even inside someone else's animation (a screen rotation).
+      UIView.performWithoutAnimation { loadingCover.alpha = alpha }
       return
     }
     let options: UIView.AnimationOptions = [.curveEaseOut, .beginFromCurrentState]
@@ -316,13 +322,13 @@ final class DioramaMapView: ExpoView {
   }
 
   // Too hot for two maps: drop the right eye and tell JS. Stays mono until
-  // the `mode` prop is set again.
+  // the `mode` prop is set again. Mid-load, the cover stays up until the
+  // remaining eye has drawn and onReady fires.
   private func fallBackToMonoIfTooHot() {
     guard mode == .stereo, !isDegraded, !thermal.budget.allowsStereo else { return }
     isDegraded = true
     if rig.isStereo {
       rig.setStereo(false)
-      updateCover(animated: false)
       setNeedsLayout()
     }
     onDegraded(["reason": "thermal"])

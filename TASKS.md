@@ -79,7 +79,7 @@ Acceptance: A Simulator screenshot of `diorama://dev/map?mode=stereo` shows two 
 Notes: NEEDS DEVICE CHECK — Cardboard: does `diorama://dev/map?mode=stereo&headTracking=1&eyeSeparation=0.5` (then 1, 2, 3) fuse and read as a tabletop model? Check fps and heat (each eye draws a 618-pt square plus a `CAReplicatorLayer` copy; T09 needs ≥50 fps), real head roll stays fused and level, thermal via Xcode Devices → Condition (serious → 30 fps, critical → mono + `onDegraded`), and that mono (preview, T07 tracking) did not regress. Design: both MapKit cameras look at the same center from eye positions (toe-in), then a per-eye homography warps back to an ideal parallel eye; this also cancels roll and zeroes parallax at the center. Needed because MapKit anchors each camera to the surface under its look-at point. Measured vertical disparity ≈0 pt in every case; horizontal disparity grows linearly with eyeSeparation. Layout margins are equalised (camera now centered on the full view, mono too); pitch cap is learned and shared by both eyes; switching to stereo builds fresh maps; `onReady` falls back after 10 s. T09 overlay slot: `EyeView.overlay` via `StereoRig.makeOverlay`.
 
 ### T09 Miniature (tilt-shift) look
-Status: todo
+Status: in-progress
 Depends: T08
 Files: modules/diorama-native/ios/MiniatureOverlay.swift, modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/src/
 Details: Overlay each eye with a tilt-shift effect: stacked `UIVisualEffectView` blur bands at the top and bottom with gradient masks (`CAGradientLayer`), plus a sharp band in the middle. Add a slight saturation/contrast lift with a `CALayer` compositing filter or a tinted overlay. Private `CAFilter` APIs are forbidden (App Store). `miniatureIntensity` 0…1 scales the band size and blur. Keep the effect identical in both eyes.
@@ -104,11 +104,12 @@ Acceptance: Orbit is smooth, and the button navigates to `/view/[cityId]`.
 Notes: Header is transparent; title = city name (so pushed screens read "‹ Paris") but not drawn over the map; blurred bar before iOS 26. Map stays opaque under a cover that fades out once rendered (MapKit may not draw an invisible map). Orbit pauses when the screen loses focus and under Reduce Motion (`useReduceMotion` follows the setting live; T14 could move it to `@/ui`). Terrain note only after `onReady` says no Flyover; unknown id shows an empty state. NEEDS DEVICE CHECK — orbit smoothness, card legibility over bright/dark imagery, 44-pt card radius vs the phone corners, haptic. Simulator visual check pending.
 
 ### T12 Viewer screen
-Status: todo
+Status: done
 Depends: T08, T11
 Files: src/screens/Viewer/**, src/features/viewer/**
 Details: Landscape comes from the route's native stack `orientation` option (set in T03), backed by `expo-screen-orientation` if needed. Portrait comes back on exit. Keep the screen awake, hide the status bar and home indicator (`prefersHomeIndicatorAutoHidden` via the module if needed; keep any native change tiny and call it out). Show a 3-second countdown ("Put on your viewer"), then recenter. Double-tap anywhere recenters, with a haptic and a HUD. Long press (1 s) exits back to the preview. Pause rendering when the app goes to the background.
 Acceptance: Full cycle on a device: enter, wear, look around, recenter, exit. No stuck orientation.
+Notes: NEEDS DEVICE CHECK — full cycle: enter, wear, look around, double-tap recenter, hold 1 s to exit; the per-eye HUD copies fuse in the headset; an incoming call or the app switcher stops tracking and it recenters on return; VoiceOver "Exit"/activate actions. Tracking stays off during the 3-s countdown (which starts after `onReady`), then recenters and starts. The HUD is drawn once per eye in stereo. Exit uses `router.dismissTo` the preview (fixes the deep-link large-title collapse). Status bar hidden via expo-status-bar; `useKeepAwake`. No native pause: turning tracking off while inactive stops the per-frame work. Follow-up: `useReduceMotion` lives in CityPreview; move it to `@/ui` (T14).
 
 ### T13 Settings screen
 Status: todo

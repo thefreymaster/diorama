@@ -48,7 +48,7 @@ describe('routes', () => {
     const router = renderRouter(routes, { initialUrl: '/view/paris' });
 
     expect(await screen.findByTestId('viewer-screen')).toBeOnTheScreen();
-    expect(screen.getByText('Viewer: paris')).toBeOnTheScreen();
+    expect(screen.getByLabelText('3D view of Paris')).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/view/paris');
   });
 
@@ -59,7 +59,10 @@ describe('routes', () => {
     expect(await screen.findByTestId('viewer-screen')).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/view/paris');
 
-    fireEvent.press(screen.getByText('Done'));
+    // The Viewer has no chrome; exit the way VoiceOver does (a long press does the same).
+    fireEvent(screen.getByTestId('viewer-screen'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'exit' },
+    });
     expect(router.getPathname()).toBe('/city/paris');
   });
 });

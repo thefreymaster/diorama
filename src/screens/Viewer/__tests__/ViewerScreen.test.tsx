@@ -1,0 +1,359 @@
+import * as Haptics from 'expo-haptics';
+import { useKeepAwake } from 'expo-keep-awake';
+import { act, fireEvent, renderRouter, screen, testRouter } from 'expo-router/testing-library';
+import { AccessibilityInfo, AppState, StatusBar, type AppStateStatus } from 'react-native';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
+import { getAnimatedStyle } from 'react-native-reanimated';
+
+import type { DioramaMapViewProps } from '@diorama/native';
+import { resetSettings, setMode } from '@/features/settings/store';
+import { COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
+import { queryClient } from '@/providers/queryClient';
+
+import * as CityRoute from '../../../../app/city/[cityId]';
+import * as IndexRoute from '../../../../app/index';
+import * as RootLayout from '../../../../app/_layout';
+import * as SettingsRoute from '../../../../app/settings';
+import * as ViewerRoute from '../../../../app/view/[cityId]';
+import { EXIT_HOLD_MS } from '../ViewerGestures';
+
+const mockRecenter = jest.fn(() => Promise.resolve());
+// Taken before each test swaps in fake timers.
+const realSetImmediate = setImmediate;
+
+// The native map becomes a plain view that keeps its props (so tests can read
+// them and play MapKit's part by calling `onReady`) and a ref with `recenter`.
+jest.mock('@diorama/native', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  function MockDioramaMapView({ ref, ...props }: DioramaMapViewProps) {
+    React.useImperativeHandle(ref, () => ({
+      recenter: mockRecenter,
+      setDebugLook: () => Promise.resolve(),
+    }));
+    return React.createElement(View, { testID: 'diorama-map', ...props });
+  }
+  return { ...jest.requireActual<object>('@diorama/native'), DioramaMapView: MockDioramaMapView };
+});
+
+jest.mock('expo-haptics', () => ({
+  ...jest.requireActual<object>('expo-haptics'),
+  impactAsync: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
+
+const mockImpact = jest.mocked(Haptics.impactAsync);
+
+const routes = {
+  _layout: RootLayout,
+  index: IndexRoute,
+  'city/[cityId]': CityRoute,
+  'view/[cityId]': ViewerRoute,
+  settings: SettingsRoute,
+};
+
+const RECENTERED = HUD_NOTICES.recentered.text;
+const COOLING = HUD_NOTICES.cooling.text;
+// The HUD is hidden from VoiceOver (it announces itself), so look past that.
+const HIDDEN = { includeHiddenElements: true };
+
+let appStateListeners: ((state: AppStateStatus) => void)[] = [];
+
+beforeEach(() => {
+  jest.useFakeTimers();
+  queryClient.clear();
+  resetSettings();
+  mockRecenter.mockClear();
+  mockImpact.mockClear();
+  appStateListeners = [];
+  const addEventListener = (event: string, listener: (state: AppStateStatus) => void) => {
+    if (event === 'change') appStateListeners.push(listener);
+    return { remove: () => (appStateListeners = appStateListeners.filter((l) => l !== listener)) };
+  };
+  jest
+    .spyOn(AppState, 'addEventListener')
+    .mockImplementation(addEventListener as unknown as typeof AppState.addEventListener);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+  jest.useRealTimers();
+});
+
+/** The Viewer's map props. */
+function viewerMap(): DioramaMapViewProps {
+  return screen.getByTestId('viewer-map').props as DioramaMapViewProps;
+}
+
+async function openViewer(url = '/view/paris') {
+  const router = renderRouter(routes, { initialUrl: url });
+  await screen.findByTestId('viewer-map');
+  return router;
+}
+
+/** What the native view reports once both eyes have drawn. */
+function finishLoading() {
+  act(() => viewerMap().onReady?.({ flyoverAvailable: true }));
+}
+
+function wait(ms: number) {
+  act(() => jest.advanceTimersByTime(ms));
+}
+
+/** Loaded, counted down: the wearer is in the diorama. */
+function enterDiorama() {
+  finishLoading();
+  wait(3000);
+}
+
+function setAppState(state: AppStateStatus) {
+  act(() => appStateListeners.forEach((listener) => listener(state)));
+}
+
+/**
+ * Gesture Handler hands a re-rendered gesture its new callbacks on the next
+ * turn of the event loop (a real `setImmediate`, which fake timers don't
+ * drive), so let that happen before firing it.
+ */
+async function nextGestureCallbacks() {
+  await act(() => new Promise<void>((resolve) => realSetImmediate(resolve)));
+}
+
+/** Lets the preview finish mounting (it reads the Reduce Motion setting asynchronously). */
+async function landOnPreview() {
+  expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+  await act(async () => {});
+}
+
+async function doubleTap() {
+  await nextGestureCallbacks();
+  act(() => fireGestureHandler(getByGestureTestId('viewer-double-tap')));
+}
+
+async function holdToExit() {
+  await nextGestureCallbacks();
+  // Async, so the preview it lands on can settle inside act.
+  await act(async () => fireGestureHandler(getByGestureTestId('viewer-long-press')));
+}
+
+describe('viewer', () => {
+  it('shows the city from its own camera with Settings applied', async () => {
+    await openViewer();
+
+    expect(viewerMap()).toMatchObject({
+      center: { latitude: 48.8575, longitude: 2.2957 },
+      altitude: 1000,
+      pitch: 60,
+      heading: 137,
+      mode: 'stereo',
+      eyeSeparation: 1,
+      trackingSensitivity: 1,
+      debugLook: false,
+    });
+    expect(viewerMap().orbit).toBeFalsy();
+    // No chrome while it's worn.
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('hides the status bar and keeps the screen awake', async () => {
+    await openViewer();
+
+    expect(screen.UNSAFE_getByType(StatusBar).props.hidden).toBe(true);
+    expect(useKeepAwake).toHaveBeenCalled();
+  });
+
+  it('counts down only after the city has drawn, then recenters and starts tracking', async () => {
+    await openViewer();
+
+    // Still loading behind the black cover: no countdown, however long it takes.
+    wait(5000);
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    expect(viewerMap().headTracking).toBe(false);
+
+    finishLoading();
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).not.toHaveLength(0);
+    expect(screen.getAllByText('3', HIDDEN)).not.toHaveLength(0);
+
+    wait(1000);
+    expect(screen.getAllByText('2', HIDDEN)).not.toHaveLength(0);
+    wait(1000);
+    expect(screen.getAllByText('1', HIDDEN)).not.toHaveLength(0);
+    expect(mockRecenter).not.toHaveBeenCalled();
+    expect(viewerMap().headTracking).toBe(false);
+
+    wait(1000);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headTracking).toBe(true);
+
+    // A later render report never starts it again.
+    finishLoading();
+    wait(3000);
+    expect(screen.queryAllByText('3', HIDDEN)).toHaveLength(0);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws the HUD once per eye in stereo', async () => {
+    await openViewer();
+    finishLoading();
+
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+    expect(screen.getByTestId('hud-eye-left', HIDDEN)).toHaveTextContent(`3${COUNTDOWN_TITLE}`);
+    expect(screen.getByTestId('hud-eye-right', HIDDEN)).toHaveTextContent(`3${COUNTDOWN_TITLE}`);
+
+    wait(3000);
+    await doubleTap();
+    expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(2);
+  });
+
+  it('draws the HUD once in mono', async () => {
+    setMode('mono');
+    await openViewer();
+    expect(viewerMap().mode).toBe('mono');
+    finishLoading();
+
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(1);
+
+    wait(3000);
+    await doubleTap();
+    expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(1);
+  });
+
+  it('springs the recenter HUD in, then fades it back out on its own', async () => {
+    // Mono: under Jest, Reanimated only tracks one view per animated style
+    // (on a phone both eye copies follow it).
+    setMode('mono');
+    await openViewer();
+    enterDiorama();
+    wait(1000);
+    const opacity = () => getAnimatedStyle(screen.getByTestId('viewer-hud', HIDDEN)).opacity;
+
+    await doubleTap();
+    wait(800);
+    expect(opacity()).toBeCloseTo(1, 2);
+
+    wait(HUD_NOTICES.recentered.holdMs);
+    wait(1000);
+    expect(opacity()).toBeCloseTo(0, 2);
+  });
+
+  it('only dissolves the HUD under Reduce Motion', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    setMode('mono');
+    await openViewer();
+    enterDiorama();
+    wait(1000);
+
+    await doubleTap();
+    wait(100);
+    const style = getAnimatedStyle(screen.getByTestId('viewer-hud', HIDDEN));
+    expect(style.opacity).toBeGreaterThan(0);
+    expect(style.opacity).toBeLessThan(1);
+    expect(style.transform).toEqual([{ scale: 1 }]);
+  });
+
+  it('says so when the phone gets too hot for stereo, and leaves the fallback alone', async () => {
+    await openViewer();
+    enterDiorama();
+
+    act(() => viewerMap().onDegraded?.({ reason: 'thermal' }));
+
+    // The native view went mono on its own, so the HUD is drawn once.
+    expect(screen.getAllByText(COOLING, HIDDEN)).toHaveLength(1);
+    expect(viewerMap().mode).toBe('stereo');
+  });
+
+  it('recenters on a double-tap, with a tap and a brief HUD', async () => {
+    await openViewer();
+    finishLoading();
+
+    // Nothing to recenter until the countdown has.
+    await doubleTap();
+    expect(mockRecenter).not.toHaveBeenCalled();
+
+    wait(3000);
+    mockRecenter.mockClear();
+    await doubleTap();
+
+    expect(getByGestureTestId('viewer-double-tap').config).toMatchObject({ numberOfTaps: 2 });
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    expect(screen.getAllByText(RECENTERED, HIDDEN)).not.toHaveLength(0);
+  });
+
+  it('goes back to the preview underneath on a one-second hold', async () => {
+    const router = renderRouter(routes, { initialUrl: '/city/paris' });
+    fireEvent.press(await screen.findByRole('button', { name: 'Enter Diorama' }));
+    await screen.findByTestId('viewer-map');
+    mockImpact.mockClear();
+
+    expect(getByGestureTestId('viewer-long-press').config).toMatchObject({
+      minDurationMs: EXIT_HOLD_MS,
+    });
+    expect(EXIT_HOLD_MS).toBe(1000);
+    await holdToExit();
+
+    expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Medium);
+    expect(router.getPathname()).toBe('/city/paris');
+    expect(screen.queryByTestId('viewer-screen')).toBeNull();
+    await landOnPreview();
+    // The picker is still under the preview.
+    act(() => testRouter.back());
+    expect(router.getPathname()).toBe('/');
+  });
+
+  it('opens the preview in its place when it was opened from a link', async () => {
+    const router = await openViewer('/view/paris');
+
+    await holdToExit();
+
+    expect(router.getPathname()).toBe('/city/paris');
+    await landOnPreview();
+    expect(screen.queryByTestId('viewer-screen')).toBeNull();
+    act(() => testRouter.back());
+    expect(router.getPathname()).toBe('/');
+    expect(await screen.findByTestId('city-picker-screen')).toBeOnTheScreen();
+  });
+
+  it('turns head tracking off while the app is in the background, and recenters on return', async () => {
+    await openViewer();
+    enterDiorama();
+    expect(viewerMap().headTracking).toBe(true);
+    mockRecenter.mockClear();
+
+    setAppState('inactive');
+    expect(viewerMap().headTracking).toBe(false);
+    setAppState('background');
+    expect(viewerMap().headTracking).toBe(false);
+    expect(mockRecenter).not.toHaveBeenCalled();
+
+    setAppState('active');
+    expect(viewerMap().headTracking).toBe(true);
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets VoiceOver recenter and exit', async () => {
+    const router = await openViewer();
+    enterDiorama();
+    mockRecenter.mockClear();
+    const view = screen.getByTestId('viewer-screen');
+    expect(view).toHaveAccessibleName('3D view of Paris');
+
+    fireEvent(view, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+
+    await act(async () =>
+      fireEvent(view, 'accessibilityAction', { nativeEvent: { actionName: 'exit' } }),
+    );
+    expect(router.getPathname()).toBe('/city/paris');
+    await landOnPreview();
+  });
+
+  it('quietly goes back to the city list for a city it does not know', async () => {
+    const router = renderRouter(routes, { initialUrl: '/view/atlantis' });
+
+    expect(await screen.findByTestId('city-picker-screen')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/');
+    expect(screen.queryByTestId('viewer-map')).toBeNull();
+  });
+});

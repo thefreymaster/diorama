@@ -21,7 +21,7 @@ jest.mock('@diorama/native', () => {
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
   return {
     ...jest.requireActual<object>('@diorama/native'),
-    DioramaMapView: (props: object) => createElement(View, { ...props, testID: 'diorama-map' }),
+    DioramaMapView: (props: object) => createElement(View, { testID: 'diorama-map', ...props }),
   };
 });
 
@@ -154,7 +154,10 @@ describe('city preview', () => {
     expect(router.getSegments()).toEqual(['view', '[cityId]']);
     expect(mapProps().orbit).toBe(false);
 
-    fireEvent.press(screen.getByText('Done'));
+    // The Viewer has no chrome; exit the way VoiceOver does (a long press does the same).
+    fireEvent(screen.getByTestId('viewer-screen'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'exit' },
+    });
 
     expect(router.getPathname()).toBe('/city/paris');
     await waitFor(() => expect(mapProps().orbit).toBe(true));

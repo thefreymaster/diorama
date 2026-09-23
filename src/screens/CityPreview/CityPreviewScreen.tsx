@@ -1,5 +1,7 @@
 import { Link, useLocalSearchParams } from 'expo-router';
-import { PlatformColor, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { colors } from '@/theme';
 
 /** Placeholder until T11 adds the orbiting 3D preview. */
 export function CityPreviewScreen() {
@@ -23,9 +25,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   title: {
-    color: PlatformColor('label'),
+    color: colors.label,
   },
   link: {
-    color: PlatformColor('link'),
+    color: colors.tint,
   },
 });

@@ -1,20 +1,22 @@
 import { DarkTheme, DefaultTheme, ThemeProvider, type Theme } from 'expo-router';
 import type { ReactNode } from 'react';
-import { PlatformColor, useColorScheme } from 'react-native';
+import { useColorScheme } from 'react-native';
 
-// iOS system colors resolve light/dark natively, so both themes share them.
+import { colors } from '@/theme';
+
+// System colors resolve light/dark natively, so both themes share them.
 // Without this, native stack headers stay white in dark mode.
-const colors: Theme['colors'] = {
-  primary: PlatformColor('systemBlue'),
-  background: PlatformColor('systemGroupedBackground'),
-  card: PlatformColor('systemGroupedBackground'),
-  text: PlatformColor('label'),
-  border: PlatformColor('separator'),
-  notification: PlatformColor('systemRed'),
+const navigationColors: Theme['colors'] = {
+  primary: colors.tint,
+  background: colors.systemGroupedBackground,
+  card: colors.systemGroupedBackground,
+  text: colors.label,
+  border: colors.separator,
+  notification: colors.systemRed,
 };
 
-const lightTheme: Theme = { ...DefaultTheme, colors };
-const darkTheme: Theme = { ...DarkTheme, colors };
+const lightTheme: Theme = { ...DefaultTheme, colors: navigationColors };
+const darkTheme: Theme = { ...DarkTheme, colors: navigationColors };
 
 type Props = { children: ReactNode };
 

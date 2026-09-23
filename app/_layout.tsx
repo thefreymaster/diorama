@@ -12,7 +12,15 @@ export default function RootLayout() {
   return (
     <AppProviders>
       {/* Portrait everywhere; the Viewer route below is the only landscape screen. */}
-      <Stack screenOptions={{ orientation: 'portrait' }}>
+      <Stack
+        screenOptions={{
+          orientation: 'portrait',
+          // Despite the name, this drops the hairline from the bar's scroll-edge
+          // appearance on every screen, large title or not: no line at rest, and
+          // it still appears once content scrolls under the bar, like UIKit.
+          headerLargeTitleShadowVisible: false,
+        }}
+      >
         <Stack.Screen name="index" options={{ title: 'Diorama', headerLargeTitleEnabled: true }} />
         <Stack.Screen name="city/[cityId]" options={{ title: '' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />

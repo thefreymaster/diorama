@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { PlatformColor, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { colors } from '@/theme';
 
 /**
  * Placeholder until T12 adds the stereo viewer. The Done button stands in for
@@ -32,9 +34,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   title: {
-    color: PlatformColor('label'),
+    color: colors.label,
   },
   link: {
-    color: PlatformColor('link'),
+    color: colors.tint,
   },
 });

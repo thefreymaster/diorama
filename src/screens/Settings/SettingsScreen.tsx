@@ -1,6 +1,7 @@
-import { PlatformColor, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { useSettings } from '@/features/settings/store';
+import { colors } from '@/theme';
 
 /** Placeholder until T13 builds the settings list. Shows the stored values. */
 export function SettingsScreen() {
@@ -28,6 +29,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   row: {
-    color: PlatformColor('label'),
+    color: colors.label,
   },
 });

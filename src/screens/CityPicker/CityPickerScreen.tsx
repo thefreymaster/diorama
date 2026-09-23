@@ -1,5 +1,7 @@
 import { Link } from 'expo-router';
-import { PlatformColor, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
+
+import { colors } from '@/theme';
 
 /** Placeholder until T10 builds the real picker (search, recents, featured cities). */
 export function CityPickerScreen() {
@@ -26,9 +28,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   body: {
-    color: PlatformColor('secondaryLabel'),
+    color: colors.secondaryLabel,
   },
   link: {
-    color: PlatformColor('link'),
+    color: colors.tint,
   },
 });

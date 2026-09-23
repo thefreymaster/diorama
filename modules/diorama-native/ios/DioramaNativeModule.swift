@@ -24,7 +24,7 @@ public class DioramaNativeModule: Module {
 
     // requireNativeView('DioramaNative') in JS renders this view.
     View(DioramaMapView.self) {
-      Events("onReady", "onDegraded")
+      Events("onReady", "onDegraded", "onEyeLayout")
 
       // Each Prop is a setter, called only when that prop changes.
       Prop("center") { (view: DioramaMapView, center: Coordinate) in
@@ -59,6 +59,10 @@ public class DioramaNativeModule: Module {
       Prop("eyeSeparation", 1.0) { (view: DioramaMapView, separation: Double) in
         // Guard against nonsense; the settings screen keeps it in 0.3...3.
         view.eyeSeparation = separation.isFinite ? min(max(separation, 0), 5) : 1
+      }
+      Prop("lensSpacing", ViewerProfile.defaultLensSpacing) { (view: DioramaMapView, spacing: Double) in
+        // Guard against nonsense; viewer lenses sit about 55 to 75 mm apart.
+        view.lensSpacing = spacing.isFinite ? min(max(spacing, 40), 90) : ViewerProfile.defaultLensSpacing
       }
       Prop("miniatureIntensity", 0.0) { (view: DioramaMapView, intensity: Double) in
         view.miniatureIntensity = intensity.isFinite ? min(max(intensity, 0), 1) : 0

@@ -10,7 +10,7 @@ type CountdownHudProps = {
 
 /**
  * "3 / Put on your viewer", for the HUD's glass tile. Text grows with
- * Dynamic Type, but only as far as still fits in one eye's half of the screen.
+ * Dynamic Type, but only as far as still fits in one eye's lens window.
  */
 export function CountdownHud({ secondsLeft }: CountdownHudProps) {
   return (

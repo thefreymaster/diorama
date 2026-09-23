@@ -31,8 +31,11 @@ enum StereoGeometry {
   static let verticalFieldOfView = 30.0
 
   // Baseline ÷ camera distance at eyeSeparation 1. Much wider than human
-  // eyes (hyperstereo), which is what makes the city read as a small model.
-  static let baselinePerMeter = 1.0 / 30
+  // eyes (hyperstereo), which is what makes the city read as a small model,
+  // yet small enough that the two eyes differ by at most ~4 points at the
+  // edges of a lens window (0.7 mm, about 1° through a Cardboard lens), so
+  // they merge easily. At 1/30 with the old half-screen eyes it was 14.
+  static let baselinePerMeter = 1.0 / 50
 
   // Extra map around a stereo eye for the slight perspective of the warp.
   private static let stereoMargin: CGFloat = 1.04

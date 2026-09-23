@@ -2,12 +2,13 @@ import MapKit
 import UIKit
 
 // One eye's picture. Mono shows one EyeView filling the component; stereo
-// shows two side by side (see StereoRig). Think of it as a small component
-// with this tree:
+// shows two, one per headset lens (see StereoRig). Think of it as a small
+// component with this tree:
 //
 //   EyeView        clips to its frame, like `overflow: hidden`
-//   ├─ warpView    shows its content turned (and in stereo slightly warped)
-//   │  │           so this eye sees what it should; see StereoGeometry
+//   ├─ warpView    shows its content turned (and in stereo slightly warped
+//   │  │           and shrunk) so this eye sees what it should; see
+//   │  │           StereoGeometry and `pictureScale`
 //   │  └─ mapView  Apple's map, usually larger than the eye (see `mapSize`)
 //   └─ overlay     optional, on top and not turned (T09: tilt-shift)
 final class EyeView: UIView {
@@ -25,7 +26,18 @@ final class EyeView: UIView {
   // How the map's picture is turned and warped onto the eye, about its
   // center. Identity = drawn as is. Set every frame by StereoRig.
   var pictureTransform = CATransform3DIdentity {
-    didSet { warpView.pictureTransform = pictureTransform }
+    didSet { updateWarp() }
+  }
+
+  // How much the warped picture is then shrunk to fit the eye: 1 = not at
+  // all (mono). A stereo eye's map is drawn larger than its window and
+  // shrunk into it; see StereoRig.pictureScale.
+  var pictureScale: CGFloat = 1 {
+    didSet {
+      guard pictureScale != oldValue else { return }
+      updateWarp()
+      setNeedsLayout()
+    }
   }
 
   // The camera last handed to this eye's map, so an unchanged camera isn't
@@ -104,6 +116,13 @@ final class EyeView: UIView {
     }
   }
 
+  // The warp, then the shrink (like CSS `transform: <warp> scale(s)` read
+  // right to left).
+  private func updateWarp() {
+    let shrink = CATransform3DMakeScale(pictureScale, pictureScale, 1)
+    warpView.pictureTransform = CATransform3DConcat(pictureTransform, shrink)
+  }
+
   private func layoutMap() {
     let size = mapSize == .zero ? bounds.size : mapSize
     // `bounds` + `center` (not `frame`) stay valid while warpView is turned.
@@ -120,9 +139,11 @@ final class EyeView: UIView {
     // MapKit centers its camera between the layout margins and puts its logo
     // and Legal link inside them. Equal margins on opposite sides keep the
     // camera on the map's center, where the warp expects it. Their size
-    // pulls the logo in to the part of the map this eye shows.
-    let sideMargin = (size.width - bounds.width) / 2 + attributionInsets.width
-    let endMargin = (size.height - bounds.height) / 2 + attributionInsets.height
+    // pulls the logo in to the part of the map this eye shows (in map
+    // points: the eye's size before the shrink).
+    let scale = max(pictureScale, 0.01)
+    let sideMargin = max((size.width - bounds.width / scale) / 2, 0) + attributionInsets.width / scale
+    let endMargin = max((size.height - bounds.height / scale) / 2, 0) + attributionInsets.height / scale
     mapView.layoutMargins = UIEdgeInsets(
       top: endMargin, left: sideMargin, bottom: endMargin, right: sideMargin)
     overlay?.frame = bounds

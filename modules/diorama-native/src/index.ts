@@ -1,17 +1,21 @@
-export { DioramaMapView } from './DioramaMapView';
+export { DEFAULT_LENS_SPACING, DioramaMapView } from './DioramaMapView';
 export type {
   Coordinate,
   DioramaCameraProps,
   DioramaDegradedEvent,
+  DioramaEyeLayout,
   DioramaHeadTrackingProps,
   DioramaMapViewProps,
   DioramaMapViewRef,
   DioramaMiniatureProps,
   DioramaReadyEvent,
+  DioramaRect,
+  DioramaStereoEyes,
   DioramaStereoProps,
   DioramaThermalState,
   DioramaViewMode,
 } from './DioramaMapView.types';
+export { useStereoEyes } from './eyeLayoutStore';
 export { FLYOVER_AREAS, distanceKm, hasFlyover, type FlyoverArea } from './flyoverCoverage';
 export {
   SEARCH_SUPERSEDED,

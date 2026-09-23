@@ -9,9 +9,11 @@ enum ViewMode: String, Enumerable {
 }
 
 // Lays out the eyes and gives each one its camera. Like a layout component
-// that renders <EyeView/> once (mono) or twice (stereo, left then right),
-// plus the per-eye camera math (see StereoGeometry.swift for the why).
-// DioramaMapView decides *what* to show; the rig decides how each eye shows it.
+// that renders <EyeView/> once (mono, filling the view) or twice (stereo,
+// left then right, each in a window centered on a headset lens with black
+// around it; see ViewerProfile.swift), plus the per-eye camera math (see
+// StereoGeometry.swift for the why). DioramaMapView decides *what* to show;
+// the rig decides how each eye shows it.
 final class StereoRig: NSObject, MKMapViewDelegate {
   // How long to wait for a clean render after a partial one (some tiles
   // failed) before calling an eye done anyway.
@@ -73,32 +75,72 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     return false
   }
 
-  // Sizes the eyes to fill `bounds` side by side. `maxRoll` (degrees) is how
-  // far a mono map may turn against head roll, 0 when not tracking.
-  // `safeArea` keeps MapKit's logo clear of the notch and corners. Returns
-  // true when the maps changed size or position, so cameras need redoing.
-  func layout(in bounds: CGRect, safeArea: UIEdgeInsets, maxRoll: Double) -> Bool {
-    let eyeWidth = bounds.width / CGFloat(eyes.count)
-    let eyeSize = CGSize(width: eyeWidth, height: bounds.height)
-    let mapSize = StereoGeometry.mapSize(forEye: eyeSize, maxRoll: maxRoll, stereo: isStereo)
+  // Sizes and places the eyes in `bounds`: mono fills it, stereo puts each
+  // eye in its lens window from `profile`. `maxRoll` (degrees) is how far a
+  // mono map may turn against head roll, 0 when not tracking. `safeArea`
+  // keeps MapKit's logo clear of the notch and corners. Returns true when
+  // the maps changed size or position, so cameras need redoing.
+  func layout(
+    in bounds: CGRect, safeArea: UIEdgeInsets, maxRoll: Double, profile: ViewerProfile
+  ) -> Bool {
+    let size = bounds.size
+    let frames = isStereo ? profile.eyeFrames(in: size) : [CGRect(origin: .zero, size: size)]
+    let eyeSize = frames[0].size
+    // Each eye's map is drawn at `drawnSize` (plus overscan) and its picture
+    // shrunk by `scale` into the eye; see `pictureScale`.
+    let scale = isStereo ? Self.pictureScale(forEyeHeight: eyeSize.height, in: size) : 1
+    let drawnSize = CGSize(width: eyeSize.width / scale, height: eyeSize.height / scale)
+    let mapSize = StereoGeometry.mapSize(forEye: drawnSize, maxRoll: maxRoll, stereo: isStereo)
     view.frame = bounds
-    // The logo sits bottom left and Legal bottom right, so only the bottom
-    // and the wider of the two sides matter.
-    let attributionInsets = CGSize(width: max(safeArea.left, safeArea.right), height: safeArea.bottom)
+    // The black around the stereo windows. Mono covers the whole view.
+    view.backgroundColor = isStereo ? .black : nil
+    let safeFrame = CGRect(origin: .zero, size: size).inset(by: safeArea)
     var changed = false
-    for (index, eye) in eyes.enumerated() {
-      let frame = CGRect(x: CGFloat(index) * eyeWidth, y: 0, width: eyeWidth, height: bounds.height)
-      if eye.frame != frame || eye.mapSize != mapSize {
+    for (eye, frame) in zip(eyes, frames) {
+      if eye.frame != frame || eye.mapSize != mapSize || eye.pictureScale != scale {
         changed = true
         eye.appliedCamera = nil  // A resized map needs its camera set again.
       }
       eye.frame = frame
       eye.mapSize = mapSize
-      eye.attributionInsets = attributionInsets
+      eye.pictureScale = scale
+      eye.attributionInsets = Self.attributionInsets(of: frame, clearOf: safeFrame)
     }
-    distanceScale = bounds.height > 0 ? Double(mapSize.height / bounds.height) : 1
+    // MapKit's field of view spans the whole (overscanned) map, while the eye
+    // shows only its middle: see DioramaMapView.liveCamera.
+    distanceScale = drawnSize.height > 0 ? Double(mapSize.height / drawnSize.height) : 1
     focalLength = StereoGeometry.focalLength(mapHeight: mapSize.height)
     return changed
+  }
+
+  // Where each eye sits in the view, left to right (one in mono).
+  var eyeFrames: [CGRect] { eyes.map(\.frame) }
+
+  // How much a stereo eye's picture is shrunk to fit its lens window.
+  // MapKit caps the pitch by how zoomed in the map is, which it judges by
+  // how many meters each point of the map covers. Drawn at the small
+  // window's own size, the same view of the city counts as zoomed out, and
+  // MapKit held every curated city (1,000 to 1,300 m out) to 35° instead of
+  // 60° (measured, iOS 26). So each eye's map is drawn as if the eye were as
+  // tall as the screen's short side, as the old half-screen eyes were, then
+  // shrunk into the window: the same picture as before, only smaller. The
+  // cost: MapKit's logo and Legal link shrink with it, and each map draws as
+  // many pixels as the old half-screen eyes did.
+  private static func pictureScale(forEyeHeight height: CGFloat, in size: CGSize) -> CGFloat {
+    let shortSide = min(size.width, size.height)
+    guard height > 0, shortSide > 0 else { return 1 }
+    return min(height / shortSide, 1)
+  }
+
+  // How far the safe area (notch, rounded corners, home indicator) reaches
+  // into an eye at `frame`. The logo sits bottom left and Legal bottom right,
+  // so only the bottom and the wider of the two sides matter. Zero for the
+  // stereo windows, which sit well inside the screen.
+  private static func attributionInsets(of frame: CGRect, clearOf safeFrame: CGRect) -> CGSize {
+    let left = max(safeFrame.minX - frame.minX, 0)
+    let right = max(frame.maxX - safeFrame.maxX, 0)
+    let bottom = max(frame.maxY - safeFrame.maxY, 0)
+    return CGSize(width: max(left, right), height: bottom)
   }
 
   // Points every eye at `camera` in one go (same frame): in stereo each eye

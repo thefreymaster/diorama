@@ -1,8 +1,16 @@
-import { useImperativeHandle, useRef } from 'react';
+import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 
 import type { DioramaMapViewProps, DioramaMapViewRef } from './DioramaMapView.types';
+import { forgetEyeLayout, reportEyeLayout } from './eyeLayoutStore';
 import { hasFlyover } from './flyoverCoverage';
-import { NativeDioramaMapView, type NativeDegradedEvent } from './NativeDioramaMapView';
+import {
+  NativeDioramaMapView,
+  type NativeDegradedEvent,
+  type NativeEyeLayoutEvent,
+} from './NativeDioramaMapView';
+
+/** Millimeters between Google Cardboard v2's lens centers. */
+export const DEFAULT_LENS_SPACING = 64;
 
 /**
  * A photoreal 3D Apple Maps view with a camera driven by props. All
@@ -12,16 +20,22 @@ export function DioramaMapView({
   ref,
   onReady,
   onDegraded,
+  onEyeLayout,
   orbit = false,
   headTracking = false,
   debugLook = false,
   trackingSensitivity = 1,
   mode = 'mono',
   eyeSeparation = 1,
+  lensSpacing = DEFAULT_LENS_SPACING,
   miniatureIntensity = 0,
   ...props
 }: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
+  // Tells this map's eye layout apart from any other map's (useStereoEyes).
+  const layoutOwner = useId();
+
+  useEffect(() => () => forgetEyeLayout(layoutOwner), [layoutOwner]);
 
   useImperativeHandle(ref, () => ({
     recenter: async () => {
@@ -41,6 +55,12 @@ export function DioramaMapView({
     onDegraded?.({ reason: nativeEvent.reason });
   };
 
+  const handleEyeLayout = ({ nativeEvent }: NativeEyeLayoutEvent) => {
+    const layout = { mode: nativeEvent.mode, left: nativeEvent.left, right: nativeEvent.right };
+    reportEyeLayout(layoutOwner, layout);
+    onEyeLayout?.(layout);
+  };
+
   return (
     <NativeDioramaMapView
       {...props}
@@ -51,9 +71,11 @@ export function DioramaMapView({
       trackingSensitivity={trackingSensitivity}
       mode={mode}
       eyeSeparation={eyeSeparation}
+      lensSpacing={lensSpacing}
       miniatureIntensity={miniatureIntensity}
       onReady={handleReady}
       onDegraded={handleDegraded}
+      onEyeLayout={handleEyeLayout}
     />
   );
 }

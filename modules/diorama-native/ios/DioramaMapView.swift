@@ -18,6 +18,11 @@ final class DioramaMapView: ExpoView {
   // Event prop: the phone got too hot for two maps, so stereo fell back to
   // mono. Payload: `{ reason: "thermal" }`.
   let onDegraded = EventDispatcher()
+  // Event prop: where each eye's picture is, whenever that changes, so JS
+  // can draw things once per eye. Payload: `{ mode, left, right }`, each eye
+  // a `{ x, y, width, height }` in this view's points (in mono both are the
+  // whole view).
+  let onEyeLayout = EventDispatcher()
 
   // Camera props from JS, applied together in `propsDidUpdate()`.
   var pose = CameraPose()
@@ -31,6 +36,11 @@ final class DioramaMapView: ExpoView {
     didSet { isDegraded = false }
   }
   var eyeSeparation = 1.0
+  // Millimeters between the headset's lens centers: where the stereo eye
+  // windows go (see ViewerProfile).
+  var lensSpacing = ViewerProfile.defaultLensSpacing {
+    didSet { if lensSpacing != oldValue { setNeedsLayout() } }
+  }
   // Debug builds only: pretend the phone is this hot (see ThermalMonitor).
   var debugThermalState: ProcessInfo.ThermalState?
   // The tilt-shift look (MiniatureOverlay), 0 = off. Every eye gets the same.
@@ -67,6 +77,8 @@ final class DioramaMapView: ExpoView {
   private lazy var thermal = ThermalMonitor { [weak self] budget in
     self?.thermalBudgetDidChange(budget)
   }
+  // The eye frames last sent to JS with onEyeLayout.
+  private var reportedEyeFrames: [CGRect] = []
   // Degrees the orbit has turned away from `pose.heading`. recenter() zeroes it.
   private var orbitOffset = 0.0
   // The latest smoothed head look; zero when not tracking.
@@ -119,6 +131,7 @@ final class DioramaMapView: ExpoView {
   override func didMoveToWindow() {
     super.didMoveToWindow()
     if window != nil { thermal.start() } else { thermal.stop() }
+    setNeedsLayout()  // The eye windows depend on the screen (ViewerProfile).
     updateHeadTracking()
     updateTicker()
   }
@@ -168,13 +181,50 @@ final class DioramaMapView: ExpoView {
   // Sizes the eyes; overscan (room to turn against roll) only while tracking.
   private func layoutEyes() {
     let maxRoll = headTracker.isRunning ? Self.maxRollDegrees : 0
-    let changed = rig.layout(in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll)
+    let changed = rig.layout(
+      in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: viewerProfile)
+    reportEyeLayout()
     guard changed else { return }
     // Resize the maps first (a map resized after its camera is set moves
     // that camera; see EyeView.layoutSubviews), then set the cameras, whose
     // distance and warps depend on the map sizes.
     rig.view.layoutIfNeeded()
     if appliedPose != nil { applyCamera(animated: false) }
+  }
+
+  // The headset, measured on this phone's screen.
+  private var viewerProfile: ViewerProfile {
+    let screen = window?.windowScene?.screen
+    let displayScale = traitCollection.displayScale
+    return ViewerProfile(
+      lensSpacing: lensSpacing,
+      pointsPerMillimeter: ViewerProfile.pointsPerMillimeter(
+        nativeScale: screen?.nativeScale ?? displayScale),
+      displayScale: displayScale
+    )
+  }
+
+  // Tells JS where the eyes are now, if that changed (e.g. on rotation, or
+  // going stereo or mono) or `force` says to anyway.
+  private func reportEyeLayout(force: Bool = false) {
+    let frames = rig.eyeFrames
+    guard window != nil, !bounds.isEmpty, force || frames != reportedEyeFrames,
+      let left = frames.first, let right = frames.last
+    else { return }
+    reportedEyeFrames = frames
+    onEyeLayout([
+      "mode": rig.isStereo ? ViewMode.stereo.rawValue : ViewMode.mono.rawValue,
+      "left": Self.json(left),
+      "right": Self.json(right),
+    ])
+  }
+
+  // A rect as the plain object JS gets.
+  private static func json(_ rect: CGRect) -> [String: Double] {
+    [
+      "x": Double(rect.minX), "y": Double(rect.minY),
+      "width": Double(rect.width), "height": Double(rect.height),
+    ]
   }
 
   // MARK: - Head tracking
@@ -291,6 +341,10 @@ final class DioramaMapView: ExpoView {
     // The cover starts to lift in the same screen update that sends onReady
     // to JS, so the Viewer's countdown starts as the city appears.
     updateCover(animated: true)
+    // Say where the eyes are again first, in case the first report went out
+    // before React Native had hooked up this view's events (it drops them
+    // then): whatever JS draws once per eye goes up now.
+    reportEyeLayout(force: true)
     onReady([:])
     updateTicker()
   }

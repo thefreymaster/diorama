@@ -1,7 +1,7 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook } from '@testing-library/react-native';
 import { createRef } from 'react';
 
-import { DioramaMapView, type DioramaMapViewRef } from '..';
+import { DioramaMapView, useStereoEyes, type DioramaEyeLayout, type DioramaMapViewRef } from '..';
 import { NativeDioramaMapView } from '../NativeDioramaMapView';
 
 const CAMERA = {
@@ -10,6 +10,15 @@ const CAMERA = {
   pitch: 60,
   heading: 29,
 };
+
+// What the native view reports on an iPhone 17 Pro in landscape.
+const STEREO_LAYOUT: DioramaEyeLayout = {
+  mode: 'stereo',
+  left: { x: 129.33, y: 107.33, width: 229, height: 187 },
+  right: { x: 515.67, y: 107.33, width: 229, height: 187 },
+};
+const WHOLE_VIEW = { x: 0, y: 0, width: 874, height: 402 };
+const MONO_LAYOUT: DioramaEyeLayout = { mode: 'mono', left: WHOLE_VIEW, right: WHOLE_VIEW };
 
 describe('DioramaMapView', () => {
   it('renders and exposes recenter() and setDebugLook() on its ref', () => {
@@ -36,9 +45,16 @@ describe('DioramaMapView', () => {
     });
   });
 
-  it('defaults to mono at eye separation 1', () => {
+  it('defaults to mono at eye separation 1, for a Cardboard v2 viewer', () => {
     const view = render(<DioramaMapView {...CAMERA} />);
-    expect(view.toJSON()).toMatchObject({ props: { mode: 'mono', eyeSeparation: 1 } });
+    expect(view.toJSON()).toMatchObject({
+      props: { mode: 'mono', eyeSeparation: 1, lensSpacing: 64 },
+    });
+  });
+
+  it('passes the lens spacing to the native view', () => {
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" lensSpacing={60} />);
+    expect(view.toJSON()).toMatchObject({ props: { mode: 'stereo', lensSpacing: 60 } });
   });
 
   it('passes stereo props to the native view', () => {
@@ -67,6 +83,41 @@ describe('DioramaMapView', () => {
       nativeEvent: { reason: 'thermal' },
     });
     expect(onDegraded).toHaveBeenCalledWith({ reason: 'thermal' });
+  });
+
+  it('unwraps the native onEyeLayout event', () => {
+    const onEyeLayout = jest.fn();
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" onEyeLayout={onEyeLayout} />);
+    fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'eyeLayout', {
+      nativeEvent: { ...STEREO_LAYOUT, target: 42 },
+    });
+    expect(onEyeLayout).toHaveBeenCalledWith(STEREO_LAYOUT);
+  });
+
+  it('shares the stereo eye windows until the map goes mono or away', () => {
+    const eyes = renderHook(() => useStereoEyes());
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" />);
+    const native = () => view.UNSAFE_getByType(NativeDioramaMapView);
+    expect(eyes.result.current).toBeNull();
+
+    act(() => fireEvent(native(), 'eyeLayout', { nativeEvent: STEREO_LAYOUT }));
+    expect(eyes.result.current).toEqual({ left: STEREO_LAYOUT.left, right: STEREO_LAYOUT.right });
+
+    act(() => fireEvent(native(), 'eyeLayout', { nativeEvent: MONO_LAYOUT }));
+    expect(eyes.result.current).toBeNull();
+
+    act(() => fireEvent(native(), 'eyeLayout', { nativeEvent: STEREO_LAYOUT }));
+    // A mono map elsewhere (say, the preview underneath) leaves them alone.
+    const preview = render(<DioramaMapView {...CAMERA} />);
+    act(() =>
+      fireEvent(preview.UNSAFE_getByType(NativeDioramaMapView), 'eyeLayout', {
+        nativeEvent: MONO_LAYOUT,
+      }),
+    );
+    expect(eyes.result.current).not.toBeNull();
+
+    act(() => view.unmount());
+    expect(eyes.result.current).toBeNull();
   });
 
   it('reports flyover coverage in onReady', () => {

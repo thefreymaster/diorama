@@ -14,6 +14,26 @@ export type DioramaReadyEvent = {
 /** One picture, or one per eye side by side for a head-mounted viewer. */
 export type DioramaViewMode = 'mono' | 'stereo';
 
+/** A rectangle in the map view's own coordinates, in points. */
+export type DioramaRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** Where each eye's picture is drawn in stereo. */
+export type DioramaStereoEyes = {
+  left: DioramaRect;
+  right: DioramaRect;
+};
+
+/** Where each eye's picture is drawn, as reported by `onEyeLayout`. */
+export type DioramaEyeLayout = DioramaStereoEyes & {
+  /** In `mono` there is one picture, so `left` and `right` are both the whole view. */
+  mode: DioramaViewMode;
+};
+
 /** Why `onDegraded` fired. */
 export type DioramaDegradedEvent = {
   /** `thermal`: the phone got too hot for two maps, so the view went mono. */
@@ -80,15 +100,28 @@ export type DioramaHeadTrackingProps = {
  */
 export type DioramaStereoProps = {
   /**
-   * `stereo` shows two eyes side by side (landscape, in a viewer), each at
-   * half width, and `onReady` waits for both. Defaults to `mono`.
+   * `stereo` shows two eyes side by side (landscape, in a viewer), each in a
+   * window centered on one of the viewer's lenses with black around it, and
+   * `onReady` waits for both. `mono` fills the view. Defaults to `mono`.
    */
   mode?: DioramaViewMode;
   /**
-   * "Model size": multiplies the distance between the eyes (altitude / 30
+   * "Model size": multiplies the distance between the eyes (altitude / 50
    * at 1). Bigger reads as a smaller model. Defaults to 1.
    */
   eyeSeparation?: number;
+  /**
+   * Millimeters between the centers of the viewer's two lenses. In stereo
+   * each eye's window is centered on its lens; the native side converts to
+   * points for the phone it runs on. Defaults to 64 (Google Cardboard v2).
+   */
+  lensSpacing?: number;
+  /**
+   * Fires with where each eye's picture is, and again whenever that changes
+   * (rotation, stereo to mono). For drawing something once per eye.
+   * `useStereoEyes()` gives the same for the stereo map on screen.
+   */
+  onEyeLayout?: (layout: DioramaEyeLayout) => void;
   /**
    * The view changed on its own to cope: when the phone gets critically hot,
    * stereo falls back to mono until `mode` is set again. (When it is merely

@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.xl,
   },
-  // A lens window is small (about 38 mm wide), so the HUD gets most of it.
+  // A lens window is small (33 mm wide by default), so the HUD gets most of it.
   window: {
     position: 'absolute',
     paddingHorizontal: spacing.sm,

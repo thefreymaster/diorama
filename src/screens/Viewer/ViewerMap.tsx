@@ -15,8 +15,9 @@ type ViewerMapProps = {
 
 /**
  * The city, edge to edge: one picture, or one per eye in stereo, from the
- * city's own camera and the wearer's Settings. Head tracking, the eyes and
- * the black cover while they load all run natively.
+ * city's own camera and the wearer's Settings, viewer fit included (it
+ * sizes each eye's window, live). Head tracking, the eyes and the black
+ * cover while they load all run natively.
  */
 export function ViewerMap({ city, headTracking, onReady, onDegraded, ref }: ViewerMapProps) {
   const settings = useSettings();
@@ -32,6 +33,9 @@ export function ViewerMap({ city, headTracking, onReady, onDegraded, ref }: View
       heading={city.heading}
       mode={settings.mode}
       eyeSeparation={settings.eyeSeparation}
+      lensSpacing={settings.lensSpacing}
+      windowWidth={settings.windowWidth}
+      windowHeight={settings.windowHeight}
       headTracking={headTracking}
       trackingSensitivity={settings.trackingSensitivity}
       miniatureIntensity={settings.miniatureIntensity}

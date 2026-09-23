@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { metrics, spacing, useScaledSize, type ColorToken } from '@/theme';
 import { ControlRow, SymbolIcon } from '@/ui';
 
-import { SLIDER_SETTINGS, type SliderSetting } from './sliderSettings';
+import { SLIDER_SETTINGS, type GlyphSliderSetting } from './sliderSettings';
 import { useSettingSlider } from './useSettingSlider';
 
 /** Width of the slot each end glyph is centered in, so every slider lines up. */
@@ -16,7 +16,7 @@ const ROW_HEIGHT = metrics.rowMinHeight + spacing.xs;
  * A list row that is just a slider (a native UISlider) between two glyphs,
  * like Brightness in Settings. The section header names it.
  */
-export function SettingSlider({ setting }: { setting: SliderSetting }) {
+export function SettingSlider({ setting }: { setting: GlyphSliderSetting }) {
   const { title, minSymbol, maxSymbol } = SLIDER_SETTINGS[setting];
   const slider = useSettingSlider(setting);
   const slot = { width: useScaledSize(END_SLOT) };

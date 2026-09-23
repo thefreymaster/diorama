@@ -46,7 +46,7 @@ import simd
 // window), so the window shows `rendered` degrees of the city. Through the
 // lens the same window fills `perceived` degrees of your view:
 //   perceived = 2 × atan(window height mm ÷ 2 ÷ lens-to-screen mm)
-// (about 42° for a 31 mm window 40 mm behind the lens). The picture is
+// (about 55° for the default 42 mm-tall window 40 mm behind the lens). The picture is
 // magnified perceived ÷ rendered times, so for the city to hold still the
 // camera turns rendered ÷ perceived as far as the head:
 //   gain = tracking sensitivity × rendered ÷ perceived

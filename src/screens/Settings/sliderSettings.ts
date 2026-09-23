@@ -3,14 +3,29 @@ import type { SFSymbol } from 'expo-symbols';
 import {
   SETTING_RANGES,
   setEyeSeparation,
+  setLensSpacing,
   setMiniatureIntensity,
   setTrackingSensitivity,
+  setWindowHeight,
+  setWindowWidth,
 } from '@/features/settings/store';
 
-import { linearScale, logScale, type SliderScale } from './sliderScale';
+import {
+  linearScale,
+  logScale,
+  steppedScale,
+  type SliderScale,
+  type SteppedScale,
+} from './sliderScale';
 
 /** The settings that have a slider. */
 export type SliderSetting = keyof typeof SETTING_RANGES;
+
+/** The "Viewer fit" sliders: sizes in millimeters, shown with their value. */
+export type FitSetting = 'lensSpacing' | 'windowWidth' | 'windowHeight';
+
+/** The sliders between two glyphs, each in a section of its own. */
+export type GlyphSliderSetting = Exclude<SliderSetting, FitSetting>;
 
 type EndSymbol = {
   name: SFSymbol;
@@ -18,24 +33,35 @@ type EndSymbol = {
   size: number;
 };
 
+/** What every slider has, whatever it looks like. */
 type SliderConfig = {
-  /** Section header, and what VoiceOver calls the slider. */
+  /** What the slider is called, on screen and to VoiceOver. */
   title: string;
-  footer: string;
   scale: SliderScale;
   /** Stores a new value (clamped by the store). */
   set: (value: number) => void;
-  /** Glyphs at the left and right ends, like the sun at each end of Brightness. */
-  minSymbol: EndSymbol;
-  maxSymbol: EndSymbol;
   /** Does nothing in mono, so it dims there. */
   stereoOnly?: boolean;
 };
 
-const { eyeSeparation, trackingSensitivity, miniatureIntensity } = SETTING_RANGES;
+type GlyphSliderConfig = SliderConfig & {
+  /** Shown under the section; `title` is its header. */
+  footer: string;
+  /** Glyphs at the left and right ends, like the sun at each end of Brightness. */
+  minSymbol: EndSymbol;
+  maxSymbol: EndSymbol;
+};
 
-/** Everything a Settings slider shows and does, per setting. */
-export const SLIDER_SETTINGS: Readonly<Record<SliderSetting, SliderConfig>> = {
+type FitSliderConfig = SliderConfig & {
+  /** Whole millimeters, so the thumb snaps from one to the next. */
+  scale: SteppedScale;
+};
+
+const { eyeSeparation, trackingSensitivity, miniatureIntensity } = SETTING_RANGES;
+const { lensSpacing, windowWidth, windowHeight } = SETTING_RANGES;
+
+/** Every glyph slider: what it shows and does. */
+export const SLIDER_SETTINGS: Readonly<Record<GlyphSliderSetting, GlyphSliderConfig>> = {
   eyeSeparation: {
     title: 'Model size',
     footer: 'How big the city looks in stereo. Smaller feels more like a model on a table.',
@@ -65,3 +91,35 @@ export const SLIDER_SETTINGS: Readonly<Record<SliderSetting, SliderConfig>> = {
     maxSymbol: { name: 'camera.macro', size: 22 },
   },
 };
+
+/** The "Viewer fit" section's sliders, top to bottom. */
+export const FIT_SETTINGS: Readonly<Record<FitSetting, FitSliderConfig>> = {
+  lensSpacing: {
+    title: 'Lens spacing',
+    scale: steppedScale(lensSpacing.min, lensSpacing.max, 1),
+    set: setLensSpacing,
+    stereoOnly: true,
+  },
+  windowWidth: {
+    title: 'Window width',
+    scale: steppedScale(windowWidth.min, windowWidth.max, 1),
+    set: setWindowWidth,
+    stereoOnly: true,
+  },
+  windowHeight: {
+    title: 'Window height',
+    scale: steppedScale(windowHeight.min, windowHeight.max, 1),
+    set: setWindowHeight,
+    stereoOnly: true,
+  },
+};
+
+const ALL_SLIDERS: Readonly<Record<SliderSetting, SliderConfig>> = {
+  ...SLIDER_SETTINGS,
+  ...FIT_SETTINGS,
+};
+
+/** Any slider's title, scale and setter, whichever kind it is. */
+export function sliderConfig(setting: SliderSetting): SliderConfig {
+  return ALL_SLIDERS[setting];
+}

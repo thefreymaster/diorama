@@ -132,9 +132,11 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // MapKit held every curated city (1,000 to 1,300 m out) to 35° instead of
   // 60° (measured, iOS 26). So each eye's map is drawn as if the eye were as
   // tall as the screen's short side, as the old half-screen eyes were, then
-  // shrunk into the window: the same picture as before, only smaller. The
-  // cost: MapKit's logo and Legal link shrink with it, and each map draws as
-  // many pixels as the old half-screen eyes did.
+  // shrunk into the window: the same picture as before, only smaller. Only
+  // the height sets the scale, so the width keeps the window's own aspect
+  // (a 33 × 42 mm window is drawn 316 × 402 points on an iPhone 17 Pro and
+  // shrunk by 0.63). The cost: MapKit's logo and Legal link shrink with it,
+  // and each map draws as many pixels as a window that tall would.
   private static func pictureScale(forEyeHeight height: CGFloat, in size: CGSize) -> CGFloat {
     let shortSide = min(size.width, size.height)
     guard height > 0, shortSide > 0 else { return 1 }

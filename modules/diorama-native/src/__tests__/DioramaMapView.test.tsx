@@ -11,11 +11,12 @@ const CAMERA = {
   heading: 29,
 };
 
-// What the native view reports on an iPhone 17 Pro in landscape.
+// What the native view reports on an iPhone 17 Pro in landscape, with the
+// default 33 × 42 mm windows (measured in the Simulator).
 const STEREO_LAYOUT: DioramaEyeLayout = {
   mode: 'stereo',
-  left: { x: 129.33, y: 107.33, width: 229, height: 187 },
-  right: { x: 515.67, y: 107.33, width: 229, height: 187 },
+  left: { x: 144.33, y: 74.67, width: 199, height: 253 },
+  right: { x: 530.67, y: 74.67, width: 199, height: 253 },
 };
 const WHOLE_VIEW = { x: 0, y: 0, width: 874, height: 402 };
 const MONO_LAYOUT: DioramaEyeLayout = { mode: 'mono', left: WHOLE_VIEW, right: WHOLE_VIEW };
@@ -52,9 +53,24 @@ describe('DioramaMapView', () => {
     });
   });
 
-  it('passes the lens spacing to the native view', () => {
-    const view = render(<DioramaMapView {...CAMERA} mode="stereo" lensSpacing={60} />);
-    expect(view.toJSON()).toMatchObject({ props: { mode: 'stereo', lensSpacing: 60 } });
+  it('defaults to eye windows 33 mm wide and 42 mm tall, inside a 34 mm lens hole', () => {
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" />);
+    expect(view.toJSON()).toMatchObject({ props: { windowWidth: 33, windowHeight: 42 } });
+  });
+
+  it('passes the viewer fit to the native view', () => {
+    const view = render(
+      <DioramaMapView
+        {...CAMERA}
+        mode="stereo"
+        lensSpacing={60}
+        windowWidth={30}
+        windowHeight={50}
+      />,
+    );
+    expect(view.toJSON()).toMatchObject({
+      props: { mode: 'stereo', lensSpacing: 60, windowWidth: 30, windowHeight: 50 },
+    });
   });
 
   it('passes stereo props to the native view', () => {

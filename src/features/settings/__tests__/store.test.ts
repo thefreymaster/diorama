@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
+import { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH } from '@diorama/native';
+
 import {
   resetSettings,
   setEyeSeparation,
@@ -38,6 +40,19 @@ describe('settings store', () => {
       miniatureIntensity: 0.6,
       mode: 'stereo',
       debugLook: false,
+      lensSpacing: 64,
+      windowWidth: 33,
+      windowHeight: 42,
+    });
+  });
+
+  it("fits the viewer the way the native view does when it's told nothing", () => {
+    const { store } = launch();
+
+    expect(store.getSettings()).toMatchObject({
+      lensSpacing: DEFAULT_LENS_SPACING,
+      windowWidth: DEFAULT_WINDOW_WIDTH,
+      windowHeight: DEFAULT_WINDOW_HEIGHT,
     });
   });
 
@@ -58,6 +73,9 @@ describe('settings store', () => {
     first.store.setMiniatureIntensity(0.2);
     first.store.setMode('mono');
     first.store.setDebugLook(true);
+    first.store.setLensSpacing(62);
+    first.store.setWindowWidth(30);
+    first.store.setWindowHeight(50);
     const saved = first.disk.getString('settings');
 
     const second = launch(saved);
@@ -68,12 +86,59 @@ describe('settings store', () => {
       miniatureIntensity: 0.2,
       mode: 'mono',
       debugLook: true,
+      lensSpacing: 62,
+      windowWidth: 30,
+      windowHeight: 50,
+    });
+  });
+
+  it('keeps settings saved before the viewer fit existed, and fits the viewer by default', () => {
+    // What a build before T24 saved: version 1, no viewer fit.
+    const saved = JSON.stringify({
+      state: {
+        eyeSeparation: 2,
+        trackingSensitivity: 0.8,
+        miniatureIntensity: 0.3,
+        mode: 'mono',
+        debugLook: false,
+      },
+      version: 1,
+    });
+
+    const { store, disk } = launch(saved);
+
+    expect(store.getSettings()).toEqual({
+      eyeSeparation: 2,
+      trackingSensitivity: 0.8,
+      miniatureIntensity: 0.3,
+      mode: 'mono',
+      debugLook: false,
+      lensSpacing: 64,
+      windowWidth: 33,
+      windowHeight: 42,
+    });
+
+    // The next change saves the whole set, viewer fit included.
+    store.setWindowHeight(45);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state).toMatchObject({
+      eyeSeparation: 2,
+      lensSpacing: 64,
+      windowWidth: 33,
+      windowHeight: 45,
     });
   });
 
   it('ignores invalid values on disk', () => {
     const saved = JSON.stringify({
-      state: { eyeSeparation: 'big', mode: 'hologram', miniatureIntensity: 7, debugLook: true },
+      state: {
+        eyeSeparation: 'big',
+        mode: 'hologram',
+        miniatureIntensity: 7,
+        debugLook: true,
+        lensSpacing: '64 mm',
+        windowWidth: null,
+        windowHeight: Number.NaN,
+      },
       version: 1,
     });
 
@@ -85,12 +150,22 @@ describe('settings store', () => {
       miniatureIntensity: 1,
       mode: 'stereo',
       debugLook: true,
+      lensSpacing: 64,
+      windowWidth: 33,
+      windowHeight: 42,
     });
   });
 
   it('clamps out-of-range values on disk instead of dropping them', () => {
     const saved = JSON.stringify({
-      state: { eyeSeparation: -5, trackingSensitivity: 100, miniatureIntensity: 0.4 },
+      state: {
+        eyeSeparation: -5,
+        trackingSensitivity: 100,
+        miniatureIntensity: 0.4,
+        lensSpacing: 90,
+        windowWidth: 10,
+        windowHeight: 58,
+      },
       version: 1,
     });
 
@@ -100,6 +175,9 @@ describe('settings store', () => {
       eyeSeparation: store.SETTING_RANGES.eyeSeparation.min,
       trackingSensitivity: store.SETTING_RANGES.trackingSensitivity.max,
       miniatureIntensity: 0.4,
+      lensSpacing: 72,
+      windowWidth: 25,
+      windowHeight: 58,
     });
   });
 
@@ -137,6 +215,28 @@ describe('settings store', () => {
     });
   });
 
+  it('keeps the viewer fit in range: 55-72 mm apart, 25-40 mm wide, 25-60 mm tall', () => {
+    const { store } = launch();
+
+    store.setLensSpacing(40);
+    store.setWindowWidth(34);
+    store.setWindowHeight(80);
+    expect(store.getSettings()).toMatchObject({
+      lensSpacing: 55,
+      windowWidth: 34,
+      windowHeight: 60,
+    });
+
+    store.setLensSpacing(100);
+    store.setWindowWidth(0);
+    store.setWindowHeight(Number.NaN);
+    expect(store.getSettings()).toMatchObject({
+      lensSpacing: 72,
+      windowWidth: 25,
+      windowHeight: 42,
+    });
+  });
+
   it('accepts the exact ends of each range, and falls back to the default for infinities', () => {
     const { store } = launch();
     const { eyeSeparation, trackingSensitivity } = store.SETTING_RANGES;
@@ -160,6 +260,9 @@ describe('settings store', () => {
     const { store, disk } = launch();
     store.setEyeSeparation(3);
     store.setMode('mono');
+    store.setLensSpacing(60);
+    store.setWindowWidth(36);
+    store.setWindowHeight(50);
 
     store.resetSettings();
 

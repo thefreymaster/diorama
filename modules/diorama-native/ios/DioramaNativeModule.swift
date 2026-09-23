@@ -64,6 +64,15 @@ public class DioramaNativeModule: Module {
         // Guard against nonsense; viewer lenses sit about 55 to 75 mm apart.
         view.lensSpacing = spacing.isFinite ? min(max(spacing, 40), 90) : ViewerProfile.defaultLensSpacing
       }
+      // One eye's window, in millimeters. Guard against nonsense; Settings
+      // keeps them in 25...40 and 25...60. The layout also keeps the windows
+      // apart and on screen (ViewerProfile.eyeFrames).
+      Prop("windowWidth", ViewerProfile.defaultWindowWidth) { (view: DioramaMapView, width: Double) in
+        view.windowWidth = width.isFinite ? min(max(width, 10), 80) : ViewerProfile.defaultWindowWidth
+      }
+      Prop("windowHeight", ViewerProfile.defaultWindowHeight) { (view: DioramaMapView, height: Double) in
+        view.windowHeight = height.isFinite ? min(max(height, 10), 80) : ViewerProfile.defaultWindowHeight
+      }
       Prop("miniatureIntensity", 0.0) { (view: DioramaMapView, intensity: Double) in
         view.miniatureIntensity = intensity.isFinite ? min(max(intensity, 0), 1) : 0
       }

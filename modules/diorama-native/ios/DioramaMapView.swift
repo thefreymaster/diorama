@@ -43,6 +43,13 @@ final class DioramaMapView: ExpoView {
   var lensSpacing = ViewerProfile.defaultLensSpacing {
     didSet { if lensSpacing != oldValue { setNeedsLayout() } }
   }
+  // Millimeters: the size of each stereo eye window (see ViewerProfile).
+  var windowWidth = ViewerProfile.defaultWindowWidth {
+    didSet { if windowWidth != oldValue { setNeedsLayout() } }
+  }
+  var windowHeight = ViewerProfile.defaultWindowHeight {
+    didSet { if windowHeight != oldValue { setNeedsLayout() } }
+  }
   // Debug builds only: pretend the phone is this hot (see ThermalMonitor).
   var debugThermalState: ProcessInfo.ThermalState?
   // The tilt-shift look (MiniatureOverlay), 0 = off. Every eye gets the same.
@@ -216,6 +223,8 @@ final class DioramaMapView: ExpoView {
     let displayScale = traitCollection.displayScale
     return ViewerProfile(
       lensSpacing: lensSpacing,
+      windowWidth: windowWidth,
+      windowHeight: windowHeight,
       pointsPerMillimeter: ViewerProfile.pointsPerMillimeter(
         nativeScale: screen?.nativeScale ?? displayScale),
       displayScale: displayScale

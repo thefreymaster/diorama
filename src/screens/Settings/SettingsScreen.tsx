@@ -8,6 +8,7 @@ import { MiniatureSection } from './MiniatureSection';
 import { ResetSection } from './ResetSection';
 import { SliderSection } from './SliderSection';
 import { StereoSection } from './StereoSection';
+import { ViewerFitSection } from './ViewerFitSection';
 
 /**
  * How the diorama looks and moves, as an inset-grouped list under a large
@@ -23,6 +24,7 @@ export function SettingsScreen() {
         <StereoSection />
         <SliderSection setting="eyeSeparation" />
         <SliderSection setting="trackingSensitivity" />
+        <ViewerFitSection />
         <DeveloperSection />
         <ResetSection />
       </View>

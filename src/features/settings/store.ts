@@ -15,16 +15,36 @@ export type Settings = {
   mode: ViewMode;
   /** Simulator only: drag to look around instead of using the gyro. */
   debugLook: boolean;
+  /** Viewer fit: millimeters between the centers of the headset's two lenses. */
+  lensSpacing: number;
+  /** Viewer fit: width of each eye's window, in millimeters. Inside the lens hole. */
+  windowWidth: number;
+  /** Viewer fit: height of each eye's window, in millimeters. */
+  windowHeight: number;
 };
 
-type NumericSetting = 'eyeSeparation' | 'trackingSensitivity' | 'miniatureIntensity';
+type NumericSetting =
+  | 'eyeSeparation'
+  | 'trackingSensitivity'
+  | 'miniatureIntensity'
+  | 'lensSpacing'
+  | 'windowWidth'
+  | 'windowHeight';
 
+/**
+ * The viewer fit defaults match the native view's own (`DEFAULT_LENS_SPACING`
+ * and friends in `@diorama/native`): Cardboard v2 lenses 64 mm apart, and
+ * windows 33 mm wide (just inside a 34 mm lens hole) by 42 mm tall.
+ */
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
   eyeSeparation: 1.0,
   trackingSensitivity: 1.0,
   miniatureIntensity: 0.6,
   mode: 'stereo',
   debugLook: false,
+  lensSpacing: 64,
+  windowWidth: 33,
+  windowHeight: 42,
 };
 
 /** Allowed range for each slider. Setters clamp to these. */
@@ -32,6 +52,9 @@ export const SETTING_RANGES: Readonly<Record<NumericSetting, { min: number; max:
   eyeSeparation: { min: 0.3, max: 3 },
   trackingSensitivity: { min: 0.5, max: 2 },
   miniatureIntensity: { min: 0, max: 1 },
+  lensSpacing: { min: 55, max: 72 },
+  windowWidth: { min: 25, max: 40 },
+  windowHeight: { min: 25, max: 60 },
 };
 
 const NUMERIC_SETTINGS = Object.keys(SETTING_RANGES) as NumericSetting[];
@@ -59,6 +82,9 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
 const useSettingsStore = create<Settings>()(
   persist(() => ({ ...DEFAULT_SETTINGS }), {
     name: 'settings',
+    // Still 1: new settings (like the viewer fit) are simply missing from
+    // older saves, and `merge` fills them in from the defaults. Bump it only
+    // when a saved value changes meaning, with a `migrate` to convert it.
     version: 1,
     storage: createPersistStorage<Settings>(),
     merge: (persisted, current) => ({ ...current, ...sanitizePersisted(persisted) }),
@@ -101,6 +127,18 @@ export function setMode(mode: ViewMode): void {
 
 export function setDebugLook(debugLook: boolean): void {
   useSettingsStore.setState({ debugLook });
+}
+
+export function setLensSpacing(value: number): void {
+  useSettingsStore.setState({ lensSpacing: clampSetting('lensSpacing', value) });
+}
+
+export function setWindowWidth(value: number): void {
+  useSettingsStore.setState({ windowWidth: clampSetting('windowWidth', value) });
+}
+
+export function setWindowHeight(value: number): void {
+  useSettingsStore.setState({ windowHeight: clampSetting('windowHeight', value) });
 }
 
 export function resetSettings(): void {

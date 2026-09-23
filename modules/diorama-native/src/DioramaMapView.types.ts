@@ -117,6 +117,20 @@ export type DioramaStereoProps = {
    */
   lensSpacing?: number;
   /**
+   * Width of each eye's window in stereo, in millimeters. Keep it inside the
+   * viewer's lens hole, so neither side of the picture is cut off. The
+   * windows never grow wider than `lensSpacing`, so they never overlap.
+   * Defaults to 33 (just inside a 34 mm hole).
+   */
+  windowWidth?: number;
+  /**
+   * Height of each eye's window in stereo, in millimeters. It stops a little
+   * short of the screen's height. Taller shows more of the city and makes
+   * head tracking turn the camera a little less per degree, since the
+   * picture then fills more of your view. Defaults to 42.
+   */
+  windowHeight?: number;
+  /**
    * Fires with where each eye's picture is, and again whenever that changes
    * (rotation, stereo to mono). For drawing something once per eye.
    * `useStereoEyes()` gives the same for the stereo map on screen.

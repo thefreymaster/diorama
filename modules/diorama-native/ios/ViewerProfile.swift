@@ -11,18 +11,28 @@ import UIKit
 struct ViewerProfile {
   // Millimeters between the two lens centers. Cardboard v2 is 64 mm.
   static let defaultLensSpacing = 64.0
-  // One eye's window, in millimeters: the part of the screen a Cardboard-style
-  // lens shows well. From the reference (iPhone 14 Pro): 230 × 187 points.
-  // Millimeters, not a share of the screen, so a bigger phone behind the
-  // same lenses shows the same picture rather than one that spills past them.
-  static let eyeWidth = 38.0
-  static let eyeHeight = 31.0
+  // One eye's window, in millimeters, unless the `windowWidth` and
+  // `windowHeight` props say otherwise (Settings > Viewer fit). The owner's
+  // viewer has lens holes about 34 mm wide, so 33 mm wide keeps both sides
+  // of the picture inside the hole, and 42 mm tall uses more of the lens
+  // than the old 38 × 31 mm window did. Millimeters, not a share of the
+  // screen, so a bigger phone behind the same lenses shows the same picture
+  // rather than one that spills past them.
+  static let defaultWindowWidth = 33.0
+  static let defaultWindowHeight = 42.0
+  // Millimeters of black kept above and below the tallest window, so it
+  // never touches the screen's edge.
+  static let edgeMargin = 2.0
   // Millimeters from the lenses to the screen. A Cardboard-style viewer
   // puts the screen about one focal length (~40 mm) behind its lenses.
   static let defaultLensDistance = 40.0
 
   // The `lensSpacing` prop, in millimeters.
   var lensSpacing: Double
+  // The `windowWidth` and `windowHeight` props: one eye's window, in
+  // millimeters, before `eyeFrames` fits it to the screen.
+  var windowWidth = defaultWindowWidth
+  var windowHeight = defaultWindowHeight
   // Screen points per millimeter on this phone (see `pointsPerMillimeter`).
   var pointsPerMillimeter: Double
   // Screen pixels per point, so window edges land on whole pixels.
@@ -38,8 +48,10 @@ struct ViewerProfile {
     // old side-by-side layout), so a window can't run off a narrow screen.
     let spacing = min(CGFloat(lensSpacing) * perMillimeter, size.width / 2)
     // No wider than the lens spacing, so the two windows never overlap.
-    let width = min(CGFloat(Self.eyeWidth) * perMillimeter, spacing).rounded(.down)
-    let height = min(CGFloat(Self.eyeHeight) * perMillimeter, size.height).rounded(.down)
+    let width = min(CGFloat(windowWidth) * perMillimeter, spacing).rounded(.down)
+    // No taller than the screen less a margin above and below.
+    let tallest = max(size.height - 2 * CGFloat(Self.edgeMargin) * perMillimeter, 1)
+    let height = min(CGFloat(windowHeight) * perMillimeter, tallest).rounded(.down)
     let left = CGRect(
       x: onPixel((size.width - spacing - width) / 2),
       y: onPixel((size.height - height) / 2),
@@ -54,7 +66,7 @@ struct ViewerProfile {
 
   // How many degrees of your view a picture `height` points tall fills when
   // seen through a lens: 2 × atan(half its height ÷ the lens distance), both
-  // in millimeters. About 42° for a 31 mm window 40 mm from the lens.
+  // in millimeters. About 55° for a 42 mm window 40 mm from the lens.
   func perceivedFieldOfView(height: CGFloat) -> Double {
     let millimeters = Double(height) / max(pointsPerMillimeter, 0.01)
     return 2 * atan(millimeters / 2 / max(lensDistance, 1)) * 180 / .pi

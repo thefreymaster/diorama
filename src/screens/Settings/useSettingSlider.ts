@@ -1,6 +1,6 @@
 import { useSetting } from '@/features/settings/store';
 
-import { SLIDER_SETTINGS, type SliderSetting } from './sliderSettings';
+import { sliderConfig, type SliderSetting } from './sliderSettings';
 
 /**
  * One setting as a 0…1 slider. Moving the thumb writes to the store at once
@@ -9,11 +9,12 @@ import { SLIDER_SETTINGS, type SliderSetting } from './sliderSettings';
  * every move never fights the drag.
  */
 export function useSettingSlider(setting: SliderSetting) {
-  const { scale, set, stereoOnly = false } = SLIDER_SETTINGS[setting];
+  const { scale, set, stereoOnly = false } = sliderConfig(setting);
   const value = useSetting(setting);
   const mode = useSetting('mode');
 
   return {
+    value,
     position: scale.toPosition(value),
     disabled: stereoOnly && mode === 'mono',
     onChange: (position: number) => set(scale.fromPosition(position)),

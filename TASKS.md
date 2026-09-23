@@ -224,6 +224,20 @@ Details: The owner wants to open any place, not just cities: type a street addre
 Acceptance: In the Simulator, `diorama://?q=1%20infinite%20loop` shows the address under "Places", tapping it opens the preview framed on that block, and it appears in Recent; a landmark query (e.g. "Golden Gate Bridge") works the same way; city searches still work ("Par" → Paris under "Cities"); Jest covers the kind mapping and the altitude rules with the native module mocked; typecheck, lint and tests pass.
 Notes: NEEDS DEVICE CHECK — type through two or three searches at normal speed and confirm "Can't search right now" never appears (MapKit allows ~100 completer requests/min, and it takes ~60 s to recover); check the 700 m / 900 m framing in the stereo Viewer. Two searches per keystroke: cities (T05) + everything else (addresses, POIs, natural features; skipping countries, postcodes, parking/EV/ATM/restrooms). Kind: in the cities list → city; else a subtitle with a digit → place, otherwise address; refined on resolve (a POI category → place). Sections "Cities"/"Places", ordered by best title match. Addresses open at 700 m, places at 900 m; subtitle "Town, Country"; the search placeholder is "Search for a city or place". Dev route gained `open=1`. Added San Jose to `flyoverCoverage.ts`. Follow-ups: T28 (false terrain note outside the listed metros), T29 (recents drop entries with an empty subtitle). Golden Gate Bridge is filed as a street, so it opens at 700 m on a stretch of deck.
 
+### T28 Don't claim "no 3D buildings" for places outside the curated coverage list
+Status: todo
+Depends: T25
+Files: modules/diorama-native/src/flyoverCoverage.ts, modules/diorama-native/src/DioramaMapView.tsx, modules/diorama-native/src/DioramaMapView.types.ts, modules/diorama-native/src/__tests__/, src/screens/CityPreview/TerrainNote.tsx, src/screens/CityPreview/usePreviewMapStatus.ts, src/screens/CityPreview/__tests__/
+Details: `flyoverAvailable` comes from a hand-kept list of ~60 metros (T04; MapKit has no API for it). Now that any address can be opened (T25), a place outside the list shows "3D buildings aren't available here. Terrain only." even where Apple has 3D (T25 had to add San Jose for 1 Infinite Loop). Make coverage three-state: `yes` (inside a listed area), `no` (inside a known-flat area: Dubai and Mexico City were checked flat in T04; keep a small list), `unknown` (everything else). Show the terrain note only for `no`; show nothing for `unknown`. Update the `onReady` event type and its docs, the preview's note logic and the tests.
+Acceptance: Jest: a curated city → `yes`, no note; Dubai → `no`, note shown; a point far from every listed area → `unknown`, no note. typecheck, lint and tests pass.
+
+### T29 Keep places with no town or country in Recent across relaunches
+Status: todo
+Depends: T25
+Files: src/features/cities/recentsStore.ts, src/features/cities/__tests__/recentsStore.test.ts
+Details: The recents store's persisted-data sanitiser (T03 follow-up) requires a non-empty `country`, so a resolved place whose subtitle is empty (rare, but possible for T25's addresses and POIs) silently drops out of Recent after a relaunch. Allow an empty (or whitespace) `country` and store it as an empty string; still require a non-empty `id` and `name` and valid coordinates and altitude.
+Acceptance: Jest: an entry with an empty country survives a persist → reload round-trip; malformed entries are still dropped. typecheck, lint and tests pass.
+
 ## Backlog (not scheduled)
 
 ### T19 Picker large title collapses after exiting a deep-linked Viewer

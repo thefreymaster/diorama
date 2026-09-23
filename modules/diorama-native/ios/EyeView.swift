@@ -29,7 +29,8 @@ final class EyeView: UIView {
   }
 
   // The camera last handed to this eye's map, so an unchanged camera isn't
-  // set again (a head roll alone only changes the transform).
+  // set again (a head roll alone only changes the transform), and so it can
+  // be put back after a resize (see layoutSubviews).
   var appliedCamera: CameraPose?
 
   // T09 attaches this eye's miniature (tilt-shift) overlay here. It sits on
@@ -92,11 +93,30 @@ final class EyeView: UIView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
+    // A resized MKMapView keeps its map scale (meters per point) by moving
+    // its camera closer or farther, and if the resize is animated (UIKit
+    // animates layout while the screen turns from portrait to landscape) it
+    // does so when the animation ends, undoing any camera set meanwhile:
+    // shrink a map from 933 to 618 points and it zooms in 1.5×. So resize
+    // it at once, then put back the camera we asked for.
+    UIView.performWithoutAnimation {
+      layoutMap()
+    }
+  }
+
+  private func layoutMap() {
     let size = mapSize == .zero ? bounds.size : mapSize
     // `bounds` + `center` (not `frame`) stay valid while warpView is turned.
     warpView.bounds = CGRect(origin: .zero, size: size)
     warpView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    let oldMapSize = mapView.bounds.size
     mapView.frame = warpView.bounds
+    if mapView.bounds.size != oldMapSize {
+      mapView.layoutIfNeeded()  // MapKit takes in the new size now.
+      if let camera = appliedCamera {
+        mapView.setCamera(camera.makeCamera(), animated: false)
+      }
+    }
     // MapKit centers its camera between the layout margins and puts its logo
     // and Legal link inside them. Equal margins on opposite sides keep the
     // camera on the map's center, where the warp expects it. Their size

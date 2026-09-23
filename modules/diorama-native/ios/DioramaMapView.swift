@@ -169,8 +169,12 @@ final class DioramaMapView: ExpoView {
   private func layoutEyes() {
     let maxRoll = headTracker.isRunning ? Self.maxRollDegrees : 0
     let changed = rig.layout(in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll)
-    // The cameras' distance and the eyes' warps depend on the map sizes.
-    if changed, appliedPose != nil { applyCamera(animated: false) }
+    guard changed else { return }
+    // Resize the maps first (a map resized after its camera is set moves
+    // that camera; see EyeView.layoutSubviews), then set the cameras, whose
+    // distance and warps depend on the map sizes.
+    rig.view.layoutIfNeeded()
+    if appliedPose != nil { applyCamera(animated: false) }
   }
 
   // MARK: - Head tracking

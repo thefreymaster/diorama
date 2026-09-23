@@ -110,8 +110,15 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     let glide = animated && !isStereo
     for (eye, pose) in zip(eyes, poses) {
       if eye.appliedCamera != pose.camera {
-        eye.mapView.setCamera(pose.camera.makeCamera(), animated: glide)
         eye.appliedCamera = pose.camera
+        if glide {
+          eye.mapView.setCamera(pose.camera.makeCamera(), animated: true)
+        } else {
+          // Not even inside someone else's animation (a screen rotation).
+          UIView.performWithoutAnimation {
+            eye.mapView.setCamera(pose.camera.makeCamera(), animated: false)
+          }
+        }
       }
       eye.pictureTransform = pose.pictureTransform
     }

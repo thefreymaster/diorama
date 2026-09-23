@@ -118,6 +118,23 @@ describe('recents store', () => {
     expect(second.store.getRecents()).toEqual([city('rome'), city('paris')]);
   });
 
+  // A searched address or POI can resolve with no town or country (T25).
+  it('keeps a place with no subtitle across relaunches', () => {
+    const first = launch();
+    first.store.addRecent({ ...city('pier'), country: '' });
+    first.store.addRecent({ ...city('reef'), country: '  ' });
+
+    const second = launch(first.disk.getString('recents'));
+    const third = launch(second.disk.getString('recents'));
+
+    const expected = [
+      { ...city('reef'), country: '' },
+      { ...city('pier'), country: '' },
+    ];
+    expect(second.store.getRecents()).toEqual(expected);
+    expect(third.store.getRecents()).toEqual(expected);
+  });
+
   it('remembers removals and clears on the next launch', () => {
     const first = launch();
     first.store.addRecent(city('paris'));
@@ -198,7 +215,11 @@ describe('recents store: malformed data on disk', () => {
           'paris',
           { ...city('no-name'), name: undefined },
           { ...city('empty-id'), id: '' },
-          { ...city('blank-country'), country: '   ' },
+          { ...city('blank-id'), id: '  ' },
+          { ...city('blank-name'), name: '  ' },
+          { ...city('empty-country'), country: '' },
+          { ...city('no-country'), country: undefined },
+          { ...city('numeric-country'), country: 7 },
           { ...city('numeric-name'), name: 7 },
           { ...city('lat-too-high'), lat: 90.5 },
           { ...city('lat-too-low'), lat: -91 },
@@ -215,7 +236,29 @@ describe('recents store: malformed data on disk', () => {
       }),
     );
 
-    expect(store.getRecents().map((c) => c.id)).toEqual(['first', 'edge', 'last']);
+    expect(store.getRecents().map((c) => c.id)).toEqual(['first', 'empty-country', 'edge', 'last']);
+  });
+
+  it('keeps an entry with a blank subtitle, stored as empty', () => {
+    const { store, disk } = launch(
+      saved({
+        cities: [
+          { ...city('pier'), country: '' },
+          { ...city('reef'), country: ' \t ' },
+        ],
+      }),
+    );
+
+    const expected = [
+      { ...city('pier'), country: '' },
+      { ...city('reef'), country: '' },
+    ];
+    expect(store.getRecents()).toEqual(expected);
+
+    store.addRecent(city('rome'));
+    expect(JSON.parse(disk.getString('recents') ?? 'null').state).toEqual({
+      cities: [city('rome'), ...expected],
+    });
   });
 
   it('keeps the first (newest) copy of a repeated id', () => {

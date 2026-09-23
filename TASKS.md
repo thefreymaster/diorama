@@ -178,7 +178,7 @@ Acceptance: A Simulator screenshot of the stereo Viewer shows two black-surround
 Notes: NEEDS DEVICE CHECK — in the headset, do the two windows fuse, and is depth comfortable at Model size 1×? Head roll stays level inside the windows; heat and fps with two maps. iPhone 14 Pro expected: lens centers at x = 232.83 / 619.17 pt, y = 196.5 pt (386.33 pt = 64.0 mm apart); windows 229 × 187 pt at x = 118.33 / 504.67, y = 103. Each eye is a 38 × 31 mm window with black around it; points per mm from a per-model ppi table (`ViewerProfile.swift`). Baseline lowered from altitude/30 to /50: max edge disparity at 1× went 14.3 → 4.0 pt. MapKit caps pitch at 35° on maps the window's size, so each eye still draws a 661-pt map scaled ~0.465 into its window (pitch 60° kept, no GPU saving, Apple logo/Legal shrink to ~47%: relevant to T21). New `lensSpacing` prop (mm, default 64) and `onEyeLayout` event; `PerEye` centers the HUD from `useStereoEyes()`. Tip: Metro started with `CI=1` does not watch files; start it without `CI` for Simulator checks.
 
 ### T18 Barrel (lens) distortion pre-correction per eye
-Status: todo
+Status: in-progress
 Depends: T22, T24, T26
 Files: modules/diorama-native/ios/
 Details: The reference (`docs/reference/cardboard-viewer.png`) pre-distorts each eye with a barrel warp (bulged edges) so straight lines look straight through the viewer's lenses. Start from Cardboard v2 coefficients (k1 = 0.34, k2 = 0.55). The current per-eye picture is a `CAReplicatorLayer` copy with a projective `CATransform3D`, which can't bend lines, and `CAMeshTransform` is private (forbidden). Research first and pick the cheapest public path, e.g. a grid of clipped replicator tiles each with its own local projective transform (piecewise-projective approximation of the warp) vs capturing the map into a Metal texture and warping it with a mesh. Report the cost before building; drop it if fps falls below 50 with stereo and miniature on.
@@ -225,18 +225,19 @@ Acceptance: In the Simulator, `diorama://?q=1%20infinite%20loop` shows the addre
 Notes: NEEDS DEVICE CHECK — type through two or three searches at normal speed and confirm "Can't search right now" never appears (MapKit allows ~100 completer requests/min, and it takes ~60 s to recover); check the 700 m / 900 m framing in the stereo Viewer. Two searches per keystroke: cities (T05) + everything else (addresses, POIs, natural features; skipping countries, postcodes, parking/EV/ATM/restrooms). Kind: in the cities list → city; else a subtitle with a digit → place, otherwise address; refined on resolve (a POI category → place). Sections "Cities"/"Places", ordered by best title match. Addresses open at 700 m, places at 900 m; subtitle "Town, Country"; the search placeholder is "Search for a city or place". Dev route gained `open=1`. Added San Jose to `flyoverCoverage.ts`. Follow-ups: T28 (false terrain note outside the listed metros), T29 (recents drop entries with an empty subtitle). Golden Gate Bridge is filed as a street, so it opens at 700 m on a stretch of deck.
 
 ### T28 Don't claim "no 3D buildings" for places outside the curated coverage list
-Status: todo
+Status: in-progress
 Depends: T25
 Files: modules/diorama-native/src/flyoverCoverage.ts, modules/diorama-native/src/DioramaMapView.tsx, modules/diorama-native/src/DioramaMapView.types.ts, modules/diorama-native/src/__tests__/, src/screens/CityPreview/TerrainNote.tsx, src/screens/CityPreview/usePreviewMapStatus.ts, src/screens/CityPreview/__tests__/
 Details: `flyoverAvailable` comes from a hand-kept list of ~60 metros (T04; MapKit has no API for it). Now that any address can be opened (T25), a place outside the list shows "3D buildings aren't available here. Terrain only." even where Apple has 3D (T25 had to add San Jose for 1 Infinite Loop). Make coverage three-state: `yes` (inside a listed area), `no` (inside a known-flat area: Dubai and Mexico City were checked flat in T04; keep a small list), `unknown` (everything else). Show the terrain note only for `no`; show nothing for `unknown`. Update the `onReady` event type and its docs, the preview's note logic and the tests.
 Acceptance: Jest: a curated city → `yes`, no note; Dubai → `no`, note shown; a point far from every listed area → `unknown`, no note. typecheck, lint and tests pass.
 
 ### T29 Keep places with no town or country in Recent across relaunches
-Status: todo
+Status: done
 Depends: T25
 Files: src/features/cities/recentsStore.ts, src/features/cities/__tests__/recentsStore.test.ts
 Details: The recents store's persisted-data sanitiser (T03 follow-up) requires a non-empty `country`, so a resolved place whose subtitle is empty (rare, but possible for T25's addresses and POIs) silently drops out of Recent after a relaunch. Allow an empty (or whitespace) `country` and store it as an empty string; still require a non-empty `id` and `name` and valid coordinates and altitude.
 Acceptance: Jest: an entry with an empty country survives a persist → reload round-trip; malformed entries are still dropped. typecheck, lint and tests pass.
+Notes: A blank or whitespace `country` is kept and stored as `''`; `id`/`name` must still be non-blank with valid coordinates and altitude. `ListRow` and `PreviewCard` already skip an empty subtitle. NEEDS DEVICE CHECK — a Recent row with an empty subtitle shows only its name and survives a relaunch.
 
 ## Backlog (not scheduled)
 

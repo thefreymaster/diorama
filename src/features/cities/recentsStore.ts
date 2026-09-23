@@ -7,6 +7,10 @@ import { createPersistStorage } from '@/providers/storage';
 export type RecentCity = {
   id: string;
   name: string;
+  /**
+   * The line under the name: a country, or "Town, Country" for a searched
+   * place. Can be empty when MapKit knows neither; the row then shows the name only.
+   */
   country: string;
   lat: number;
   lon: number;
@@ -29,14 +33,23 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-/** True when a value read from disk can safely be drawn and reopened. */
+/** A blank subtitle becomes '', so no row draws an empty line for it. */
+function subtitle(country: string): string {
+  return country.trim() ? country : '';
+}
+
+/**
+ * True when a value read from disk can safely be drawn and reopened. The
+ * subtitle (`country`) may be blank: a place with no known town or country
+ * still reopens fine.
+ */
 function isRecentCity(value: unknown): value is RecentCity {
   if (typeof value !== 'object' || value === null) return false;
   const entry = value as Partial<Record<keyof RecentCity, unknown>>;
   return (
     isNonEmptyString(entry.id) &&
     isNonEmptyString(entry.name) &&
-    isNonEmptyString(entry.country) &&
+    typeof entry.country === 'string' &&
     isFiniteNumber(entry.lat) &&
     Math.abs(entry.lat) <= 90 &&
     isFiniteNumber(entry.lon) &&
@@ -63,7 +76,7 @@ function sanitizePersisted(persisted: unknown): RecentsState {
     if (!isRecentCity(entry) || seen.has(entry.id)) continue;
     seen.add(entry.id);
     const { id, name, country, lat, lon, altitude } = entry;
-    clean.push({ id, name, country, lat, lon, altitude });
+    clean.push({ id, name, country: subtitle(country), lat, lon, altitude });
   }
   return { cities: clean };
 }
@@ -97,7 +110,7 @@ export function getRecent(id: string): RecentCity | undefined {
 
 /** Moves the city to the top of the list, dropping the oldest past MAX_RECENTS. */
 export function addRecent({ id, name, country, lat, lon, altitude }: RecentCity): void {
-  const entry: RecentCity = { id, name, country, lat, lon, altitude };
+  const entry: RecentCity = { id, name, country: subtitle(country), lat, lon, altitude };
   useRecentsStore.setState((state) => ({
     cities: [entry, ...state.cities.filter((city) => city.id !== id)].slice(0, MAX_RECENTS),
   }));

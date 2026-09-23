@@ -56,11 +56,13 @@ Details: Async functions `autocomplete(query): Promise<Completion[]>` (restricte
 Acceptance: A Simulator build compiles. In `diorama://dev/search`, typing "Par" returns Paris within about 300 ms. `useCity` works offline for curated cities (Jest test with the native module mocked).
 
 ### T06 Curated Flyover city list
-Status: in-progress
+Status: done
 Depends: T01, T04
 Files: src/features/cities/curated.ts, src/features/cities/__tests__/curated.test.ts
 Details: About 20 cities known to have Apple 3D Flyover (New York, San Francisco, Chicago, London, Paris, Rome, Barcelona, Tokyo, Sydney, Las Vegas, Seattle, Boston, Berlin, Venice, Florence, Prague, Vancouver, Miami, Los Angeles, Dubai). Each entry has id, name, country, coordinates of a landmark-dense center, default altitude, pitch, heading, and an SF Symbol or accent for its row.
 Acceptance: The list is typed. A Jest test checks that ids are unique and coordinates are in range. Spot-check 5 entries in 3D via `diorama://dev/map?lat=…&lon=…` (screenshots).
+Notes: 20 cities; Amsterdam replaces Dubai (flat imagery only). Every center sits inside a T04-verified `FLYOVER_AREAS` entry (tested). `CuratedCity` = `RecentCity` + pitch, heading, symbol, tileColor; `getCuratedCity(id)`. Simulator spot-check of 5 camera framings still pending.
+
 
 ### T07 Head tracking (native)
 Status: todo

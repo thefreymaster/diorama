@@ -21,11 +21,61 @@ type RecentsState = {
   cities: RecentCity[];
 };
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** True when a value read from disk can safely be drawn and reopened. */
+function isRecentCity(value: unknown): value is RecentCity {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Partial<Record<keyof RecentCity, unknown>>;
+  return (
+    isNonEmptyString(entry.id) &&
+    isNonEmptyString(entry.name) &&
+    isNonEmptyString(entry.country) &&
+    isFiniteNumber(entry.lat) &&
+    Math.abs(entry.lat) <= 90 &&
+    isFiniteNumber(entry.lon) &&
+    Math.abs(entry.lon) <= 180 &&
+    // A camera altitude in meters: zero or below can't be rendered.
+    isFiniteNumber(entry.altitude) &&
+    entry.altitude > 0
+  );
+}
+
+/**
+ * Rebuilds the list from whatever was on disk: well-formed entries only,
+ * first (newest) copy of each id, at most MAX_RECENTS. Anything else is [].
+ */
+function sanitizePersisted(persisted: unknown): RecentsState {
+  const saved = typeof persisted === 'object' && persisted !== null ? persisted : {};
+  const cities = (saved as { cities?: unknown }).cities;
+  if (!Array.isArray(cities)) return { cities: [] };
+
+  const seen = new Set<string>();
+  const clean: RecentCity[] = [];
+  for (const entry of cities) {
+    if (clean.length === MAX_RECENTS) break;
+    if (!isRecentCity(entry) || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    const { id, name, country, lat, lon, altitude } = entry;
+    clean.push({ id, name, country, lat, lon, altitude });
+  }
+  return { cities: clean };
+}
+
 const useRecentsStore = create<RecentsState>()(
   persist((): RecentsState => ({ cities: [] }), {
     name: 'recents',
     version: 1,
     storage: createPersistStorage<RecentsState>(),
+    // Data saved under another version keeps its good entries instead of being dropped.
+    migrate: sanitizePersisted,
+    merge: (persisted, current) => ({ ...current, ...sanitizePersisted(persisted) }),
   }),
 );
 

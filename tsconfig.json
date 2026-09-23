@@ -6,7 +6,8 @@
     "types": ["jest"],
     "paths": {
       "@/*": ["./src/*"],
-      "@/assets/*": ["./assets/*"]
+      "@/assets/*": ["./assets/*"],
+      "@diorama/native": ["./modules/diorama-native"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]

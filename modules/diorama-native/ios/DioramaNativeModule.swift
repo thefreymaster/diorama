@@ -27,6 +27,16 @@ public class DioramaNativeModule: Module {
       Prop("orbit", false) { (view: DioramaMapView, orbit: Bool) in
         view.orbit = orbit
       }
+      Prop("headTracking", false) { (view: DioramaMapView, headTracking: Bool) in
+        view.headTracking = headTracking
+      }
+      Prop("debugLook", false) { (view: DioramaMapView, debugLook: Bool) in
+        view.debugLook = debugLook
+      }
+      Prop("trackingSensitivity", 1.0) { (view: DioramaMapView, sensitivity: Double) in
+        // Guard against nonsense; the settings screen keeps it in 0.5...2.
+        view.trackingSensitivity = sensitivity.isFinite ? min(max(sensitivity, 0), 5) : 1
+      }
 
       // Runs once after a batch of prop changes, so the camera moves once.
       OnViewDidUpdateProps { (view: DioramaMapView) in
@@ -36,6 +46,11 @@ public class DioramaNativeModule: Module {
       // `ref.recenter()` in JS. Returns a Promise; runs on the main thread.
       AsyncFunction("recenter") { (view: DioramaMapView) in
         view.recenter()
+      }
+
+      // `ref.setDebugLook(dx, dy)` in JS: fake head yaw/pitch in degrees.
+      AsyncFunction("setDebugLook") { (view: DioramaMapView, dx: Double, dy: Double) in
+        view.setDebugLook(yaw: dx, pitch: dy)
       }
     }
   }

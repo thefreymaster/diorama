@@ -2,6 +2,7 @@ export { DioramaMapView } from './DioramaMapView';
 export type {
   Coordinate,
   DioramaCameraProps,
+  DioramaHeadTrackingProps,
   DioramaMapViewProps,
   DioramaMapViewRef,
   DioramaReadyEvent,

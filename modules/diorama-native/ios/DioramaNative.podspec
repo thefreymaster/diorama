@@ -15,7 +15,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
-  s.frameworks = 'MapKit', 'QuartzCore'
+  s.frameworks = 'MapKit', 'QuartzCore', 'CoreMotion'
 
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {

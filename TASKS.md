@@ -28,17 +28,15 @@ Details: Tokens use iOS system colors via `PlatformColor` (label, secondaryLabel
 Acceptance: A dev-only route `app/dev/ui.tsx` (open with `diorama://dev/ui`; it redirects to `/` outside `__DEV__`) renders every primitive. Simulator screenshots look right in light and dark mode. Typecheck passes.
 Notes: SF Symbol wrapper is `SymbolIcon`: a component named `Symbol` shadows the global the React Compiler calls (`Symbol.for`). `GlassButton`/`GlassSurface` use Liquid Glass (expo-glass-effect) on iOS 26 with an expo-blur fallback; `Text` primitive has Dynamic Type variants. 52-pt rows / 26-pt corners match iOS 26 Settings (pixel-checked). Follow-up being fixed: large title invisible on `dev/ui`, separator insets/thickness. NEEDS DEVICE CHECK — glass reacts to touch; Reduce Motion stops skeleton pulse.
 
-
 ### T03 Providers: navigation stack, query client, stores
 Status: done
 Depends: T01
 Files: app/_layout.tsx, app/index.tsx, app/city/[cityId].tsx, app/view/[cityId].tsx, app/settings.tsx, src/providers/, src/screens/, src/features/settings/store.ts, src/features/cities/recentsStore.ts
 Details: The root `Stack` in `app/_layout.tsx` is wrapped in providers from `src/providers/`: `GestureHandlerRootView`, and a `QueryClientProvider` (staleTime 5 min). Routes: `app/index.tsx` → CityPicker, `app/city/[cityId].tsx` → CityPreview, `app/view/[cityId].tsx` → Viewer (presentation `fullScreenModal`, no header), `app/settings.tsx` → Settings. Each route file only renders its screen from `src/screens/<Name>/`; use placeholder screens for now. Native stack options: large title on the picker, `orientation: 'portrait'` by default, and landscape only on the Viewer. Zustand stores persisted with `react-native-mmkv`: settings (eyeSeparation 1.0, trackingSensitivity 1.0, miniatureIntensity 0.6, mode 'stereo', debugLook false) and recents (max 8).
 Acceptance: `diorama://settings`, `diorama://city/paris` and `diorama://view/paris` each open their placeholder in the Simulator, and swipe-back works. A Jest test shows the settings store persists and rehydrates. `npm run typecheck && npm run lint && npm test` pass.
-
-## Phase 1 — Native module (Swift)
 Notes: Deep links get the picker underneath (`unstable_settings.initialRouteName`). Viewer: `fullScreenModal`, landscape, `autoHideHomeIndicator`; hiding the status bar is left to T12 (red box while `UIViewControllerBasedStatusBarAppearance=false`). Settings store: `useSettings`, `useSetting`, setters clamp to `SETTING_RANGES` (trackingSensitivity 0.5–2, for T13 to confirm), `resetSettings`. Deep links, rotation, Done and swipe-back all checked in the Simulator. Follow-up being fixed: hairline under nav bar at rest; picker large title collapses after the Viewer closes when opened by deep link.
 
+## Phase 1 — Native module (Swift)
 
 ### T04 Expo Module skeleton + mono DioramaMapView
 Status: done
@@ -63,13 +61,13 @@ Details: About 20 cities known to have Apple 3D Flyover (New York, San Francisco
 Acceptance: The list is typed. A Jest test checks that ids are unique and coordinates are in range. Spot-check 5 entries in 3D via `diorama://dev/map?lat=…&lon=…` (screenshots).
 Notes: 20 cities; Amsterdam replaces Dubai (flat imagery only). Every center sits inside a T04-verified `FLYOVER_AREAS` entry (tested). `CuratedCity` = `RecentCity` + pitch, heading, symbol, tileColor; `getCuratedCity(id)`. Simulator spot-check of 5 camera framings still pending.
 
-
 ### T07 Head tracking (native)
-Status: todo
+Status: done
 Depends: T04
 Files: modules/diorama-native/ios/HeadTracker.swift, modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/src/, app.json, app/dev/map.tsx
 Details: `CMMotionManager.deviceMotion` at 60 Hz with `.xArbitraryCorrectedZVertical`. Convert the attitude to yaw/pitch/roll for a phone held in **landscape** in a head mount. Store a reference attitude when the viewer starts and on `recenter()`. Map yaw → camera heading offset. Map head pitch → camera pitch, clamped to the range MapKit allows, and looking down tilts you over the model. Map roll → rotate the container view with an overscanned frame. Smooth with a one-euro or low-pass filter. Drive everything from `CADisplayLink`, not the bridge. Add `debugLook` mode: a pan gesture feeds fake yaw/pitch for the Simulator (the dev map route turns it on). Add `NSMotionUsageDescription` to the app config.
 Acceptance: On a device, turning your head turns the city with no visible jitter and no drift over 2 min. In the Simulator, dragging looks around.
+Notes: NEEDS DEVICE CHECK — `npx expo run:ios --device`, open `diorama://dev/map?headTracking=1&landscape=1`: Xcode console should print `[HeadTracker] axis check OK`; in both landscape directions, head right turns right, look down tilts over the model, ear-to-shoulder stays level with no corners up to ~20°; no jitter; flat on a table 2 min, heading must not creep; Recenter; try `&sensitivity=0.5`/`2`. Pure pose math in `HeadPose.swift` (axis conventions at top), one-euro filter; yaw/pitch relative to the first-render/recenter pose, roll against gravity; props optional (default off/off/1). Overscan narrows the view (map is 1.68× screen height in landscape mono), so roll is capped at 20°. For T08: each eye needs its own rotating container, and apply both cameras only after both have loaded (terrain can shift the eyes vertically). Added the `@diorama/native` alias (tsconfig + Jest).
 
 ### T08 Stereo rendering (two eyes)
 Status: todo

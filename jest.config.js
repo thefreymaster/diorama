@@ -7,6 +7,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/assets/(.*)$': '<rootDir>/assets/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@diorama/native$': '<rootDir>/modules/diorama-native',
   },
   // Watchman can hang in sandboxed shells; the node crawler is plenty for this repo.
   watchman: false,

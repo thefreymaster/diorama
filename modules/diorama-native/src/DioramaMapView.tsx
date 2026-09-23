@@ -6,14 +6,25 @@ import { NativeDioramaMapView } from './NativeDioramaMapView';
 
 /**
  * A photoreal 3D Apple Maps view with a camera driven by props. All
- * per-frame work (orbit now; head tracking and stereo later) runs natively.
+ * per-frame work (orbit, head tracking; stereo later) runs natively.
  */
-export function DioramaMapView({ ref, onReady, orbit = false, ...props }: DioramaMapViewProps) {
+export function DioramaMapView({
+  ref,
+  onReady,
+  orbit = false,
+  headTracking = false,
+  debugLook = false,
+  trackingSensitivity = 1,
+  ...props
+}: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
 
   useImperativeHandle(ref, () => ({
     recenter: async () => {
       await nativeRef.current?.recenter();
+    },
+    setDebugLook: async (dx, dy) => {
+      await nativeRef.current?.setDebugLook(dx, dy);
     },
   }));
 
@@ -22,5 +33,15 @@ export function DioramaMapView({ ref, onReady, orbit = false, ...props }: Dioram
     onReady?.({ flyoverAvailable: hasFlyover(props.center) });
   };
 
-  return <NativeDioramaMapView {...props} ref={nativeRef} orbit={orbit} onReady={handleReady} />;
+  return (
+    <NativeDioramaMapView
+      {...props}
+      ref={nativeRef}
+      orbit={orbit}
+      headTracking={headTracking}
+      debugLook={debugLook}
+      trackingSensitivity={trackingSensitivity}
+      onReady={handleReady}
+    />
+  );
 }

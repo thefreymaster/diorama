@@ -14,7 +14,8 @@
       "infoPlist": {
         "EXDevMenuIsOnboardingFinished": true,
         "EXDevMenuShowsAtLaunch": false,
-        "EXDevMenuShowFloatingActionButton": false
+        "EXDevMenuShowFloatingActionButton": false,
+        "NSMotionUsageDescription": "Diorama uses motion to turn the city as you turn your head."
       }
     },
     "plugins": [

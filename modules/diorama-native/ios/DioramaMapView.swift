@@ -7,13 +7,17 @@ import UIKit
 // then calls `propsDidUpdate()` once per render.
 //
 // Every frame (orbit, head tracking) runs here on a display link, never
-// through JS: props + orbit + head look → one MapKit camera per frame.
-final class DioramaMapView: ExpoView, MKMapViewDelegate {
+// through JS: props + orbit + head look → a camera → StereoRig, which gives
+// each eye (one in mono, two in stereo) its own MapKit camera.
+final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady([:])` fires the JS `onReady` callback.
   // MapKit can't tell whether a place has photoreal 3D (it accepts a 3D
   // camera over flat imagery too), so the TS wrapper adds `flyoverAvailable`
   // from a curated list. See src/flyoverCoverage.ts.
   let onReady = EventDispatcher()
+  // Event prop: the phone got too hot for two maps, so stereo fell back to
+  // mono. Payload: `{ reason: "thermal" }`.
+  let onDegraded = EventDispatcher()
 
   // Camera props from JS, applied together in `propsDidUpdate()`.
   var pose = CameraPose()
@@ -22,39 +26,53 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
   var headTracking = false
   var debugLook = false
   var trackingSensitivity = 1.0
+  // Stereo props. Setting `mode` again also lifts a thermal fallback to mono.
+  var mode = ViewMode.mono {
+    didSet { isDegraded = false }
+  }
+  var eyeSeparation = 1.0
+  // Debug builds only: pretend the phone is this hot (see ThermalMonitor).
+  var debugThermalState: ProcessInfo.ThermalState?
 
   // Orbit speed: one full turn every two minutes.
   private static let orbitDegreesPerSecond = 3.0
-  // How long to wait for a clean render before firing onReady anyway.
-  private static let readyFallbackSeconds = 2.0
   // Head roll is cancelled up to this angle; past it the city tilts with you.
-  // Bigger costs more: the overscanned map is larger to draw, and MapKit
+  // Bigger costs more: the overscanned maps are larger to draw, and MapKit
   // spreads its field of view over the larger height (see
-  // overscanDistanceScale), so less of the city fits on screen.
+  // StereoRig.distanceScale), so less of the city fits on screen.
   private static let maxRollDegrees = 20.0
   // Per-frame changes smaller than this (degrees) are skipped, so a still
   // head lets MapKit finish rendering and rest.
   private static let minFrameChange = 0.01
+  // Fade from the loading cover to the city.
+  private static let revealSeconds = 0.3
 
-  // Apple's map view. Mono mode uses one; stereo (T08) adds a second eye.
-  private let mapView = MKMapView()
-  // Holds the map and turns it against head roll so the city stays level.
-  // While tracking it is larger than this view ("overscan"), so turning it
-  // never shows a corner.
-  private let rollView = UIView()
+  // The eyes (one or two MKMapViews) and their per-eye cameras.
+  private let rig = StereoRig()
+  // Black cover over a stereo view until both eyes have fully drawn, so the
+  // wearer never sees one eye ahead of the other.
+  private let loadingCover = UIView()
   private let headTracker = HeadTracker()
   private lazy var debugPan = UIPanGestureRecognizer(target: self, action: #selector(handleDebugPan(_:)))
+  private lazy var thermal = ThermalMonitor { [weak self] budget in
+    self?.thermalBudgetDidChange(budget)
+  }
   // Degrees the orbit has turned away from `pose.heading`. recenter() zeroes it.
   private var orbitOffset = 0.0
   // The latest smoothed head look; zero when not tracking.
   private var look = HeadPose.zero
   private var appliedPose: CameraPose?
-  // The camera last handed to MapKit, with orbit and look added.
+  private var appliedEyeSeparation = 1.0
+  // The camera last handed to the rig, with orbit and look added, and the
+  // head roll (degrees) its pictures were turned against so the city stays
+  // level. Roll past `maxRollDegrees` tilts the city with you.
   private var appliedCamera: CameraPose?
   private var appliedRoll = 0.0
-  // onReady fires once per center (a new place is a new load).
+  // True once the phone got too hot and stereo fell back to mono.
+  private var isDegraded = false
+  // onReady fires once every eye has drawn, per center (a new place is a
+  // new load) and per switch to stereo (both eyes load afresh).
   private var isReady = false
-  private var readyGeneration = 0
   private lazy var ticker = FrameTicker { [weak self] seconds in
     self?.tick(seconds)
   }
@@ -62,47 +80,32 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     clipsToBounds = true
-    configureMap()
-    rollView.isUserInteractionEnabled = false
-    rollView.addSubview(mapView)
-    addSubview(rollView)
+    rig.onRendered = { [weak self] in self?.eyesDidRender() }
+    addSubview(rig.view)
+    loadingCover.backgroundColor = .black
+    loadingCover.isUserInteractionEnabled = false
+    loadingCover.alpha = 0
+    addSubview(loadingCover)
     debugPan.isEnabled = false
     addGestureRecognizer(debugPan)
   }
 
-  // Photoreal 3D imagery with nothing on top: no labels, POIs, compass or
-  // scale, and no gestures (touches fall through to React Native).
-  private func configureMap() {
-    mapView.preferredConfiguration = MKImageryMapConfiguration(elevationStyle: .realistic)
-    mapView.pointOfInterestFilter = .excludingAll
-    mapView.showsCompass = false
-    mapView.showsScale = false
-    mapView.showsUserLocation = false
-    mapView.isZoomEnabled = false
-    mapView.isScrollEnabled = false
-    mapView.isRotateEnabled = false
-    mapView.isPitchEnabled = false
-    mapView.isUserInteractionEnabled = false
-    mapView.delegate = self
-  }
-
   override func layoutSubviews() {
     super.layoutSubviews()
-    let size = headTracker.isRunning ? Self.overscanSize(for: bounds.size) : bounds.size
-    // `bounds` + `center` (not `frame`) stay valid while rollView is rotated.
-    rollView.bounds = CGRect(origin: .zero, size: size)
-    rollView.center = CGPoint(x: bounds.midX, y: bounds.midY)
-    mapView.frame = rollView.bounds
-    // MapKit places its logo and Legal link inside the layout margins. Pull
-    // them in by the overscan so they stay on screen.
-    let overscanX = (size.width - bounds.width) / 2
-    let overscanY = (size.height - bounds.height) / 2
-    mapView.layoutMargins = UIEdgeInsets(top: overscanY, left: overscanX, bottom: overscanY, right: overscanX)
+    loadingCover.frame = bounds
+    layoutEyes()
   }
 
-  // Like a useEffect cleanup/setup pair: only track and tick while on screen.
+  override func safeAreaInsetsDidChange() {
+    super.safeAreaInsetsDidChange()
+    setNeedsLayout()  // MapKit's logo keeps clear of the safe area.
+  }
+
+  // Like a useEffect cleanup/setup pair: only track, tick and watch the
+  // temperature while on screen.
   override func didMoveToWindow() {
     super.didMoveToWindow()
+    if window != nil { thermal.start() } else { thermal.stop() }
     updateHeadTracking()
     updateTicker()
   }
@@ -112,18 +115,26 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
   func propsDidUpdate() {
     defer { updateTicker() }  // `orbit` or `headTracking` may have changed.
     updateHeadTracking()
-    guard appliedPose != pose else { return }
+    thermal.debugState = debugThermalState
+    fallBackToMonoIfTooHot()
+    let wasStereo = rig.isStereo
+    let newEyes = rig.setStereo(mode == .stereo && !isDegraded)
+    let separationChanged = rig.isStereo && appliedEyeSeparation != eyeSeparation
+    appliedEyeSeparation = eyeSeparation
+    if rig.isStereo != wasStereo || separationChanged { setNeedsLayout() }
+    if !rig.isStereo { updateCover(animated: false) }
+    guard appliedPose != pose || newEyes || separationChanged else { return }
     let isNewPlace = appliedPose.map { !$0.hasSameCenter(as: pose) } ?? true
     if isNewPlace {
       // New place: jump there, and wait for its tiles before orbiting and
       // firing onReady again.
-      isReady = false
-      readyGeneration += 1  // Cancels a pending fallback for the old place.
       orbitOffset = 0
-      ticker.stop()
+      rig.restartRenderTracking()
     }
+    if isNewPlace || newEyes { startLoading() }
+    layoutIfNeeded()
     // Glide when adjusting the view of the same place.
-    applyCamera(animated: !isNewPlace && !ticker.isRunning)
+    applyCamera(animated: !isNewPlace && !newEyes && !separationChanged && !ticker.isRunning)
     appliedPose = pose
   }
 
@@ -138,6 +149,16 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
   // Debug look: fake head yaw/pitch in degrees (+yaw = right, +pitch = up).
   func setDebugLook(yaw: Double, pitch: Double) {
     headTracker.setDebugLook(yaw: yaw, pitch: pitch)
+  }
+
+  // MARK: - Layout
+
+  // Sizes the eyes; overscan (room to turn against roll) only while tracking.
+  private func layoutEyes() {
+    let maxRoll = headTracker.isRunning ? Self.maxRollDegrees : 0
+    let changed = rig.layout(in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll)
+    // The cameras' distance and the eyes' warps depend on the map sizes.
+    if changed, appliedPose != nil { applyCamera(animated: false) }
   }
 
   // MARK: - Head tracking
@@ -157,9 +178,7 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
     } else {
       headTracker.stop()
       look = .zero
-      appliedRoll = 0
-      rollView.transform = .identity
-      if window != nil { applyCamera(animated: true) }  // Glide back to the props.
+      applyCamera(animated: window != nil)  // Glide back to the props, level.
     }
     setNeedsLayout()  // Overscan is only needed while tracking.
   }
@@ -168,25 +187,6 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
   @objc private func handleDebugPan(_ pan: UIPanGestureRecognizer) {
     headTracker.dragDebugLook(by: pan.translation(in: self))
     pan.setTranslation(.zero, in: self)
-  }
-
-  // Turns the map against the head's roll, so the city stays level.
-  // UIKit angles are clockwise-positive on screen, hence the minus.
-  private func applyRoll() {
-    let roll = min(max(look.roll, -Self.maxRollDegrees), Self.maxRollDegrees)
-    guard abs(roll - appliedRoll) >= Self.minFrameChange else { return }
-    appliedRoll = roll
-    rollView.transform = CGAffineTransform(rotationAngle: -roll * .pi / 180)
-  }
-
-  // The smallest size that still covers `size` when turned by up to
-  // `maxRollDegrees` either way (the bounding box of the turned screen).
-  private static func overscanSize(for size: CGSize) -> CGSize {
-    let angle = maxRollDegrees * .pi / 180
-    return CGSize(
-      width: ceil(size.width * cos(angle) + size.height * sin(angle)),
-      height: ceil(size.width * sin(angle) + size.height * cos(angle))
-    )
   }
 
   // How the interface is rotated right now (HeadPose needs it to tell up
@@ -201,26 +201,28 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
   private var liveCamera: CameraPose {
     var camera = pose.looking(look, sensitivity: trackingSensitivity)
     camera.heading = CameraPose.normalizedHeading(camera.heading + orbitOffset)
-    camera.altitude *= overscanDistanceScale
+    // MapKit's field of view spans the map's height, so a taller
+    // (overscanned) map shows the city bigger. Backing the camera off by the
+    // same ratio keeps the city exactly the size it is without overscan.
+    camera.altitude *= rig.distanceScale
     return camera
   }
 
-  // MapKit's field of view spans the map's height, so a taller (overscanned)
-  // map shows the city bigger. Backing the camera off by the same ratio keeps
-  // the city exactly the size it is without overscan.
-  private var overscanDistanceScale: Double {
-    guard bounds.height > 0, mapView.bounds.height > 0 else { return 1 }
-    return mapView.bounds.height / bounds.height
+  // The head roll to cancel, capped at `maxRollDegrees`.
+  private var liveRoll: Double {
+    min(max(look.roll, -Self.maxRollDegrees), Self.maxRollDegrees)
   }
 
   private func applyCamera(animated: Bool) {
     let camera = liveCamera
-    mapView.setCamera(camera.makeCamera(), animated: animated)
+    let roll = liveRoll
+    rig.apply(camera, roll: roll, eyeSeparation: eyeSeparation, animated: animated)
     appliedCamera = camera
+    appliedRoll = roll
   }
 
   // One display-link frame: advance the orbit, read the head, move the
-  // camera if anything visibly changed.
+  // cameras if anything visibly changed. Both eyes move in the same frame.
   private func tick(_ seconds: CFTimeInterval) {
     guard isReady else { return }
     if orbit {
@@ -229,12 +231,12 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
     }
     if headTracker.isRunning {
       look = headTracker.update(screen: screenAxes, seconds: seconds)
-      applyRoll()
     }
-    let camera = liveCamera
-    if let applied = appliedCamera, applied.isWithin(Self.minFrameChange, of: camera) { return }
-    mapView.setCamera(camera.makeCamera(), animated: false)
-    appliedCamera = camera
+    let rollMoved = abs(liveRoll - appliedRoll) >= Self.minFrameChange
+    if let applied = appliedCamera, applied.isWithin(Self.minFrameChange, of: liveCamera), !rollMoved {
+      return
+    }
+    applyCamera(animated: false)
   }
 
   // Tick while orbiting or following a head, but only once the first render
@@ -249,35 +251,65 @@ final class DioramaMapView: ExpoView, MKMapViewDelegate {
     }
   }
 
-  // MARK: - Ready event
+  // MARK: - Loading and ready
 
-  private func emitReady() {
-    guard !isReady else { return }
+  // Something new has to load: hold the ticker, and in stereo hide the eyes
+  // until they have all drawn.
+  private func startLoading() {
+    isReady = false
+    ticker.stop()
+    updateCover(animated: false)
+  }
+
+  // Every eye has drawn. MapKit stands a camera on whatever terrain (and
+  // buildings) it has loaded when the camera is set, so an eye set before
+  // its tiles arrived can sit higher or lower than the other. Setting both
+  // cameras again now that both have everything puts them level.
+  private func eyesDidRender() {
+    guard !isReady, appliedPose != nil else { return }
+    if rig.isStereo {
+      rig.forgetAppliedCameras()
+      applyCamera(animated: false)
+    }
     isReady = true
+    updateCover(animated: true)
     onReady([:])
     updateTicker()
   }
 
-  // MARK: - MKMapViewDelegate (MapKit's callbacks, like event handlers)
-
-  func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
-    if fullyRendered {
-      emitReady()
+  // The cover shows while a stereo view is loading.
+  private func updateCover(animated: Bool) {
+    let alpha: CGFloat = rig.isStereo && !isReady ? 1 : 0
+    guard loadingCover.alpha != alpha else { return }
+    guard animated else {
+      loadingCover.layer.removeAllAnimations()
+      loadingCover.alpha = alpha
       return
     }
-    // Some tiles failed (e.g. offline). Give MapKit a moment to retry, then
-    // report ready anyway so screens never wait forever.
-    readyGeneration += 1
-    let generation = readyGeneration
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.readyFallbackSeconds) { [weak self] in
-      guard let self, self.readyGeneration == generation else { return }
-      self.emitReady()
+    let options: UIView.AnimationOptions = [.curveEaseOut, .beginFromCurrentState]
+    UIView.animate(withDuration: Self.revealSeconds, delay: 0, options: options) {
+      self.loadingCover.alpha = alpha
     }
   }
 
-  // Tiles couldn't load at all (e.g. offline): don't leave screens waiting.
-  func mapViewDidFailLoadingMap(_ mapView: MKMapView, withError error: Error) {
-    emitReady()
+  // MARK: - Thermal
+
+  private func thermalBudgetDidChange(_ budget: ThermalBudget) {
+    ticker.maxFramesPerSecond = budget.maxFramesPerSecond
+    fallBackToMonoIfTooHot()
+  }
+
+  // Too hot for two maps: drop the right eye and tell JS. Stays mono until
+  // the `mode` prop is set again.
+  private func fallBackToMonoIfTooHot() {
+    guard mode == .stereo, !isDegraded, !thermal.budget.allowsStereo else { return }
+    isDegraded = true
+    if rig.isStereo {
+      rig.setStereo(false)
+      updateCover(animated: false)
+      setNeedsLayout()
+    }
+    onDegraded(["reason": "thermal"])
   }
 }
 

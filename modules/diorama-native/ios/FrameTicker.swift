@@ -13,12 +13,23 @@ final class FrameTicker {
 
   var isRunning: Bool { link != nil }
 
+  // Upper limit on frames per second (DioramaMapView drops it to 30 when
+  // the phone runs hot). Takes effect right away, even while running.
+  var maxFramesPerSecond = 60 {
+    didSet { link?.preferredFrameRateRange = frameRateRange }
+  }
+
+  private var frameRateRange: CAFrameRateRange {
+    let maximum = Float(max(maxFramesPerSecond, 30))
+    return CAFrameRateRange(minimum: 30, maximum: maximum, preferred: maximum)
+  }
+
   func start() {
     guard link == nil else { return }
     // CADisplayLink keeps a strong reference to its target, so it points at a
     // tiny proxy instead of `self`. Otherwise the ticker could never be freed.
     let link = CADisplayLink(target: DisplayLinkProxy(self), selector: #selector(DisplayLinkProxy.step))
-    link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+    link.preferredFrameRateRange = frameRateRange
     link.add(to: .main, forMode: .common)
     self.link = link
   }

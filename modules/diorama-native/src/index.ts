@@ -2,10 +2,14 @@ export { DioramaMapView } from './DioramaMapView';
 export type {
   Coordinate,
   DioramaCameraProps,
+  DioramaDegradedEvent,
   DioramaHeadTrackingProps,
   DioramaMapViewProps,
   DioramaMapViewRef,
   DioramaReadyEvent,
+  DioramaStereoProps,
+  DioramaThermalState,
+  DioramaViewMode,
 } from './DioramaMapView.types';
 export { FLYOVER_AREAS, distanceKm, hasFlyover, type FlyoverArea } from './flyoverCoverage';
 export {

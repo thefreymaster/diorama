@@ -24,7 +24,7 @@ public class DioramaNativeModule: Module {
 
     // requireNativeView('DioramaNative') in JS renders this view.
     View(DioramaMapView.self) {
-      Events("onReady")
+      Events("onReady", "onDegraded")
 
       // Each Prop is a setter, called only when that prop changes.
       Prop("center") { (view: DioramaMapView, center: Coordinate) in
@@ -53,6 +53,17 @@ public class DioramaNativeModule: Module {
         view.trackingSensitivity = sensitivity.isFinite ? min(max(sensitivity, 0), 5) : 1
       }
 
+      Prop("mode", ViewMode.mono) { (view: DioramaMapView, mode: ViewMode) in
+        view.mode = mode
+      }
+      Prop("eyeSeparation", 1.0) { (view: DioramaMapView, separation: Double) in
+        // Guard against nonsense; the settings screen keeps it in 0.3...3.
+        view.eyeSeparation = separation.isFinite ? min(max(separation, 0), 5) : 1
+      }
+      Prop("debugThermalState") { (view: DioramaMapView, state: ThermalStateName?) in
+        view.debugThermalState = state?.processInfoState
+      }
+
       // Runs once after a batch of prop changes, so the camera moves once.
       OnViewDidUpdateProps { (view: DioramaMapView) in
         view.propsDidUpdate()
@@ -67,6 +78,23 @@ public class DioramaNativeModule: Module {
       AsyncFunction("setDebugLook") { (view: DioramaMapView, dx: Double, dy: Double) in
         view.setDebugLook(yaw: dx, pitch: dy)
       }
+    }
+  }
+}
+
+// The `debugThermalState` prop's values, named like iOS's thermal states.
+enum ThermalStateName: String, Enumerable {
+  case nominal
+  case fair
+  case serious
+  case critical
+
+  var processInfoState: ProcessInfo.ThermalState {
+    switch self {
+    case .nominal: return .nominal
+    case .fair: return .fair
+    case .serious: return .serious
+    case .critical: return .critical
     }
   }
 }

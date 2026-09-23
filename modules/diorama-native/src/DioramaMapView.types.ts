@@ -11,6 +11,18 @@ export type DioramaReadyEvent = {
   flyoverAvailable: boolean;
 };
 
+/** One picture, or one per eye side by side for a head-mounted viewer. */
+export type DioramaViewMode = 'mono' | 'stereo';
+
+/** Why `onDegraded` fired. */
+export type DioramaDegradedEvent = {
+  /** `thermal`: the phone got too hot for two maps, so the view went mono. */
+  reason: 'thermal';
+};
+
+/** iOS thermal states, coolest to hottest. */
+export type DioramaThermalState = 'nominal' | 'fair' | 'serious' | 'critical';
+
 /** Methods on a `ref` to `<DioramaMapView>`. */
 export type DioramaMapViewRef = {
   /**
@@ -27,8 +39,7 @@ export type DioramaMapViewRef = {
 
 /**
  * Camera props. The native side composes these with its own live offsets
- * (orbit, head tracking; stereo eyes later), so JS never sends per-frame
- * updates.
+ * (orbit, head tracking, stereo eyes), so JS never sends per-frame updates.
  */
 export type DioramaCameraProps = {
   /** The point the camera looks at. */
@@ -65,16 +76,45 @@ export type DioramaHeadTrackingProps = {
 };
 
 /**
+ * Stereo props. Both eyes are drawn and moved natively in the same frame.
+ */
+export type DioramaStereoProps = {
+  /**
+   * `stereo` shows two eyes side by side (landscape, in a viewer), each at
+   * half width. While the eyes load the view stays black, and `onReady`
+   * waits for both. Defaults to `mono`.
+   */
+  mode?: DioramaViewMode;
+  /**
+   * "Model size": multiplies the distance between the eyes (altitude / 30
+   * at 1). Bigger reads as a smaller model. Defaults to 1.
+   */
+  eyeSeparation?: number;
+  /**
+   * The view changed on its own to cope: when the phone gets critically hot,
+   * stereo falls back to mono until `mode` is set again. (When it is merely
+   * hot, the view quietly drops to 30 frames a second.)
+   */
+  onDegraded?: (event: DioramaDegradedEvent) => void;
+  /** Dev builds only: pretend the phone is this hot (the Simulator never is). */
+  debugThermalState?: DioramaThermalState;
+};
+
+/**
  * Public props, following the `DioramaMapViewProps` contract in OVERVIEW.md.
  * Later tasks add their props here and in DioramaNativeModule.swift:
- * stereo (T08), miniature (T09).
+ * miniature (T09).
  */
 export type DioramaMapViewProps = ViewProps &
   DioramaCameraProps &
-  DioramaHeadTrackingProps & {
+  DioramaHeadTrackingProps &
+  DioramaStereoProps & {
     /** Slow auto-rotate around `center`. Starts after the first full render. */
     orbit?: boolean;
-    /** Fires after the first full render at each `center`. */
+    /**
+     * Fires once every eye has fully rendered: after the first render at each
+     * `center`, and again after switching to stereo.
+     */
     onReady?: (event: DioramaReadyEvent) => void;
     ref?: Ref<DioramaMapViewRef>;
   };

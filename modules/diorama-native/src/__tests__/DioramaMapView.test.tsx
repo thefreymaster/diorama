@@ -1,7 +1,8 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { createRef } from 'react';
 
 import { DioramaMapView, type DioramaMapViewRef } from '..';
+import { NativeDioramaMapView } from '../NativeDioramaMapView';
 
 const CAMERA = {
   center: { latitude: 40.7549, longitude: -73.984 },
@@ -33,5 +34,35 @@ describe('DioramaMapView', () => {
     expect(view.toJSON()).toMatchObject({
       props: { ...CAMERA, headTracking: true, debugLook: true, trackingSensitivity: 1.5 },
     });
+  });
+
+  it('defaults to mono at eye separation 1', () => {
+    const view = render(<DioramaMapView {...CAMERA} />);
+    expect(view.toJSON()).toMatchObject({ props: { mode: 'mono', eyeSeparation: 1 } });
+  });
+
+  it('passes stereo props to the native view', () => {
+    const view = render(
+      <DioramaMapView {...CAMERA} mode="stereo" eyeSeparation={2} debugThermalState="serious" />,
+    );
+    expect(view.toJSON()).toMatchObject({
+      props: { mode: 'stereo', eyeSeparation: 2, debugThermalState: 'serious' },
+    });
+  });
+
+  it('unwraps the native onDegraded event', () => {
+    const onDegraded = jest.fn();
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" onDegraded={onDegraded} />);
+    fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'degraded', {
+      nativeEvent: { reason: 'thermal' },
+    });
+    expect(onDegraded).toHaveBeenCalledWith({ reason: 'thermal' });
+  });
+
+  it('reports flyover coverage in onReady', () => {
+    const onReady = jest.fn();
+    const view = render(<DioramaMapView {...CAMERA} mode="stereo" onReady={onReady} />);
+    fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'ready', { nativeEvent: {} });
+    expect(onReady).toHaveBeenCalledWith({ flyoverAvailable: true });
   });
 });

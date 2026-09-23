@@ -2,7 +2,12 @@ import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Button, StyleSheet, View } from 'react-native';
 
-import { DioramaMapView, type DioramaMapViewRef } from '@diorama/native';
+import {
+  DioramaMapView,
+  type DioramaMapViewRef,
+  type DioramaThermalState,
+  type DioramaViewMode,
+} from '@diorama/native';
 import { useSetting } from '@/features/settings/store';
 
 type MapParams = {
@@ -16,6 +21,9 @@ type MapParams = {
   debugLook?: string;
   sensitivity?: string;
   landscape?: string;
+  mode?: string;
+  eyeSeparation?: string;
+  thermal?: string;
 };
 
 type ScreenOrientation = 'portrait' | 'landscape' | 'landscape_left' | 'landscape_right';
@@ -36,34 +44,51 @@ function flagParam(value: string | undefined, fallback: boolean): boolean {
   return value === undefined ? fallback : value === '1' || value === 'true';
 }
 
+function modeParam(value: string | undefined, fallback: DioramaViewMode): DioramaViewMode {
+  return value === 'mono' || value === 'stereo' ? value : fallback;
+}
+
+const THERMAL_STATES: readonly DioramaThermalState[] = ['nominal', 'fair', 'serious', 'critical'];
+
+function thermalParam(value: string | undefined): DioramaThermalState | undefined {
+  return THERMAL_STATES.find((state) => state === value);
+}
+
 // `left`/`right` pick UIKit's landscapeLeft/landscapeRight; `1` allows both.
-function orientationParam(value: string | undefined): ScreenOrientation {
+function orientationParam(value: string | undefined, fallback: boolean): ScreenOrientation {
   if (value === 'left') return 'landscape_left';
   if (value === 'right') return 'landscape_right';
-  return flagParam(value, false) ? 'landscape' : 'portrait';
+  return flagParam(value, fallback) ? 'landscape' : 'portrait';
 }
 
 /**
  * Dev-only map check:
  * diorama://dev/map?lat=&lon=&altitude=&pitch=&heading=&orbit=1
  *   &headTracking=1&debugLook=1&sensitivity=1.5&landscape=left|right|1
+ *   &mode=mono|stereo&eyeSeparation=1&thermal=serious|critical
  * "Turn" changes the heading prop from JS; "Recenter" and "Peek" call the
  * ref methods. With `headTracking=1&debugLook=1`, dragging looks around
  * (the Simulator has no gyro); on a device, drop `debugLook` to use motion.
- * `debugLook` and `sensitivity` default to the Settings values.
+ * `mode=stereo` shows two eyes (landscape unless `landscape=0`); `thermal` pretends
+ * the phone is that hot. Unset params default to the Settings values
+ * (`mode` defaults to mono here).
  */
 export default function DevMapRoute() {
   const params = useLocalSearchParams<MapParams>();
   const savedSensitivity = useSetting('trackingSensitivity');
   const savedDebugLook = useSetting('debugLook');
+  const savedEyeSeparation = useSetting('eyeSeparation');
   const mapRef = useRef<DioramaMapViewRef>(null);
   const [turn, setTurn] = useState(0);
   const [flyover, setFlyover] = useState<boolean | null>(null);
+  const [degraded, setDegraded] = useState(false);
 
   if (!__DEV__) return <Redirect href="/" />;
 
-  const title = flyover === null ? 'Loading' : flyover ? 'Flyover 3D' : 'No Flyover';
+  const loadTitle = flyover === null ? 'Loading' : flyover ? 'Flyover 3D' : 'No Flyover';
+  const title = degraded ? `${loadTitle} · Mono (hot)` : loadTitle;
   const debugLook = flagParam(params.debugLook, savedDebugLook);
+  const mode = modeParam(params.mode, 'mono');
 
   return (
     <View style={styles.fill}>
@@ -71,7 +96,7 @@ export default function DevMapRoute() {
         options={{
           title,
           headerTransparent: true,
-          orientation: orientationParam(params.landscape),
+          orientation: orientationParam(params.landscape, mode === 'stereo'),
           headerRight: () => (
             <View style={styles.actions}>
               <Button title="Turn" onPress={() => setTurn((t) => t + TURN_STEP_DEGREES)} />
@@ -100,7 +125,11 @@ export default function DevMapRoute() {
         headTracking={flagParam(params.headTracking, false)}
         debugLook={debugLook}
         trackingSensitivity={numberParam(params.sensitivity, savedSensitivity)}
+        mode={mode}
+        eyeSeparation={numberParam(params.eyeSeparation, savedEyeSeparation)}
+        debugThermalState={thermalParam(params.thermal)}
         onReady={({ flyoverAvailable }) => setFlyover(flyoverAvailable)}
+        onDegraded={() => setDegraded(true)}
       />
     </View>
   );

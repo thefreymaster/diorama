@@ -1,8 +1,18 @@
-import { FLYOVER_AREAS, distanceKm, hasFlyover } from '../flyoverCoverage';
+import {
+  FLAT_AREAS,
+  FLYOVER_AREAS,
+  distanceKm,
+  flyoverCoverageAt,
+  hasFlyover,
+} from '../flyoverCoverage';
 
 const MIDTOWN = { latitude: 40.7549, longitude: -73.984 };
 const SALINA_KS = { latitude: 38.8403, longitude: -97.6114 };
 const DUBAI = { latitude: 25.1972, longitude: 55.2744 };
+const MEXICO_CITY_ZOCALO = { latitude: 19.4326, longitude: -99.1332 };
+const REYKJAVIK = { latitude: 64.1466, longitude: -21.9426 };
+// The middle of the South Pacific, thousands of km from any listed area.
+const POINT_NEMO = { latitude: -48.8767, longitude: -123.3933 };
 
 describe('flyoverCoverage', () => {
   it('measures great-circle distance', () => {
@@ -56,13 +66,49 @@ describe('flyoverCoverage', () => {
     expect(hasFlyover(DUBAI)).toBe(false);
   });
 
-  it('has valid, unique areas', () => {
-    const names = FLYOVER_AREAS.map((area) => area.name);
+  it.each([
+    ['3D', FLYOVER_AREAS],
+    ['flat', FLAT_AREAS],
+  ])('has valid, unique %s areas', (_kind, areas) => {
+    const names = areas.map((area) => area.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const area of FLYOVER_AREAS) {
+    for (const area of areas) {
       expect(Math.abs(area.latitude)).toBeLessThanOrEqual(90);
       expect(Math.abs(area.longitude)).toBeLessThanOrEqual(180);
       expect(area.radiusKm).toBeGreaterThan(0);
     }
+  });
+
+  // Otherwise a point could be both, and the answer would depend on list order.
+  it('keeps every flat area clear of every 3D area', () => {
+    for (const flat of FLAT_AREAS) {
+      for (const area of FLYOVER_AREAS) {
+        expect(distanceKm(flat, area)).toBeGreaterThan(flat.radiusKm + area.radiusKm);
+      }
+    }
+  });
+
+  describe('flyoverCoverageAt', () => {
+    it('says yes inside a checked 3D area', () => {
+      expect(flyoverCoverageAt(MIDTOWN)).toBe('yes');
+    });
+
+    // Both were checked in the Simulator (T04) and are flat.
+    it('says no inside a checked flat area', () => {
+      expect(flyoverCoverageAt(DUBAI)).toBe('no');
+      expect(flyoverCoverageAt(MEXICO_CITY_ZOCALO)).toBe('no');
+    });
+
+    // Not listed means nobody looked, not that Apple has no 3D there.
+    it('says unknown anywhere nobody has checked', () => {
+      expect(flyoverCoverageAt(SALINA_KS)).toBe('unknown');
+      expect(flyoverCoverageAt(REYKJAVIK)).toBe('unknown');
+      expect(flyoverCoverageAt(POINT_NEMO)).toBe('unknown');
+    });
+
+    it('agrees with the lists for every area center', () => {
+      for (const area of FLYOVER_AREAS) expect(flyoverCoverageAt(area)).toBe('yes');
+      for (const area of FLAT_AREAS) expect(flyoverCoverageAt(area)).toBe('no');
+    });
   });
 });

@@ -56,7 +56,7 @@ type DioramaMapViewProps = {
   trackingSensitivity: number;
   miniatureIntensity: number; // 0..1 tilt-shift + saturation
   orbit: boolean;            // slow auto-rotate (preview screen)
-  onReady?: (e: { flyoverAvailable: boolean }) => void;
+  onReady?: (e: { coverage: 'yes' | 'no' | 'unknown' }) => void; // 3D buildings here? From hand-checked lists
 };
 // ref methods: recenter(), setDebugLook(dx, dy)
 ```

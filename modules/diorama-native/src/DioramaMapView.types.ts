@@ -6,9 +6,20 @@ export type Coordinate = {
   longitude: number;
 };
 
+/**
+ * Whether Apple shows photoreal 3D (Flyover) buildings at a place. MapKit has
+ * no API for it, so this comes from places checked by hand: `yes` inside a
+ * checked 3D area, `no` inside a checked flat one, and `unknown` everywhere
+ * else (Apple may well have 3D there; nobody has looked).
+ */
+export type FlyoverCoverage = 'yes' | 'no' | 'unknown';
+
 export type DioramaReadyEvent = {
-  /** True when Apple's photoreal 3D (Flyover) buildings are shown here. */
-  flyoverAvailable: boolean;
+  /**
+   * Photoreal 3D (Flyover) coverage at `center`. Only `no` means the view is
+   * terrain only; treat `unknown` as "probably fine" and say nothing.
+   */
+  coverage: FlyoverCoverage;
 };
 
 /** One picture, or one per eye side by side for a head-mounted viewer. */

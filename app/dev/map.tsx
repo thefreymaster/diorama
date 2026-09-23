@@ -7,6 +7,7 @@ import {
   type DioramaMapViewRef,
   type DioramaThermalState,
   type DioramaViewMode,
+  type FlyoverCoverage,
 } from '@diorama/native';
 import { useSetting } from '@/features/settings/store';
 
@@ -35,6 +36,12 @@ const MANHATTAN = { lat: 40.7549, lon: -73.984, altitude: 1200, pitch: 60, headi
 const TURN_STEP_DEGREES = 45;
 // "Peek" sets the debug look to 30° right and 20° down.
 const PEEK = { dx: 30, dy: -20 };
+// The header once the map has drawn: 3D coverage from the hand-checked lists.
+const COVERAGE_TITLES: Record<FlyoverCoverage, string> = {
+  yes: 'Flyover 3D',
+  no: 'No Flyover',
+  unknown: 'Flyover unknown',
+};
 
 function numberParam(value: string | undefined, fallback: number): number {
   const parsed = value === undefined ? NaN : Number(value);
@@ -82,12 +89,12 @@ export default function DevMapRoute() {
   const savedMiniature = useSetting('miniatureIntensity');
   const mapRef = useRef<DioramaMapViewRef>(null);
   const [turn, setTurn] = useState(0);
-  const [flyover, setFlyover] = useState<boolean | null>(null);
+  const [coverage, setCoverage] = useState<FlyoverCoverage | null>(null);
   const [degraded, setDegraded] = useState(false);
 
   if (!__DEV__) return <Redirect href="/" />;
 
-  const loadTitle = flyover === null ? 'Loading' : flyover ? 'Flyover 3D' : 'No Flyover';
+  const loadTitle = coverage === null ? 'Loading' : COVERAGE_TITLES[coverage];
   const title = degraded ? `${loadTitle} · Mono (hot)` : loadTitle;
   const debugLook = flagParam(params.debugLook, savedDebugLook);
   const mode = modeParam(params.mode, 'mono');
@@ -131,7 +138,7 @@ export default function DevMapRoute() {
         eyeSeparation={numberParam(params.eyeSeparation, savedEyeSeparation)}
         miniatureIntensity={numberParam(params.miniature, savedMiniature)}
         debugThermalState={thermalParam(params.thermal)}
-        onReady={({ flyoverAvailable }) => setFlyover(flyoverAvailable)}
+        onReady={(event) => setCoverage(event.coverage)}
         onDegraded={() => setDegraded(true)}
       />
     </View>

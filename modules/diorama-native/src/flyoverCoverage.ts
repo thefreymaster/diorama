@@ -1,22 +1,28 @@
-import type { Coordinate } from './DioramaMapView.types';
+import type { Coordinate, FlyoverCoverage } from './DioramaMapView.types';
 
-/** A place where Apple Maps shows photoreal 3D (Flyover) buildings. */
-export type FlyoverArea = {
+/** A city checked by hand in the Simulator, as a circle on the map. */
+type CheckedArea = {
   name: string;
   latitude: number;
   longitude: number;
-  /** How far from the center the 3D coverage reaches, in km. */
+  /** How far from the center what was seen (3D or flat) reaches, in km. */
   radiusKm: number;
 };
+
+/** A place where Apple Maps shows photoreal 3D (Flyover) buildings. */
+export type FlyoverArea = CheckedArea;
+
+/** A place where Apple Maps shows no 3D buildings: imagery over terrain only. */
+export type FlatArea = CheckedArea;
 
 /**
  * MapKit has no "is 3D here?" API, and it accepts a pitched camera over
  * flat imagery too, so coverage comes from this curated list. Apple covers
  * ~350 cities and publishes no list, so this one is incomplete: a missing
- * city only means the app shows its "terrain only" note there. Every entry
- * below was checked in the Simulator (Sept 2026); check a new city with
- * diorama://dev/map?lat=…&lon=… before adding it. Checked and flat (no 3D):
- * Dubai, Mexico City.
+ * city only means its coverage is `unknown`, and the app says nothing. Every
+ * entry below was checked in the Simulator (Sept 2026); check a new city with
+ * diorama://dev/map?lat=…&lon=… before adding it here (3D) or to
+ * `FLAT_AREAS` (no 3D).
  */
 export const FLYOVER_AREAS: readonly FlyoverArea[] = [
   { name: 'New York', latitude: 40.7549, longitude: -73.984, radiusKm: 30 },
@@ -84,6 +90,17 @@ export const FLYOVER_AREAS: readonly FlyoverArea[] = [
   { name: 'Auckland', latitude: -36.8485, longitude: 174.7633, radiusKm: 20 },
 ];
 
+/**
+ * Big cities checked in the Simulator (Sept 2026) and found flat: satellite
+ * imagery over terrain, no 3D buildings. Only these get the "terrain only"
+ * note, so add a city only after looking at it. Keep them clear of every
+ * `FLYOVER_AREAS` circle (a test enforces it).
+ */
+export const FLAT_AREAS: readonly FlatArea[] = [
+  { name: 'Dubai', latitude: 25.1972, longitude: 55.2744, radiusKm: 30 },
+  { name: 'Mexico City', latitude: 19.4326, longitude: -99.1332, radiusKm: 30 },
+];
+
 const EARTH_RADIUS_KM = 6371;
 
 function toRadians(degrees: number): number {
@@ -100,7 +117,21 @@ export function distanceKm(a: Coordinate, b: Coordinate): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+function isInside(point: Coordinate, areas: readonly CheckedArea[]): boolean {
+  return areas.some((area) => distanceKm(point, area) <= area.radiusKm);
+}
+
 /** True when `point` falls inside a known photoreal 3D (Flyover) area. */
 export function hasFlyover(point: Coordinate): boolean {
-  return FLYOVER_AREAS.some((area) => distanceKm(point, area) <= area.radiusKm);
+  return isInside(point, FLYOVER_AREAS);
+}
+
+/**
+ * Photoreal 3D coverage at `point`: `yes` inside a checked 3D area, `no`
+ * inside a checked flat one, `unknown` anywhere nobody has looked.
+ */
+export function flyoverCoverageAt(point: Coordinate): FlyoverCoverage {
+  if (hasFlyover(point)) return 'yes';
+  if (isInside(point, FLAT_AREAS)) return 'no';
+  return 'unknown';
 }

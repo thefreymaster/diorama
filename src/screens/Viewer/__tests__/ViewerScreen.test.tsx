@@ -144,7 +144,7 @@ async function openViewer(url = '/view/paris') {
 
 /** What the native view reports once both eyes have drawn. */
 function finishLoading() {
-  act(() => viewerMap().onReady?.({ flyoverAvailable: true }));
+  act(() => viewerMap().onReady?.({ coverage: 'yes' }));
 }
 
 function wait(ms: number) {

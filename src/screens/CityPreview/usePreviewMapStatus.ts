@@ -13,8 +13,12 @@ export function usePreviewMapStatus() {
   return {
     /** The map has drawn its first full frame. */
     isReady: ready !== null,
-    /** Only once the map has drawn: until then we don't know yet. */
-    showTerrainNote: ready?.flyoverAvailable === false,
+    /**
+     * Only once the map has drawn, and only where the place was checked and
+     * found flat. Where nobody has checked (`unknown`) Apple may well have 3D,
+     * so we say nothing rather than risk a wrong "terrain only".
+     */
+    showTerrainNote: ready?.coverage === 'no',
     onReady: setReady,
   };
 }

@@ -4,7 +4,7 @@ import { AccessibilityInfo } from 'react-native';
 import { getAnimatedStyle } from 'react-native-reanimated';
 import type { ReactTestInstance } from 'react-test-renderer';
 
-import type { DioramaMapViewProps, DioramaReadyEvent } from '@diorama/native';
+import { flyoverCoverageAt, type DioramaMapViewProps } from '@diorama/native';
 import { addRecent, clearRecents, type RecentCity } from '@/features/cities/recentsStore';
 import { queryClient } from '@/providers/queryClient';
 
@@ -41,13 +41,23 @@ const routes = {
   settings: SettingsRoute,
 };
 
-// A searched city outside Apple's 3D coverage, so it reaches the preview via Recent.
+// Searched cities (not featured), so they reach the preview via Recent.
+// Reykjavík is in no checked list: nobody knows whether Apple has 3D there.
 const REYKJAVIK: RecentCity = {
   id: 'reykjavik_64.146_-21.943',
   name: 'Reykjavík',
   country: 'Iceland',
   lat: 64.1466,
   lon: -21.9426,
+  altitude: 1500,
+};
+// Dubai was checked in the Simulator and is flat: terrain, no 3D buildings.
+const DUBAI: RecentCity = {
+  id: 'dubai_25.197_55.274',
+  name: 'Dubai',
+  country: 'United Arab Emirates',
+  lat: 25.1972,
+  lon: 55.2744,
   altitude: 1500,
 };
 
@@ -59,9 +69,12 @@ function mapProps(): DioramaMapViewProps {
   return map.props as DioramaMapViewProps;
 }
 
-/** What the native view reports once MapKit has drawn the first full frame. */
-function finishRendering(event: DioramaReadyEvent) {
-  act(() => mapProps().onReady?.(event));
+/**
+ * What the map reports once MapKit has drawn the first full frame, with the
+ * 3D coverage the real wrapper works out for the map's center.
+ */
+function finishRendering() {
+  act(() => mapProps().onReady?.({ coverage: flyoverCoverageAt(mapProps().center) }));
 }
 
 /** The native stack's header settings for one screen (react-native-screens). */
@@ -121,28 +134,41 @@ describe('city preview', () => {
     expect(header[0].props.translucent).toBe(true);
   });
 
-  it('shows the terrain note only after the map reports no 3D buildings', async () => {
-    addRecent(REYKJAVIK);
-    renderRouter(routes, { initialUrl: `/city/${REYKJAVIK.id}` });
+  it('shows the terrain note once the map has drawn a place known to be flat', async () => {
+    addRecent(DUBAI);
+    renderRouter(routes, { initialUrl: `/city/${DUBAI.id}` });
 
-    expect(await screen.findByText('Reykjavík')).toBeOnTheScreen();
-    expect(screen.getByText('Iceland')).toBeOnTheScreen();
+    expect(await screen.findByText('Dubai')).toBeOnTheScreen();
+    expect(screen.getByText('United Arab Emirates')).toBeOnTheScreen();
     expect(screen.queryByText(TERRAIN_NOTE)).toBeNull();
 
-    finishRendering({ flyoverAvailable: false });
+    finishRendering();
 
     expect(screen.getByText(TERRAIN_NOTE)).toBeOnTheScreen();
+  });
+
+  // Apple may well have 3D there, so a "terrain only" note could be wrong.
+  it('says nothing about 3D where nobody has checked', async () => {
+    addRecent(REYKJAVIK);
+    renderRouter(routes, { initialUrl: `/city/${REYKJAVIK.id}` });
+    expect(await screen.findByText('Reykjavík')).toBeOnTheScreen();
+    expect(screen.getByText('Iceland')).toBeOnTheScreen();
+
+    finishRendering();
+
+    expect(screen.queryByText(TERRAIN_NOTE)).toBeNull();
+    expect(screen.queryByTestId('terrain-note')).toBeNull();
   });
 
   it('opens the terrain note to the full height of its text', async () => {
     // Reduce Motion opens it at once, so the height can be read straight away.
     jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
-    addRecent(REYKJAVIK);
-    renderRouter(routes, { initialUrl: `/city/${REYKJAVIK.id}` });
-    await screen.findByText('Reykjavík');
+    addRecent(DUBAI);
+    renderRouter(routes, { initialUrl: `/city/${DUBAI.id}` });
+    await screen.findByText('Dubai');
     await act(async () => {});
 
-    finishRendering({ flyoverAvailable: false });
+    finishRendering();
     const text = screen.getByTestId('terrain-note-text');
     // Measured on its own: the closed note (0 tall) must not squash the text.
     expect(text).toHaveStyle({ position: 'absolute' });
@@ -157,7 +183,7 @@ describe('city preview', () => {
     renderRouter(routes, { initialUrl: '/city/paris' });
     await screen.findByTestId('city-preview-screen');
 
-    finishRendering({ flyoverAvailable: true });
+    finishRendering();
 
     expect(screen.queryByText(TERRAIN_NOTE)).toBeNull();
   });

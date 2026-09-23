@@ -8,7 +8,8 @@ import { Text } from '@/ui';
 export const TERRAIN_NOTE = "3D buildings aren't available here. Terrain only.";
 
 /**
- * The quiet "no Flyover here" line under the country. It opens up with a
+ * The quiet "no Flyover here" line under the country, shown only where the
+ * place is known to be flat (not merely unlisted). It opens up with a
  * spring, so the card grows smoothly instead of jumping (at once under
  * Reduce Motion). The inner view measures the text; the outer one shows
  * `measured height × progress` of it. The inner view is laid out on its own

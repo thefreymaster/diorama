@@ -14,9 +14,18 @@ export type {
   DioramaStereoProps,
   DioramaThermalState,
   DioramaViewMode,
+  FlyoverCoverage,
 } from './DioramaMapView.types';
 export { useStereoEyes } from './eyeLayoutStore';
-export { FLYOVER_AREAS, distanceKm, hasFlyover, type FlyoverArea } from './flyoverCoverage';
+export {
+  FLAT_AREAS,
+  FLYOVER_AREAS,
+  distanceKm,
+  flyoverCoverageAt,
+  hasFlyover,
+  type FlatArea,
+  type FlyoverArea,
+} from './flyoverCoverage';
 export {
   PLACE_ALTITUDES,
   SEARCH_SUPERSEDED,

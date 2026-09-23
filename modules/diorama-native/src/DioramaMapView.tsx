@@ -2,7 +2,7 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 
 import type { DioramaMapViewProps, DioramaMapViewRef } from './DioramaMapView.types';
 import { forgetEyeLayout, reportEyeLayout } from './eyeLayoutStore';
-import { hasFlyover } from './flyoverCoverage';
+import { flyoverCoverageAt } from './flyoverCoverage';
 import {
   NativeDioramaMapView,
   type NativeDegradedEvent,
@@ -49,9 +49,9 @@ export function DioramaMapView({
     },
   }));
 
-  // Native reports "rendered"; 3D coverage comes from the curated list.
+  // Native reports "rendered"; 3D coverage comes from the hand-checked lists.
   const handleReady = () => {
-    onReady?.({ flyoverAvailable: hasFlyover(props.center) });
+    onReady?.({ coverage: flyoverCoverageAt(props.center) });
   };
 
   const handleDegraded = ({ nativeEvent }: NativeDegradedEvent) => {

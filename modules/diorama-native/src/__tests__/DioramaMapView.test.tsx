@@ -139,10 +139,16 @@ describe('DioramaMapView', () => {
     expect(eyes.result.current).toBeNull();
   });
 
-  it('reports flyover coverage in onReady', () => {
+  it.each([
+    ['yes', 'Midtown Manhattan', CAMERA.center],
+    ['no', 'Dubai', { latitude: 25.1972, longitude: 55.2744 }],
+    ['unknown', 'Reykjavík', { latitude: 64.1466, longitude: -21.9426 }],
+  ])('reports 3D coverage "%s" for %s in onReady', (coverage, _place, center) => {
     const onReady = jest.fn();
-    const view = render(<DioramaMapView {...CAMERA} mode="stereo" onReady={onReady} />);
+    const view = render(
+      <DioramaMapView {...CAMERA} center={center} mode="stereo" onReady={onReady} />,
+    );
     fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'ready', { nativeEvent: {} });
-    expect(onReady).toHaveBeenCalledWith({ flyoverAvailable: true });
+    expect(onReady).toHaveBeenCalledWith({ coverage });
   });
 });

@@ -10,7 +10,13 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.ejf.diorama",
+      "buildNumber": "1",
+      "appleTeamId": "3U62R986E5",
+      "supportsTablet": false,
       "icon": "./assets/expo.icon",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "EXDevMenuIsOnboardingFinished": true,
         "EXDevMenuShowsAtLaunch": false,
@@ -27,7 +33,8 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#000000",
+            "image": "./assets/images/splash-icon-dark.png"
           }
         }
       ],

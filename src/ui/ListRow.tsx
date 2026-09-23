@@ -9,8 +9,16 @@ import { rowStyles } from './rowStyles';
 import { SymbolIcon } from './SymbolIcon';
 import { Text } from './Text';
 
+/** A run of characters in a row's title (JS string indices). */
+export type TitleRange = {
+  start: number;
+  length: number;
+};
+
 export type ListRowProps = {
   title: string;
+  /** Parts of the title to draw in the bolder weight, e.g. the letters a search matched. */
+  titleHighlights?: readonly TitleRange[];
   /** Second line in secondary text (e.g. a city's country). */
   subtitle?: string;
   /** Trailing value in secondary text (e.g. "1.0×"). */
@@ -28,6 +36,7 @@ export type ListRowProps = {
 /** One row of an inset-grouped list. Place inside `InsetGroupedSection`. */
 export function ListRow({
   title,
+  titleHighlights,
   subtitle,
   value,
   symbol,
@@ -45,7 +54,19 @@ export function ListRow({
       <View style={rowStyles.content}>
         <RowSeparator />
         <View style={rowStyles.text}>
-          <Text>{title}</Text>
+          <Text>
+            {titleHighlights?.length
+              ? titleRuns(title, titleHighlights).map((run, index) =>
+                  run.highlighted ? (
+                    <Text key={index} emphasized>
+                      {run.text}
+                    </Text>
+                  ) : (
+                    run.text
+                  ),
+                )
+              : title}
+          </Text>
           {subtitle ? (
             <Text variant="subheadline" color="secondaryLabel">
               {subtitle}
@@ -78,4 +99,25 @@ export function ListRow({
       {content}
     </Pressable>
   );
+}
+
+/**
+ * Splits `title` into plain and highlighted runs, in order. Ranges may be
+ * unsorted or overlap; any part outside the title is ignored.
+ */
+function titleRuns(title: string, ranges: readonly TitleRange[]) {
+  const highlighted = Array.from({ length: title.length }, () => false);
+  for (const { start, length } of ranges) {
+    for (let i = Math.max(0, start); i < Math.min(title.length, start + length); i += 1) {
+      highlighted[i] = true;
+    }
+  }
+
+  const runs: { text: string; highlighted: boolean }[] = [];
+  for (let i = 0; i < title.length; i += 1) {
+    const last = runs.at(-1);
+    if (last && last.highlighted === highlighted[i]) last.text += title[i];
+    else runs.push({ text: title[i], highlighted: highlighted[i] });
+  }
+  return runs;
 }

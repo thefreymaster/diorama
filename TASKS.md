@@ -71,7 +71,7 @@ Acceptance: On a device, turning your head turns the city with no visible jitter
 Notes: NEEDS DEVICE CHECK — `npx expo run:ios --device`, open `diorama://dev/map?headTracking=1&landscape=1`: Xcode console should print `[HeadTracker] axis check OK`; in both landscape directions, head right turns right, look down tilts over the model, ear-to-shoulder stays level with no corners up to ~20°; no jitter; flat on a table 2 min, heading must not creep; Recenter; try `&sensitivity=0.5`/`2`. Pure pose math in `HeadPose.swift` (axis conventions at top), one-euro filter; yaw/pitch relative to the first-render/recenter pose, roll against gravity; props optional (default off/off/1). Overscan narrows the view (map is 1.68× screen height in landscape mono), so roll is capped at 20°. For T08: each eye needs its own rotating container, and apply both cameras only after both have loaded (terrain can shift the eyes vertically). Added the `@diorama/native` alias (tsconfig + Jest).
 
 ### T08 Stereo rendering (two eyes)
-Status: todo
+Status: in-progress
 Depends: T07
 Files: modules/diorama-native/ios/DioramaMapView.swift, modules/diorama-native/ios/StereoRig.swift, modules/diorama-native/src/, app/dev/map.tsx
 Details: With `mode: 'stereo'`, lay out two `MKMapView`s side by side, each at half width. For each eye, move the camera center perpendicular to the current heading by ±baseline/2, where baseline = altitude / 30 × eyeSeparation. Apply a small toe-in (convergence) so the model center has zero parallax. Set both cameras in the same display-link tick. Keep the viewer hidden behind a loading state until both eyes have fully rendered. `mode: 'mono'` goes back to a single view. Watch the thermal state: at `.serious`, drop to 30 fps; at `.critical`, switch to mono and emit `onDegraded`. The dev map route accepts `mode=stereo`.
@@ -87,11 +87,12 @@ Acceptance: At 0.6 intensity the view reads as a tilt-shift photo of a model (Si
 ## Phase 2 — Screens (React)
 
 ### T10 City picker screen
-Status: todo
+Status: done
 Depends: T02, T03, T05, T06
 Files: src/screens/CityPicker/**
 Details: A native large title "Diorama" with the stack header's search bar (`headerSearchBarOptions`). When the search is empty, show a "Recent" section (if any) and a "Featured" inset-grouped list of curated cities. When searching, show results from `useCitySearch`. Tapping a search result resolves it, adds it to recents, then navigates, so `useCity` can find it offline. Row tap → haptic selection → `/city/[cityId]`. A settings gear sits top right in the header. Use skeleton rows while loading and a quiet empty state.
 Acceptance: Search, tap a result, and you land on the preview. Recents update.
+Notes: Search text lives in the URL (`?q=`), so `diorama://?q=par` opens with results; `useSeededSearchBarRef` fills the native field on first mount. Gear is a native `Stack.Toolbar` bar button (iOS 26 glass; Expo marks it experimental). Every opened city goes to Recent; a search result matching a featured city (same name, <50 km) opens the tuned featured entry. Leaving mid-resolve cancels the push. `ListRow` gained an optional `titleHighlights` prop. Simulator visual check pending (light/dark, `?q=par` bold matches, search field placement, VoiceOver "Settings").
 
 ### T11 City preview screen
 Status: todo
@@ -131,7 +132,7 @@ Details: Profile with Instruments (Core Animation FPS, GPU, Energy) on a device.
 Acceptance: 10 minutes in stereo without reaching `.critical` on an iPhone 15-class device. Record the numbers in Notes.
 
 ### T16 Tests
-Status: todo
+Status: in-progress
 Depends: T03, T05
 Files: src/**/__tests__/, jest.setup.ts
 Details: Jest is set up in T01. Add tests for the stores, query hooks (with the native module mocked), curated list integrity, and routes (each path renders its screen, using `renderRouter` from `expo-router/testing-library`). Add pure-TS tests for any math that lives in TS.

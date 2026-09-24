@@ -37,6 +37,15 @@ describe('DioramaMapView', () => {
     expect(typeof ref.current?.setDebugLook).toBe('function');
   });
 
+  it('exposes pinch to zoom on its ref: begin, set, end and reset', () => {
+    const ref = createRef<DioramaMapViewRef>();
+    render(<DioramaMapView ref={ref} {...CAMERA} headTracking />);
+    expect(typeof ref.current?.beginZoom).toBe('function');
+    expect(typeof ref.current?.setZoom).toBe('function');
+    expect(typeof ref.current?.endZoom).toBe('function');
+    expect(typeof ref.current?.resetZoom).toBe('function');
+  });
+
   it('leaves head tracking off by default', () => {
     const view = render(<DioramaMapView {...CAMERA} />);
     expect(view.toJSON()).toMatchObject({

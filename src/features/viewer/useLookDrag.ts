@@ -10,7 +10,11 @@ const PITCH_LIMIT = 90;
 
 type Look = { yaw: number; pitch: number };
 
+type Point = { dx: number; dy: number };
+
 const STRAIGHT_AHEAD: Look = { yaw: 0, pitch: 0 };
+
+const NOWHERE: Point = { dx: 0, dy: 0 };
 
 /** A one-finger drag's handlers, for the Viewer's pan gesture. */
 export type LookDrag = {
@@ -27,20 +31,43 @@ export type LookDrag = {
  * `setDebugLook`. (Natively that angle only moves a debug-look map so far;
  * on a phone it still has to be added to the motion sensors' look.)
  * `reset()` goes with every recenter, which zeroes it natively too.
+ *
+ * `isHeld` says whether a pinch has the fingers right now: while it does,
+ * the finger that started the drag moves with the pinch, so the view holds
+ * still, and once the pinch lets go the drag carries on from there.
  */
-export function useLookDrag(mapRef: RefObject<DioramaMapViewRef | null>) {
+export function useLookDrag(mapRef: RefObject<DioramaMapViewRef | null>, isHeld: () => boolean) {
   // Refs, not state: nothing on screen is drawn from them, and a drag
   // updates them many times a second.
   const look = useRef<Look>(STRAIGHT_AHEAD);
   const dragOrigin = useRef<Look>(STRAIGHT_AHEAD);
+  // Where the finger was (from where the drag began) when `dragOrigin` was taken.
+  const fingerOrigin = useRef<Point>(NOWHERE);
+  // A pinch held the drag: the next move starts it afresh from there.
+  const wasHeld = useRef(false);
 
   const handlers: LookDrag = {
     onStart: () => {
       dragOrigin.current = look.current;
+      fingerOrigin.current = NOWHERE;
+      wasHeld.current = false;
     },
     onDrag: (dx, dy) => {
-      const yaw = dragOrigin.current.yaw - dx * LOOK_DEGREES_PER_POINT;
-      const pitch = clamp(dragOrigin.current.pitch + dy * LOOK_DEGREES_PER_POINT, PITCH_LIMIT);
+      if (isHeld()) {
+        wasHeld.current = true;
+        return;
+      }
+      if (wasHeld.current) {
+        wasHeld.current = false;
+        dragOrigin.current = look.current;
+        fingerOrigin.current = { dx, dy };
+      }
+      const moved = { dx: dx - fingerOrigin.current.dx, dy: dy - fingerOrigin.current.dy };
+      const yaw = dragOrigin.current.yaw - moved.dx * LOOK_DEGREES_PER_POINT;
+      const pitch = clamp(
+        dragOrigin.current.pitch + moved.dy * LOOK_DEGREES_PER_POINT,
+        PITCH_LIMIT,
+      );
       look.current = { yaw, pitch };
       void mapRef.current?.setDebugLook(yaw, pitch);
     },
@@ -52,6 +79,8 @@ export function useLookDrag(mapRef: RefObject<DioramaMapViewRef | null>) {
     reset: () => {
       look.current = STRAIGHT_AHEAD;
       dragOrigin.current = STRAIGHT_AHEAD;
+      fingerOrigin.current = NOWHERE;
+      wasHeld.current = false;
     },
   };
 }

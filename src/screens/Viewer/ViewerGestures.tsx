@@ -3,6 +3,7 @@ import { StyleSheet, View, type AccessibilityActionEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import type { LookDrag } from '@/features/viewer/useLookDrag';
+import { ZOOM_STEP, type PinchZoom } from '@/features/viewer/usePinchZoom';
 
 /** How long to hold anywhere to leave the diorama. */
 export const EXIT_HOLD_MS = 1000;
@@ -26,10 +27,18 @@ const ACCESSIBILITY_ACTIONS = [
   { name: 'escape', label: 'Exit' },
 ];
 
+// Where a pinch zooms, the rotor offers the same a step at a time.
+const ZOOM_ACTIONS = [
+  { name: 'zoomIn', label: 'Zoom in' },
+  { name: 'zoomOut', label: 'Zoom out' },
+];
+
 type ViewerGesturesProps = {
   children: ReactNode;
   /** One finger drags to look around (held in the hand), or `null` for no drag. */
   lookDrag: LookDrag | null;
+  /** Two fingers pinch to zoom (held upright), or `null` for no pinch. */
+  pinchZoom: PinchZoom | null;
   /** A single tap anywhere, once it's clear it isn't the start of a double-tap. */
   onTap: () => void;
   onRecenter: () => void;
@@ -42,14 +51,16 @@ type ViewerGesturesProps = {
  * The whole screen is the control, since nothing can be aimed at once it's
  * worn: double-tap anywhere recenters, hold anywhere for a second to exit,
  * and a single tap (for the exit button in mono) comes last. Held in the
- * hand, one finger also drags to look around; once a drag gets going, it's
- * a drag and not a tap or a hold. The recognizers sit on this container, not
- * on a layer over the map, so the map's own drag-to-look (debug look) still
+ * hand, one finger also drags to look around, and held upright two fingers
+ * pinch to zoom, both at once if you like; once either gets going, it's
+ * not a tap or a hold. The recognizers sit on this container, not on a
+ * layer over the map, so the map's own drag-to-look (debug look) still
  * gets every drag.
  */
 export function ViewerGestures({
   children,
   lookDrag,
+  pinchZoom,
   onTap,
   onRecenter,
   onExit,
@@ -77,11 +88,24 @@ export function ViewerGestures({
     .onStart(() => lookDrag?.onStart())
     .onUpdate(({ translationX, translationY }) => lookDrag?.onDrag(translationX, translationY))
     .withTestId('viewer-look-drag');
-  // Each waits for the ones before it to fail. A double-tap never waits;
-  // a single tap waits out the double-tap window; a hold waits for both
-  // taps, which give up half a second into it, well before the second is up.
-  // A drag waits for nothing: as soon as the finger travels, it wins.
-  const gesture = Gesture.Race(drag, Gesture.Exclusive(doubleTap, tap, hold));
+  // Each update goes straight to the map; it does the moving natively.
+  const pinch = Gesture.Pinch()
+    .enabled(pinchZoom !== null)
+    .runOnJS(true)
+    .onStart(({ scale }) => pinchZoom?.onStart(scale))
+    .onUpdate(({ scale }) => pinchZoom?.onPinch(scale))
+    .onEnd(() => pinchZoom?.onEnd())
+    .withTestId('viewer-pinch');
+  // Each tap or hold waits for the ones before it to fail. A double-tap
+  // never waits; a single tap waits out the double-tap window; a hold waits
+  // for both taps, which give up half a second into it, well before the
+  // second is up. A drag or a pinch waits for nothing: as soon as the
+  // fingers travel, it wins over every tap and hold, and the two go on
+  // together (a second finger can land mid-drag and pinch).
+  const gesture = Gesture.Race(
+    Gesture.Simultaneous(drag, pinch),
+    Gesture.Exclusive(doubleTap, tap, hold),
+  );
 
   const onAccessibilityAction = ({ nativeEvent }: AccessibilityActionEvent) => {
     switch (nativeEvent.actionName) {
@@ -92,6 +116,12 @@ export function ViewerGestures({
       case 'exit':
       case 'escape':
         onExit();
+        break;
+      case 'zoomIn':
+        pinchZoom?.zoomBy(ZOOM_STEP);
+        break;
+      case 'zoomOut':
+        pinchZoom?.zoomBy(1 / ZOOM_STEP);
         break;
     }
   };
@@ -104,7 +134,9 @@ export function ViewerGestures({
         accessible
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={VIEWER_ACCESSIBILITY_HINT}
-        accessibilityActions={ACCESSIBILITY_ACTIONS}
+        accessibilityActions={
+          pinchZoom ? [...ACCESSIBILITY_ACTIONS, ...ZOOM_ACTIONS] : ACCESSIBILITY_ACTIONS
+        }
         onAccessibilityAction={onAccessibilityAction}
       >
         {children}

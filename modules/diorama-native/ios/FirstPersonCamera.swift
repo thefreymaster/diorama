@@ -18,7 +18,9 @@ import simd
 //   stays put while you look around. New camera props (another city,
 //   another framing, another Camera height) are a new place to stand, so
 //   they move it; recentering doesn't (it only makes wherever you face now
-//   "straight ahead" again). From far out MapKit won't draw a city's own
+//   "straight ahead" again). A pinch does (T37, see `Dolly` below): it
+//   slides it along the gaze, toward or away from the aim point, and the
+//   slide is kept as `shift`. From far out MapKit won't draw a city's own
 //   pitch, so DioramaMapView hands in the starting camera at the steepest
 //   pitch MapKit draws there (see `firstPersonCamera(from:)`): a higher
 //   camera stands farther forward and looks more straight down, with the
@@ -98,13 +100,17 @@ struct FirstPersonCamera {
 
   // The starting camera: props plus orbit, backed off for overscan.
   let base: CameraPose
+  // How far pinches have moved the vantage point from the starting
+  // camera's position, in meters (east, north, up). Zero until you zoom.
+  let shift: simd_double3
   // The vantage point, in meters from the model center (east, north, up).
   let eye: simd_double3
 
-  init(base: CameraPose) {
+  init(base: CameraPose, shift: simd_double3 = .zero) {
     self.base = base
+    self.shift = shift
     let axes = CameraAxes(heading: base.heading, pitch: base.pitch, roll: 0)
-    eye = -base.altitude * axes.forward
+    eye = -base.altitude * axes.forward + shift
   }
 
   // The vantage point's height above the model center's ground, in meters.
@@ -248,6 +254,131 @@ struct FirstPersonCamera {
     let northRadius = equatorRadius * (1 - eccentricitySquared) / pow(w, 1.5)
     let eastRadius = equatorRadius / sqrt(w) * cos(phi)
     return (northRadius * .pi / 180, eastRadius * .pi / 180)
+  }
+}
+
+// MARK: - Pinch to zoom (T37)
+
+// Zooming moves where you stand, not the picture: a pinch slides the
+// vantage point along a straight line toward the aim point (spreading the
+// fingers) or away from it (pinching them together), the way Apple Maps
+// zooms into whatever is in the middle of the screen. The aim point stays
+// where it is on the ground and the gaze doesn't turn, so whatever is in
+// the middle of the view stays there and grows or shrinks.
+//
+// The line is the gaze, toward the ground in the middle of the view, even
+// where MapKit leaves that in haze (from far out MapKit won't tilt up that
+// far; see DioramaMapView): moving nearer brings the city back, and
+// pinching in and out along one line undo each other exactly. Only a gaze
+// near the horizon, which meets the ground far off, or above it, which
+// never does, slides along the line `Dolly.maxPitch` under it instead
+// (15° below the horizon, where MapKit's farthest city usually is): toward
+// the ground a few heights ahead, below the middle of the view. The gaze
+// still doesn't turn, and nothing jumps as it crosses that line.
+//
+// The distance to the aim point stays within a range (300 m to 5 km, like
+// the Camera height setting; DioramaMapView also stops a pinch backing
+// away where MapKit would stop drawing the middle of the view). Past
+// either end the pinch gives way less and less, like a scroll view pulled
+// past its end, and springs back once the fingers lift. A pinch that starts outside the range (say you zoomed in
+// close, then looked straight down) doesn't jump into it: the range widens
+// to take in where it starts.
+extension FirstPersonCamera {
+  // One pinch: the line the vantage point slides along. Like a plain JS
+  // object of numbers plus a few pure functions; DioramaMapView keeps the
+  // state (how far along the line you are).
+  struct Dolly {
+    // UIScrollView's rubber-band constant: just past an end, the distance
+    // moves 0.55 times as far as the fingers ask, then less and less.
+    static let resistance = 0.55
+    // The farthest past an end a pinch can stretch: 25% nearer or farther.
+    static let maxStretch = log(1.25)
+    // How quickly a stretch springs back once the fingers lift: the gap
+    // shrinks e-fold every this many seconds (gone in about 0.4 s), with no
+    // overshoot.
+    static let settleSeconds = 0.08
+    // The shallowest line a pinch slides along, in degrees from straight
+    // down: 15° below the horizon, whose ground is 3.9 heights ahead.
+    static let maxPitch = 75.0
+
+    // The point zoomed toward, in meters from the model center (on the ground).
+    let aim: simd_double3
+    // The way from the vantage point to the aim point (unit length).
+    let direction: simd_double3
+    // Meters from the vantage point to the aim point as the pinch began.
+    let startDistance: Double
+    // Where the vantage point is with no zoom at all (a zero shift).
+    let origin: simd_double3
+    // The meters to the aim point the pinch may come to rest at.
+    let range: ClosedRange<Double>
+
+    // The line's pitch, in degrees from straight down.
+    var pitch: Double {
+      acos(min(max(-direction.z, -1), 1)) * 180 / .pi
+    }
+
+    // The same line, going back no farther than `farthest` meters from the
+    // aim point (but never nearer than where it started).
+    func limited(to farthest: Double) -> Dolly {
+      let upper = max(min(range.upperBound, farthest), range.lowerBound, startDistance)
+      return Dolly(
+        aim: aim, direction: direction, startDistance: startDistance, origin: origin,
+        range: range.lowerBound...upper)
+    }
+
+    // Meters to the aim point for a pinch `scale` (finger spread ÷ spread
+    // as the pinch began): 2 is half as far, 0.5 twice as far, with the
+    // rubber band past either end of `range`.
+    func distance(forScale scale: Double) -> Double {
+      let pinch = scale.isFinite && scale > 0 ? scale : 1
+      // In logarithms, so a stretch feels the same near and far.
+      let wanted = log(startDistance / pinch)
+      return exp(Self.rubberBand(wanted, within: log(range.lowerBound)...log(range.upperBound)))
+    }
+
+    // The vantage point's shift (see FirstPersonCamera.shift) at `distance`
+    // meters from the aim point.
+    func shift(atDistance distance: Double) -> simd_double3 {
+      aim - distance * direction - origin
+    }
+
+    // Where a stretched pinch comes to rest: back inside `range`.
+    func restingDistance(from distance: Double) -> Double {
+      min(max(distance, range.lowerBound), range.upperBound)
+    }
+
+    // One frame of springing back: `distance` after `seconds` more of
+    // easing toward `target`. Exactly `target` once within 0.1% of it.
+    static func settle(_ distance: Double, toward target: Double, seconds: Double) -> Double {
+      let gap = log(distance / target) * exp(-max(seconds, 0) / settleSeconds)
+      return abs(gap) < 0.001 ? target : target * exp(gap)
+    }
+
+    // `value` if it's within `range`; past it, only part of the way past
+    // (UIScrollView's formula), and never more than `maxStretch`.
+    static func rubberBand(_ value: Double, within range: ClosedRange<Double>) -> Double {
+      func give(_ overshoot: Double) -> Double {
+        (1 - 1 / (overshoot * resistance / maxStretch + 1)) * maxStretch
+      }
+      if value > range.upperBound { return range.upperBound + give(value - range.upperBound) }
+      if value < range.lowerBound { return range.lowerBound - give(range.lowerBound - value) }
+      return value
+    }
+  }
+
+  // A pinch from here along `gaze` (at most `Dolly.maxPitch` from straight
+  // down; see above), keeping the distance to its aim point within `range`
+  // meters, widened to take in the distance it starts at.
+  func dolly(along gaze: Gaze, range: ClosedRange<Double>) -> Dolly {
+    let line = Gaze(heading: gaze.heading, pitch: min(max(gaze.pitch, 0), Dolly.maxPitch))
+    let direction = CameraAxes(heading: line.heading, pitch: line.pitch, roll: 0).forward
+    let distance = reach(for: line)
+    return Dolly(
+      aim: eye + distance * direction,
+      direction: direction,
+      startDistance: distance,
+      origin: eye - shift,
+      range: min(range.lowerBound, distance)...max(range.upperBound, distance))
   }
 }
 

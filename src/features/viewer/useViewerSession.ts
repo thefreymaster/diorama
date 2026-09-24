@@ -8,9 +8,10 @@ import { useExitViewer } from './useExitViewer';
 import { useHeadsetCountdown } from './useHeadsetCountdown';
 import { useLookDrag } from './useLookDrag';
 import { useOnChange } from './useOnChange';
+import { usePinchZoom } from './usePinchZoom';
 import { phaseWhenReady, useViewerPhase } from './useViewerPhase';
 import { useViewerHud } from './useViewerHud';
-import { useViewerMode } from './useViewerMode';
+import { useViewerMode, useViewerOrientation } from './useViewerMode';
 import { useViewerTracking } from './useViewerTracking';
 
 /**
@@ -20,7 +21,9 @@ import { useViewerTracking } from './useViewerTracking';
  * - Upright (and sideways with the two-eye view off), one full-screen
  *   picture held like a window: once the map draws (`onReady`) it
  *   recenters and follows the phone at once, and a one-finger drag
- *   (`lookDrag`) looks around too.
+ *   (`lookDrag`) looks around too. Upright, a pinch (`pinchZoom`) moves
+ *   you nearer to or farther from what's in the middle of the view; a
+ *   recenter keeps that, and turning the phone sideways undoes it.
  * - Sideways, the headset: once both eyes draw, "Put on your viewer"
  *   counts 3, 2, 1, then it recenters and follows your head.
  *
@@ -32,10 +35,11 @@ import { useViewerTracking } from './useViewerTracking';
  *
  * `mapRef` is the screen's ref to the map. The screen hands `mode`,
  * `headTracking` and the callbacks to the map, `hud` to the HUD, and
- * `lookDrag`, `recenter` and `exit` to the gestures.
+ * `lookDrag`, `pinchZoom`, `recenter` and `exit` to the gestures.
  */
 export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   const mode = useViewerMode();
+  const orientation = useViewerOrientation();
   const inHeadset = mode === 'stereo';
   const debugLook = useSetting('debugLook');
   const { phase, setPhase } = useViewerPhase(mode);
@@ -44,7 +48,8 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   // `onDegraded`, before React renders again.
   const degraded = useRef(false);
   const { hud, showCountdown, showNotice, hide } = useViewerHud();
-  const lookDrag = useLookDrag(mapRef);
+  const pinchZoom = usePinchZoom(mapRef);
+  const lookDrag = useLookDrag(mapRef, pinchZoom.isPinching);
   const exitViewer = useExitViewer();
 
   const recenterMap = () => {
@@ -74,6 +79,18 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
 
   const headTracking = useViewerTracking(phase === 'viewing', recenterMap);
 
+  // Zooming is for the picture held upright, while it follows the phone.
+  const canPinch = orientation === 'portrait' && headTracking;
+  // A pinch cut short (the phone turned, the app left the screen) never
+  // hears its fingers lift: let go of it here.
+  useOnChange(canPinch, (can) => {
+    if (!can) pinchZoom.release();
+  });
+  // Turned sideways, back to the place's normal distance.
+  useOnChange(orientation, (turnedTo) => {
+    if (turnedTo === 'landscape') pinchZoom.reset();
+  });
+
   return {
     mode,
     hud,
@@ -85,6 +102,8 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
      * with debug look, whose own drag stands in for the phone's motion.
      */
     lookDrag: !inHeadset && headTracking && !debugLook ? lookDrag.handlers : null,
+    /** Held upright and following the phone, a pinch zooms. */
+    pinchZoom: canPinch ? pinchZoom.handlers : null,
     onReady: (event: DioramaReadyEvent) => {
       // A report from the other view is stale (the one picture finished just
       // as the phone turned sideways): the eyes on screen still have to

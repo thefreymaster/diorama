@@ -48,6 +48,18 @@ export function DioramaMapView({
     setDebugLook: async (dx, dy) => {
       await nativeRef.current?.setDebugLook(dx, dy);
     },
+    beginZoom: async () => {
+      await nativeRef.current?.beginZoom();
+    },
+    setZoom: async (scale) => {
+      await nativeRef.current?.setZoom(scale);
+    },
+    endZoom: async () => {
+      await nativeRef.current?.endZoom();
+    },
+    resetZoom: async () => {
+      await nativeRef.current?.resetZoom();
+    },
   }));
 
   // Native reports what it drew; 3D coverage comes from the hand-checked lists.

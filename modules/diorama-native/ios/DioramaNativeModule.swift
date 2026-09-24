@@ -92,6 +92,23 @@ public class DioramaNativeModule: Module {
       AsyncFunction("setDebugLook") { (view: DioramaMapView, dx: Double, dy: Double) in
         view.setDebugLook(yaw: dx, pitch: dy)
       }
+
+      // Pinch to zoom, one call per step of the gesture: `ref.beginZoom()`
+      // as it starts, `ref.setZoom(scale)` as the fingers move (the scale
+      // since it started), `ref.endZoom()` as they lift. `ref.resetZoom()`
+      // goes back to the place's normal distance. The moving runs natively.
+      AsyncFunction("beginZoom") { (view: DioramaMapView) in
+        view.beginZoom()
+      }
+      AsyncFunction("setZoom") { (view: DioramaMapView, scale: Double) in
+        view.setZoom(scale: scale)
+      }
+      AsyncFunction("endZoom") { (view: DioramaMapView) in
+        view.endZoom()
+      }
+      AsyncFunction("resetZoom") { (view: DioramaMapView) in
+        view.resetZoom()
+      }
     }
   }
 }

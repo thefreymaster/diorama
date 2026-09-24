@@ -12,6 +12,7 @@ import {
 import {
   AccessibilityInfo,
   AppState,
+  DeviceEventEmitter,
   Dimensions,
   StatusBar,
   StyleSheet,
@@ -38,6 +39,7 @@ import {
 import { COUNTDOWN_HINT, COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
 import { EXIT_BUTTON_SHOWN_MS } from '@/features/viewer/useExitButton';
 import { LOOK_DEGREES_PER_POINT } from '@/features/viewer/useLookDrag';
+import { ZOOM_STEP } from '@/features/viewer/usePinchZoom';
 import { queryClient } from '@/providers/queryClient';
 import { canUseLiquidGlass } from '@/ui/liquidGlass';
 
@@ -51,14 +53,32 @@ import { EXIT_HOLD_DRIFT, EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../Vie
 
 const mockRecenter = jest.fn(() => Promise.resolve());
 const mockSetDebugLook = jest.fn((_dx: number, _dy: number) => Promise.resolve());
+// Pinch to zoom: every call the map gets, in order ('set 2' for setZoom(2)).
+let mockZoomCalls: string[] = [];
+const mockBeginZoom = jest.fn(() => {
+  mockZoomCalls.push('begin');
+  return Promise.resolve();
+});
+const mockSetZoom = jest.fn((scale: number) => {
+  mockZoomCalls.push(`set ${scale}`);
+  return Promise.resolve();
+});
+const mockEndZoom = jest.fn(() => {
+  mockZoomCalls.push('end');
+  return Promise.resolve();
+});
+const mockResetZoom = jest.fn(() => {
+  mockZoomCalls.push('reset');
+  return Promise.resolve();
+});
 // Where the native view says each eye's window is; `null` until it has.
 let mockStereoEyes: DioramaStereoEyes | null = null;
 // Taken before each test swaps in fake timers.
 const realSetImmediate = setImmediate;
 
 // The native map becomes a plain view that keeps its props (so tests can read
-// them and play MapKit's part by calling `onReady`) and a ref with `recenter`
-// and `setDebugLook`.
+// them and play MapKit's part by calling `onReady`) and a ref with `recenter`,
+// `setDebugLook` and the zoom methods.
 jest.mock('@diorama/native', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
@@ -66,6 +86,10 @@ jest.mock('@diorama/native', () => {
     React.useImperativeHandle(ref, () => ({
       recenter: mockRecenter,
       setDebugLook: mockSetDebugLook,
+      beginZoom: mockBeginZoom,
+      setZoom: mockSetZoom,
+      endZoom: mockEndZoom,
+      resetZoom: mockResetZoom,
     }));
     return React.createElement(View, { testID: 'diorama-map', ...props });
   }
@@ -145,6 +169,8 @@ beforeEach(() => {
   holdPhone('sideways');
   mockRecenter.mockClear();
   mockSetDebugLook.mockClear();
+  mockZoomCalls = [];
+  [mockBeginZoom, mockSetZoom, mockEndZoom, mockResetZoom].forEach((mock) => mock.mockClear());
   mockImpact.mockClear();
   mockLiquidGlass.mockReturnValue(true);
   mockStereoEyes = null;
@@ -252,6 +278,12 @@ function waitsFor(testId: string): number[] {
   return refs.flatMap((ref) => (typeof ref === 'number' ? [ref] : []));
 }
 
+/** The gestures that may go on at the same time as this one, by handler tag. */
+function goesWith(testId: string): number[] {
+  const refs = getByGestureTestId(testId).config.simultaneousWith ?? [];
+  return refs.flatMap((ref) => (typeof ref === 'number' ? [ref] : []));
+}
+
 function tagOf(testId: string): number {
   return getByGestureTestId(testId).handlerTag;
 }
@@ -290,6 +322,44 @@ async function dragBy(dx: number, dy: number) {
       { state: State.END, translationX: dx, translationY: dy },
     ]),
   );
+}
+
+/**
+ * Two fingers pinched: the pinch takes hold at the first scale (finger
+ * spread ÷ spread as they landed), moves through the rest, and lifts.
+ */
+async function pinch(...scales: [number, ...number[]]) {
+  await nextGestureCallbacks();
+  const [first, ...rest] = scales;
+  act(() =>
+    fireGestureHandler(getByGestureTestId('viewer-pinch'), [
+      { state: State.BEGAN, scale: 1 },
+      { state: State.ACTIVE, scale: first },
+      ...rest.map((scale) => ({ scale })),
+      { state: State.END, scale: rest.at(-1) ?? first },
+    ]),
+  );
+}
+
+/** A pinch that takes hold and is still going (the fingers never lift). */
+async function startPinch() {
+  await nextGestureCallbacks();
+  const pinchTag = tagOf('viewer-pinch');
+  const payload = { handlerTag: pinchTag, scale: 1, focalX: 0, focalY: 0, velocity: 0 };
+  act(() => {
+    DeviceEventEmitter.emit('onGestureHandlerStateChange', {
+      ...payload,
+      numberOfPointers: 2,
+      state: State.BEGAN,
+      oldState: State.UNDETERMINED,
+    });
+    DeviceEventEmitter.emit('onGestureHandlerStateChange', {
+      ...payload,
+      numberOfPointers: 2,
+      state: State.ACTIVE,
+      oldState: State.BEGAN,
+    });
+  });
 }
 
 /** The HUD's glass (one copy: held in the hand), materialized or dissolved. */
@@ -1084,6 +1154,181 @@ describe('viewer drag to look', () => {
     await holdToExit();
     expect(router.getPathname()).toBe('/city/paris');
     await landOnPreview();
+  });
+});
+
+describe('viewer pinch to zoom', () => {
+  it('held upright, moves nearer to what is in the middle of the view, or farther', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+
+    // Spread from where the pinch took hold (1.25), so it never starts with a jump.
+    await pinch(1.25, 1.25, 2.5, 5);
+    expect(mockZoomCalls).toEqual(['begin', 'set 1', 'set 2', 'set 4', 'end']);
+
+    // Together: backs away.
+    mockZoomCalls = [];
+    await pinch(1, 0.5);
+    expect(mockZoomCalls).toEqual(['begin', 'set 0.5', 'end']);
+    // The map does all the moving: nothing else went across.
+    expect(mockSetDebugLook).not.toHaveBeenCalled();
+    expect(mockResetZoom).not.toHaveBeenCalled();
+  });
+
+  it('goes along with a drag, and never recenters, exits or shows the ✕', async () => {
+    holdPhone('upright');
+    const router = await openViewer();
+    finishLoading();
+    mockRecenter.mockClear();
+
+    // A pinch and a drag wait for nothing and go on together; the taps and
+    // the hold wait only for each other, and give way to either.
+    expect(waitsFor('viewer-pinch')).toEqual([]);
+    expect(waitsFor('viewer-look-drag')).toEqual([]);
+    expect(goesWith('viewer-pinch')).toEqual([tagOf('viewer-look-drag')]);
+    expect(goesWith('viewer-look-drag')).toEqual([tagOf('viewer-pinch')]);
+    for (const other of ['viewer-double-tap', 'viewer-tap', 'viewer-long-press']) {
+      expect(goesWith(other)).toEqual([]);
+      expect(waitsFor(other)).not.toContain(tagOf('viewer-pinch'));
+    }
+
+    await dragBy(-40, 0);
+    await pinch(1, 3);
+    wait(EXIT_HOLD_MS * 2);
+
+    expect(mockZoomCalls).toEqual(['begin', 'set 3', 'end']);
+    expect(mockSetDebugLook).toHaveBeenLastCalledWith(40 * LOOK_DEGREES_PER_POINT, 0);
+    expect(mockRecenter).not.toHaveBeenCalled();
+    expect(exitButton()).toBeNull();
+    expect(router.getPathname()).toBe('/view/paris');
+  });
+
+  it('keeps the zoom through a recenter', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+    await pinch(1, 2);
+    mockRecenter.mockClear();
+
+    await doubleTap();
+
+    expect(mockRecenter).toHaveBeenCalledTimes(1);
+    expect(mockZoomCalls).toEqual(['begin', 'set 2', 'end']);
+  });
+
+  it('only zooms once the view follows the phone', async () => {
+    holdPhone('upright');
+    await openViewer();
+
+    // Still loading.
+    await pinch(1, 2);
+    expect(mockZoomCalls).toEqual([]);
+
+    finishLoading();
+    await pinch(1, 2);
+    expect(mockZoomCalls).toEqual(['begin', 'set 2', 'end']);
+  });
+
+  it('turned sideways, goes back to the normal distance and ignores pinches in the headset', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+    await pinch(1, 2);
+    mockZoomCalls = [];
+
+    holdPhone('sideways');
+    expect(viewerMap().mode).toBe('stereo');
+    expect(mockZoomCalls).toEqual(['reset']);
+
+    // Loading, counting down, then worn: no pinch at any point.
+    await pinch(1, 2);
+    finishLoading();
+    await pinch(1, 2);
+    wait(3000);
+    expect(viewerMap().headTracking).toBe(true);
+    await pinch(1, 2);
+    expect(mockZoomCalls).toEqual(['reset']);
+
+    // Back upright, it zooms again from the normal distance.
+    holdPhone('upright');
+    await pinch(1, 0.5);
+    expect(mockZoomCalls).toEqual(['reset', 'begin', 'set 0.5', 'end']);
+  });
+
+  it('zooms upright only, with the two-eye view off too', async () => {
+    setTwoEyeLandscape(false);
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+    await pinch(1, 2);
+    mockZoomCalls = [];
+
+    // Sideways it is one picture too, but not one to zoom.
+    holdPhone('sideways');
+    expect(viewerMap()).toMatchObject({ mode: 'mono', headTracking: true });
+    expect(mockZoomCalls).toEqual(['reset']);
+    await pinch(1, 2);
+    expect(mockZoomCalls).toEqual(['reset']);
+  });
+
+  it('lets go of a pinch the app leaves mid-way', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+
+    await startPinch();
+    expect(mockZoomCalls).toEqual(['begin']);
+    setAppState('inactive');
+
+    // The fingers never lift, so the view lets go of the pinch itself.
+    expect(mockZoomCalls).toEqual(['begin', 'end']);
+    expect(mockResetZoom).not.toHaveBeenCalled();
+  });
+
+  it('leaves the zoom behind with the map on the way out, without moving it first', async () => {
+    holdPhone('upright');
+    const router = await openViewer();
+    finishLoading();
+    await pinch(1, 2);
+
+    await holdToExit();
+
+    expect(router.getPathname()).toBe('/city/paris');
+    // The Viewer's map is gone, zoom and all; the next visit starts afresh.
+    expect(screen.queryByTestId('viewer-map')).toBeNull();
+    expect(mockZoomCalls).toEqual(['begin', 'set 2', 'end']);
+    await landOnPreview();
+  });
+
+  it('lets VoiceOver zoom a step at a time, upright only', async () => {
+    holdPhone('upright');
+    await openViewer();
+    finishLoading();
+    const view = () => screen.getByTestId('viewer-screen');
+    expect(view().props.accessibilityActions).toEqual(
+      expect.arrayContaining([
+        { name: 'zoomIn', label: 'Zoom in' },
+        { name: 'zoomOut', label: 'Zoom out' },
+      ]),
+    );
+
+    fireEvent(view(), 'accessibilityAction', { nativeEvent: { actionName: 'zoomIn' } });
+    fireEvent(view(), 'accessibilityAction', { nativeEvent: { actionName: 'zoomOut' } });
+    expect(mockZoomCalls).toEqual([
+      'begin',
+      `set ${ZOOM_STEP}`,
+      'end',
+      'begin',
+      `set ${1 / ZOOM_STEP}`,
+      'end',
+    ]);
+
+    // In the headset there's nothing to zoom.
+    holdPhone('sideways');
+    const names = view().props.accessibilityActions.map(({ name }: { name: string }) => name);
+    expect(names).not.toContain('zoomIn');
+    expect(names).not.toContain('zoomOut');
   });
 });
 

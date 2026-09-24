@@ -41,6 +41,10 @@ jest.mock('@diorama/native', () => {
     React.useImperativeHandle(ref, () => ({
       recenter: () => Promise.resolve(),
       setDebugLook: () => Promise.resolve(),
+      beginZoom: () => Promise.resolve(),
+      setZoom: () => Promise.resolve(),
+      endZoom: () => Promise.resolve(),
+      resetZoom: () => Promise.resolve(),
     }));
     return React.createElement(View, { testID: 'diorama-map', ...props });
   }

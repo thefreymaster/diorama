@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import MapKit
 import UIKit
+import simd
 
 // The native side of <DioramaMapView>. Think of it as a React component
 // written in UIKit: Expo sets the "props" below (see DioramaNativeModule.swift),
@@ -12,7 +13,9 @@ import UIKit
 // (FirstPersonCamera), anywhere from straight down to straight up → MapKit's
 // camera follows the gaze as far up as MapKit draws → StereoRig, which gives
 // each eye (one in mono, two in stereo) its own MapKit camera and warps its
-// picture the rest of the way up, sky and all (T31).
+// picture the rest of the way up, sky and all (T31). Held upright, a pinch
+// moves where you stand along the gaze (T37, `beginZoom()` and friends):
+// JS sends only the pinch; the moving happens here, frame by frame.
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady(...)` fires the JS `onReady` callback.
   // Payload: `{ mode }`, the eyes that just finished drawing ("mono" or
@@ -83,6 +86,14 @@ final class DioramaMapView: ExpoView {
   private static let pitchCapMargin = 0.25
   // Fade from the loading cover to the city (stereo; mono lifts at once).
   private static let revealSeconds = 0.3
+  // Pinch to zoom: the meters from the vantage point to the aim point it
+  // may come to rest at. The same range as the Camera height setting
+  // (CAMERA_DISTANCE in src/features/map/cameraHeight.ts), in the same
+  // measure: scaled by overscan like the props' altitude (see `baseCamera`).
+  private static let zoomDistances = 300.0...5000.0
+  // While zoomed, MapKit's pitch cap is asked for once per 2% step of the
+  // vantage point's height, not every frame (see `steepestPitch(from:)`).
+  private static let zoomCapStep = log(1.02)
 
   // The eyes (one or two MKMapViews) and their per-eye cameras.
   private let rig = StereoRig()
@@ -114,6 +125,15 @@ final class DioramaMapView: ExpoView {
   private var appliedBase: CameraPose?
   private var appliedGaze: FirstPersonCamera.Gaze?
   private var appliedRoll = 0.0
+  // Pinch to zoom: how far pinches have moved the vantage point from where
+  // the props put it, in meters (east, north, up). Like a useRef: a
+  // recenter keeps it; resetZoom() (the phone turned) and new camera props
+  // drop it. Only the one picture held upright uses it (`zoomApplies`).
+  private var zoomShift = simd_double3.zero
+  // The pinch moving it, if any (including one springing back).
+  private var pinch: Pinch?
+  // The zoom shift the cameras were last set with.
+  private var appliedShift = simd_double3.zero
   // True once the phone got too hot and stereo fell back to mono.
   private var isDegraded = false
   // onReady fires once every eye has drawn, per center (a new place is a
@@ -172,6 +192,8 @@ final class DioramaMapView: ExpoView {
     let separationChanged = rig.isStereo && appliedEyeSeparation != eyeSeparation
     appliedEyeSeparation = eyeSeparation
     if rig.isStereo != wasStereo || separationChanged { setNeedsLayout() }
+    // New camera props are a new place to stand: the zoom starts over.
+    if let appliedPose, appliedPose != pose { dropZoom() }
     guard appliedPose != pose || newEyes || separationChanged else { return }
     let isNewPlace = appliedPose.map { !$0.hasSameCenter(as: pose) } ?? true
     if isNewPlace {
@@ -188,8 +210,8 @@ final class DioramaMapView: ExpoView {
   }
 
   // Back to the pose given by props: drops the orbit angle, and wherever the
-  // head faces now becomes straight ahead. You stay where you stand: the
-  // vantage point comes from the props, so only the gaze swings back.
+  // head faces now becomes straight ahead. You stay where you stand (the
+  // props' vantage point, moved by any zoom), so only the gaze swings back.
   func recenter() {
     orbitOffset = 0
     headTracker.recenter()
@@ -201,11 +223,66 @@ final class DioramaMapView: ExpoView {
     headTracker.setDebugLook(yaw: yaw, pitch: pitch)
   }
 
+  // Pinch to zoom, step 1 of 3: fingers down. Takes the line the pinch
+  // slides you along: from where you stand along the gaze, toward the
+  // ground in the middle of the view (see FirstPersonCamera.Dolly). Only
+  // while following the head, in the one picture held upright.
+  func beginZoom() {
+    guard isReady, zoomApplies, headTracker.isRunning else { return }
+    let firstPerson = firstPersonCamera(from: baseCamera)
+    guard let gaze = liveGaze(from: firstPerson) else { return }
+    let dolly = firstPerson.dolly(along: gaze, range: zoomRange)
+    pinch = Pinch(
+      dolly: dolly, distance: dolly.startDistance,
+      stopsBeforeHaze: draws(dolly, at: dolly.startDistance))
+  }
+
+  // Step 2, as the fingers move: `scale` is the finger spread ÷ the spread
+  // at beginZoom(). 2 stands half as far from the aim point, 0.5 twice as
+  // far, rubber-banded past the ends of `zoomDistances`.
+  func setZoom(scale: Double) {
+    guard var pinch, !pinch.isReleased, zoomApplies else { return }
+    var distance = pinch.dolly.distance(forScale: scale)
+    // Backing away, MapKit tilts up less and less (see steepestDrawnPitch)
+    // until it no longer draws the middle of the view, which would then
+    // fade into haze. Where it last drew it is as far back as this pinch
+    // goes: past it the pinch stretches, as at any other end, and springs
+    // back. (A pinch that starts in haze, looking up, has no such stop.)
+    if pinch.stopsBeforeHaze, distance > pinch.distance, !draws(pinch.dolly, at: distance) {
+      pinch.stopsBeforeHaze = false
+      pinch.dolly = pinch.dolly.limited(to: pinch.distance)
+      distance = pinch.dolly.distance(forScale: scale)
+    }
+    pinch.distance = distance
+    self.pinch = pinch
+    zoomShift = pinch.dolly.shift(atDistance: pinch.distance)
+    zoomDidChange()
+  }
+
+  // Step 3, fingers up: a pinch stretched past either end springs back.
+  func endZoom() {
+    guard var pinch, !pinch.isReleased else { return }
+    pinch.isReleased = true
+    self.pinch = pinch
+    updateTicker()  // Springs back frame by frame on the display link,
+    if !ticker.isRunning { settleZoom(seconds: .infinity) }  // or at once without one.
+  }
+
+  // Back to the props' vantage point, the place's normal distance (JS
+  // calls it when the phone turns sideways).
+  func resetZoom() {
+    let wasZoomed = zoomShift != .zero
+    dropZoom()
+    if wasZoomed, appliedPose != nil { applyCamera(animated: !ticker.isRunning) }
+  }
+
   // MARK: - Layout
 
-  // Sizes the eyes; overscan (room to turn against roll) only while tracking.
+  // Sizes the eyes; overscan (room to turn against roll) only while tracking,
+  // or zoomed (a zoom lasts while tracking pauses, and a map that changes
+  // size moves the camera it's zoomed from).
   private func layoutEyes() {
-    let maxRoll = headTracker.isRunning ? Self.maxMonoRollDegrees : 0
+    let maxRoll = headTracker.isRunning || isZoomed ? Self.maxMonoRollDegrees : 0
     let profile = viewerProfile
     let changed = rig.layout(
       in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: profile)
@@ -309,26 +386,39 @@ final class DioramaMapView: ExpoView {
     return camera
   }
 
-  // You stand where the base camera is. From far out (a high Camera height)
-  // MapKit won't tilt as steeply as the props ask, so while tracking you
-  // start from the steepest pitch it draws there, still looking at the model
+  // You stand where the base camera is, until a pinch moves you from there
+  // (`liveZoomShift`). From far out (a high Camera height) MapKit won't tilt
+  // as steeply as the props ask, so while tracking (or zoomed) you start
+  // from the steepest pitch it draws there, still looking at the model
   // center: the city stays in the middle and you look more straight down.
   // (Standing at the props' pitch instead, the gaze could only tilt as far
   // as MapKit draws, and it would land short of the city.)
   private func firstPersonCamera(from base: CameraPose) -> FirstPersonCamera {
     var start = base
-    if headTracker.isRunning, let steepest = rig.steepestPitch(lookingAt: base) {
+    if headTracker.isRunning || isZoomed, let steepest = rig.steepestPitch(lookingAt: base) {
       start.pitch = min(start.pitch, steepest)
     }
-    return FirstPersonCamera(base: start)
+    return FirstPersonCamera(base: start, shift: liveZoomShift)
   }
 
   // Where the head looks this frame, turned from the base camera's gaze, or
   // nil when not tracking: anywhere from straight down to straight up, and
-  // round and round.
+  // round and round. Zoomed in, you stay where the pinch took you while
+  // tracking pauses (the app in the background), looking straight ahead.
   private func liveGaze(from firstPerson: FirstPersonCamera) -> FirstPersonCamera.Gaze? {
-    guard headTracker.isRunning else { return nil }
+    guard headTracker.isRunning else { return isZoomed ? firstPerson.restingGaze : nil }
     return firstPerson.gaze(for: look, gain: lookGain * trackingSensitivity)
+  }
+
+  // MapKit's camera looks along the gaze, but no steeper than it draws.
+  private func drawnGaze(
+    _ gaze: FirstPersonCamera.Gaze, from firstPerson: FirstPersonCamera, baseline: Double,
+    roll: Double
+  ) -> FirstPersonCamera.Gaze {
+    var drawn = gaze
+    drawn.pitch = min(
+      gaze.pitch, steepestDrawnPitch(from: firstPerson, baseline: baseline, roll: roll))
+    return drawn
   }
 
   // The steepest pitch MapKit's camera takes from `firstPerson`'s vantage
@@ -342,7 +432,7 @@ final class DioramaMapView: ExpoView {
     from firstPerson: FirstPersonCamera, baseline: Double, roll: Double
   ) -> Double {
     let start = firstPerson.base.pitch
-    let steepest = rig.steepestPitch(from: firstPerson) ?? start
+    let steepest = steepestPitch(from: firstPerson) ?? start
     let upper = max(steepest - Self.pitchCapMargin, min(start, steepest))
     guard rig.isStereo else { return upper }
     // A rolled head puts one eye lower than the other, and the lower eye
@@ -353,6 +443,21 @@ final class DioramaMapView: ExpoView {
     return max(upper - atan(lift) * 180 / .pi, CameraPose.pitchRange.lowerBound)
   }
 
+  // The steepest pitch MapKit draws from `firstPerson`'s vantage point.
+  // StereoRig asks MapKit (a dozen trial cameras) whenever the vantage point
+  // changes, which a pinch does every frame. So while zoomed it asks from
+  // the top of the vantage point's 2% step of height (`zoomCapStep`), which
+  // changes only now and then. MapKit's cap only comes down as the camera
+  // backs off, so what it draws from a little higher it draws from here.
+  private func steepestPitch(from firstPerson: FirstPersonCamera) -> Double? {
+    guard firstPerson.shift != .zero else { return rig.steepestPitch(from: firstPerson) }
+    let height = max(firstPerson.eyeHeight, 1)
+    let top = exp((log(height) / Self.zoomCapStep).rounded(.up) * Self.zoomCapStep)
+    let raised = FirstPersonCamera(
+      base: firstPerson.base, shift: firstPerson.shift + simd_double3(0, 0, max(top - height, 0)))
+    return rig.steepestPitch(from: raised)
+  }
+
   // The head roll to cancel: all of it in stereo, up to
   // `maxMonoRollDegrees` in mono.
   private var liveRoll: Double {
@@ -360,26 +465,28 @@ final class DioramaMapView: ExpoView {
     return min(max(look.roll, -Self.maxMonoRollDegrees), Self.maxMonoRollDegrees)
   }
 
+  // The eyes' spacing follows the base camera's distance from the model
+  // center (fixed while you stand still), not how far away you look.
+  private func baseline(for base: CameraPose) -> Double {
+    StereoGeometry.baseline(distance: base.altitude, eyeSeparation: eyeSeparation)
+  }
+
   private func applyCamera(animated: Bool) {
     let base = baseCamera
     let firstPerson = firstPersonCamera(from: base)
     let gaze = liveGaze(from: firstPerson)
     let roll = liveRoll
-    // The eyes' spacing follows the base camera's distance from the model
-    // center (fixed while you stand still), not how far away you look.
-    let baseline = StereoGeometry.baseline(distance: base.altitude, eyeSeparation: eyeSeparation)
+    let baseline = baseline(for: base)
     var camera = base
     if let gaze {
-      // MapKit looks along the gaze, but no steeper than it draws.
-      var drawn = gaze
-      drawn.pitch = min(
-        gaze.pitch, steepestDrawnPitch(from: firstPerson, baseline: baseline, roll: roll))
-      camera = firstPerson.camera(for: drawn)
+      camera = firstPerson.camera(
+        for: drawnGaze(gaze, from: firstPerson, baseline: baseline, roll: roll))
     }
     rig.apply(camera, lookPitch: gaze?.pitch, roll: roll, baseline: baseline, animated: animated)
     appliedBase = base
     appliedGaze = gaze
     appliedRoll = roll
+    appliedShift = firstPerson.shift
   }
 
   // One display-link frame: advance the orbit, read the head, move the
@@ -394,12 +501,14 @@ final class DioramaMapView: ExpoView {
     if headTracker.isRunning {
       look = headTracker.update(screen: screenAxes, seconds: seconds)
     }
+    settleZoom(seconds: seconds)
     let base = baseCamera
     let gaze = liveGaze(from: firstPersonCamera(from: base))
     let baseMoved = appliedBase.map { !$0.isWithin(Self.minFrameChange, of: base) } ?? true
     let gazeMoved = !Self.isWithin(Self.minFrameChange, gaze, appliedGaze)
     let rollMoved = abs(liveRoll - appliedRoll) >= Self.minFrameChange
-    guard baseMoved || gazeMoved || rollMoved else { return }
+    let zoomMoved = appliedShift != liveZoomShift
+    guard baseMoved || gazeMoved || rollMoved || zoomMoved else { return }
     applyCamera(animated: false)
   }
 
@@ -416,11 +525,75 @@ final class DioramaMapView: ExpoView {
   // "finished". Head tracking takes its reference on the first tick, so
   // "straight ahead" is wherever you face when the city appears.
   private func updateTicker() {
-    if window != nil && isReady && (orbit || headTracker.canLook) {
+    if window != nil && isReady && (orbit || headTracker.canLook || isSettlingZoom) {
       ticker.start()
     } else {
       ticker.stop()
     }
+  }
+
+  // MARK: - Pinch to zoom
+
+  // A zoom belongs to the one picture held upright. The headset (even when
+  // too hot for two eyes) and a sideways view ignore it, so a turn of the
+  // phone never shows a zoom made for another shape of screen.
+  private var zoomApplies: Bool {
+    mode == .mono && bounds.height > bounds.width
+  }
+
+  // The zoom the cameras use now.
+  private var liveZoomShift: simd_double3 { zoomApplies ? zoomShift : .zero }
+
+  private var isZoomed: Bool { liveZoomShift != .zero }
+
+  // True while a released pinch springs back inside its range.
+  private var isSettlingZoom: Bool { pinch?.isReleased == true }
+
+  // The meters to the aim point a pinch may come to rest at, in the
+  // cameras' own measure (see `zoomDistances`).
+  private var zoomRange: ClosedRange<Double> {
+    let scale = rig.distanceScale
+    return (Self.zoomDistances.lowerBound * scale)...(Self.zoomDistances.upperBound * scale)
+  }
+
+  // The zoom moved: the next frame shows it, together with the head. If
+  // nothing ticks (the Simulator has no motion), it shows now.
+  private func zoomDidChange() {
+    if !ticker.isRunning { applyCamera(animated: false) }
+  }
+
+  // One frame of a released pinch springing back inside its range; then
+  // the pinch is over.
+  private func settleZoom(seconds: Double) {
+    guard var pinch, pinch.isReleased else { return }
+    let target = pinch.dolly.restingDistance(from: pinch.distance)
+    pinch.distance = FirstPersonCamera.Dolly.settle(pinch.distance, toward: target, seconds: seconds)
+    zoomShift = pinch.dolly.shift(atDistance: pinch.distance)
+    guard pinch.distance == target else {
+      self.pinch = pinch
+      zoomDidChange()
+      return
+    }
+    self.pinch = nil
+    zoomDidChange()
+    updateTicker()  // Nothing left to spring: tick only if something else needs it.
+  }
+
+  // True when MapKit draws the pinch's line of sight itself from `distance`
+  // meters along it (rather than leaving it to the warp and the haze).
+  private func draws(_ dolly: FirstPersonCamera.Dolly, at distance: Double) -> Bool {
+    let base = firstPersonCamera(from: baseCamera).base
+    let there = FirstPersonCamera(base: base, shift: dolly.shift(atDistance: distance))
+    guard let steepest = steepestPitch(from: there) else { return true }
+    return steepest >= dolly.pitch - 0.01
+  }
+
+  // Forgets the zoom (and any pinch) without moving the cameras.
+  private func dropZoom() {
+    pinch = nil
+    guard zoomShift != .zero else { return }
+    zoomShift = .zero
+    setNeedsLayout()  // Overscan for roll only while tracking now.
   }
 
   // MARK: - Loading and ready
@@ -496,3 +669,14 @@ final class DioramaMapView: ExpoView {
   }
 }
 
+// One pinch (T37): the line it slides the vantage point along, how far along
+// it you are (meters from the aim point), whether it still has to find
+// where MapKit stops drawing the middle of the view (see setZoom), and
+// whether the fingers have lifted (it then springs back inside its range,
+// if stretched past it).
+private struct Pinch {
+  var dolly: FirstPersonCamera.Dolly
+  var distance: Double
+  var stopsBeforeHaze: Bool
+  var isReleased = false
+}

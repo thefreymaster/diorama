@@ -77,6 +77,29 @@ export type DioramaMapViewRef = {
    * otherwise it adds to the motion look. `recenter()` zeroes it.
    */
   setDebugLook: (dx: number, dy: number) => Promise<void>;
+  /**
+   * Pinch to zoom, as a pinch starts. Zooming moves where you stand, not
+   * the picture: `setZoom` slides you along the gaze toward (or away from)
+   * the point in the middle of the view, and the way you face never
+   * changes. (Looking near the horizon or at the sky, it zooms along a
+   * line 15° below the horizon instead, toward the city ahead.) Only in
+   * `mono`, upright (taller than wide), with `headTracking` on; otherwise
+   * the zoom calls do nothing.
+   * `recenter()` keeps the zoom; new camera props and `resetZoom()` drop it.
+   */
+  beginZoom: () => Promise<void>;
+  /**
+   * The pinch's scale since `beginZoom()` (finger spread ÷ spread then):
+   * 2 stands half as far from that point, 0.5 twice as far. The distance
+   * stays between 300 m and 5 km (like the Camera height setting),
+   * stretching a little past either end while the fingers are down.
+   * Call once per gesture update; the moving itself runs natively.
+   */
+  setZoom: (scale: number) => Promise<void>;
+  /** The pinch ended: a stretch past either end springs back. */
+  endZoom: () => Promise<void>;
+  /** Back to the place's normal distance (where the camera props put you). */
+  resetZoom: () => Promise<void>;
 };
 
 /**

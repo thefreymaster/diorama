@@ -36,6 +36,7 @@ export function ViewerScreen() {
     <View style={styles.fill}>
       <ViewerGestures
         lookDrag={viewer.lookDrag}
+        pinchZoom={viewer.pinchZoom}
         onTap={exitButton.reveal}
         onRecenter={viewer.recenter}
         onExit={viewer.exit}

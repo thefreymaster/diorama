@@ -59,7 +59,7 @@ type DioramaMapViewProps = {
   orbit: boolean;            // slow auto-rotate (preview screen)
   onReady?: (e: { coverage: 'yes' | 'no' | 'unknown' }) => void; // 3D buildings here? From hand-checked lists
 };
-// ref methods: recenter(), setDebugLook(dx, dy)
+// ref methods: recenter(), setDebugLook(dx, dy), beginZoom(), setZoom(scale), endZoom(), resetZoom() (portrait pinch)
 ```
 
 ### Folder layout (target)

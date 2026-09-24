@@ -15,7 +15,9 @@ import simd
 // each eye (one in mono, two in stereo) its own MapKit camera and warps its
 // picture the rest of the way up, sky and all (T31). Held upright, a pinch
 // moves where you stand along the gaze (T37, `beginZoom()` and friends):
-// JS sends only the pinch; the moving happens here, frame by frame.
+// JS sends only the pinch; the moving happens here, frame by frame. In live
+// mode (T40, `followTo()`), JS sends a GPS fix now and then and the model
+// center glides there, taking you, your zoom and your gaze along with it.
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady(...)` fires the JS `onReady` callback.
   // Payload: `{ mode }`, the eyes that just finished drawing ("mono" or
@@ -64,6 +66,10 @@ final class DioramaMapView: ExpoView {
         (eye.overlay as? MiniatureOverlay)?.intensity = miniatureIntensity
       }
     }
+  }
+  // Apple's blue location dot, in every eye (T40, live mode).
+  var showsUserLocation = false {
+    didSet { rig.showsUserLocation = showsUserLocation }
   }
 
   // Orbit speed: one full turn every two minutes.
@@ -134,6 +140,12 @@ final class DioramaMapView: ExpoView {
   private var pinch: Pinch?
   // The zoom shift the cameras were last set with.
   private var appliedShift = simd_double3.zero
+  // Live mode (T40): how far the model center has glided from the `center`
+  // prop toward the latest GPS fix (see FirstPersonCamera.Glide). Like a
+  // useRef: recenter and zoom keep it; a new place (new `center`) drops it.
+  private var glide = FirstPersonCamera.Glide()
+  // How long this glide takes: quicker under Reduce Motion.
+  private var glideSeconds = FirstPersonCamera.Glide.seconds
   // True once the phone got too hot and stereo fell back to mono.
   private var isDegraded = false
   // onReady fires once every eye has drawn, per center (a new place is a
@@ -198,8 +210,9 @@ final class DioramaMapView: ExpoView {
     let isNewPlace = appliedPose.map { !$0.hasSameCenter(as: pose) } ?? true
     if isNewPlace {
       // New place: jump there, and wait for its tiles before orbiting and
-      // firing onReady again.
+      // firing onReady again. Any live glide belonged to the old one.
       orbitOffset = 0
+      glide = FirstPersonCamera.Glide()
       rig.restartRenderTracking()
     }
     if isNewPlace || newEyes { startLoading() }
@@ -274,6 +287,29 @@ final class DioramaMapView: ExpoView {
     let wasZoomed = zoomShift != .zero
     dropZoom()
     if wasZoomed, appliedPose != nil { applyCamera(animated: !ticker.isRunning) }
+  }
+
+  // Live mode (T40): you're now at this spot. The model center, and with it
+  // where you stand, glides there on the display link, both eyes in the
+  // same frame: at your own pace while fixes keep coming, else over about a
+  // second (see FirstPersonCamera.Glide); under Reduce Motion, a quick
+  // quarter-second glide to each fix. Unlike a new `center` prop, it isn't
+  // a new place: no loading cover, no onReady, and the head look, zoom,
+  // orbit angle and eye spacing all stay.
+  func followTo(latitude: Double, longitude: Double) {
+    let spot = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    guard appliedPose != nil, CLLocationCoordinate2DIsValid(spot) else { return }
+    let reduceMotion = UIAccessibility.isReduceMotionEnabled
+    glide.head(
+      to: FirstPersonCamera.offset(of: spot, from: pose.center), at: CACurrentMediaTime(),
+      smooth: !reduceMotion)
+    glideSeconds =
+      reduceMotion ? FirstPersonCamera.Glide.reducedMotionSeconds : FirstPersonCamera.Glide.seconds
+    updateTicker()
+    guard !ticker.isRunning else { return }  // The next frames glide.
+    // Nothing on screen to glide (still loading, or not in a window): go now.
+    glide.arrive()
+    applyCamera(animated: false)
   }
 
   // MARK: - Layout
@@ -373,11 +409,15 @@ final class DioramaMapView: ExpoView {
 
   // MARK: - Camera
 
-  // This frame's base camera: the props turned by the orbit. With head
-  // tracking it's where you stand (FirstPersonCamera's vantage point), so
-  // it's the view with the head straight ahead.
+  // This frame's base camera: the props turned by the orbit, and in live
+  // mode moved along to where the glide has got to. With head tracking it's
+  // where you stand (FirstPersonCamera's vantage point), so it's the view
+  // with the head straight ahead.
   private var baseCamera: CameraPose {
     var camera = pose
+    if glide.offset != .zero {
+      camera.center = FirstPersonCamera.coordinate(at: glide.offset, from: pose.center)
+    }
     camera.heading = CameraPose.normalizedHeading(camera.heading + orbitOffset)
     // MapKit's field of view spans the map's height, so a taller
     // (overscanned) map shows the city bigger. Backing the camera off by the
@@ -489,8 +529,9 @@ final class DioramaMapView: ExpoView {
     appliedShift = firstPerson.shift
   }
 
-  // One display-link frame: advance the orbit, read the head, move the
-  // cameras if anything visibly changed. Both eyes move in the same frame.
+  // One display-link frame: advance the orbit and the live glide, read the
+  // head, move the cameras if anything visibly changed (a gliding center
+  // always has). Both eyes move in the same frame.
   private func tick(_ seconds: CFTimeInterval) {
     guard isReady else { return }
     if orbit {
@@ -502,6 +543,10 @@ final class DioramaMapView: ExpoView {
       look = headTracker.update(screen: screenAxes, seconds: seconds)
     }
     settleZoom(seconds: seconds)
+    if glide.isMoving {
+      glide.step(seconds: seconds, settleSeconds: glideSeconds)
+      if !glide.isMoving { updateTicker() }  // Arrived: tick only if something else needs it.
+    }
     let base = baseCamera
     let gaze = liveGaze(from: firstPersonCamera(from: base))
     let baseMoved = appliedBase.map { !$0.isWithin(Self.minFrameChange, of: base) } ?? true
@@ -520,12 +565,14 @@ final class DioramaMapView: ExpoView {
     return a.isWithin(degrees, of: b)
   }
 
-  // Tick while orbiting or following a head, but only once the first render
-  // is done: a camera that moves every frame keeps MapKit from ever reporting
-  // "finished". Head tracking takes its reference on the first tick, so
-  // "straight ahead" is wherever you face when the city appears.
+  // Tick while orbiting, following a head or gliding to a new fix, but only
+  // once the first render is done: a camera that moves every frame keeps
+  // MapKit from ever reporting "finished". Head tracking takes its reference
+  // on the first tick, so "straight ahead" is wherever you face when the
+  // city appears.
   private func updateTicker() {
-    if window != nil && isReady && (orbit || headTracker.canLook || isSettlingZoom) {
+    let isMoving = orbit || headTracker.canLook || isSettlingZoom || glide.isMoving
+    if window != nil && isReady && isMoving {
       ticker.start()
     } else {
       ticker.stop()
@@ -599,10 +646,11 @@ final class DioramaMapView: ExpoView {
   // MARK: - Loading and ready
 
   // Something new has to load: hold the ticker, and hide the map until
-  // every eye has drawn.
+  // every eye has drawn. A live glide under way lands at once, unseen.
   private func startLoading() {
     isReady = false
     ticker.stop()
+    glide.arrive()
     updateCover(animated: false)
   }
 

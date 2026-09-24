@@ -77,6 +77,10 @@ public class DioramaNativeModule: Module {
       Prop("debugThermalState") { (view: DioramaMapView, state: ThermalStateName?) in
         view.debugThermalState = state?.processInfoState
       }
+      // Live mode: Apple's blue location dot in every eye.
+      Prop("showsUserLocation", false) { (view: DioramaMapView, shows: Bool) in
+        view.showsUserLocation = shows
+      }
 
       // Runs once after a batch of prop changes, so the camera moves once.
       OnViewDidUpdateProps { (view: DioramaMapView) in
@@ -108,6 +112,12 @@ public class DioramaNativeModule: Module {
       }
       AsyncFunction("resetZoom") { (view: DioramaMapView) in
         view.resetZoom()
+      }
+
+      // `ref.followTo(latitude, longitude)` in JS, live mode: a new GPS fix.
+      // The model center glides there natively; JS sends one now and then.
+      AsyncFunction("followTo") { (view: DioramaMapView, latitude: Double, longitude: Double) in
+        view.followTo(latitude: latitude, longitude: longitude)
       }
     }
   }

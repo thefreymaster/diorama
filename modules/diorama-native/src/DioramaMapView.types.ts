@@ -100,6 +100,18 @@ export type DioramaMapViewRef = {
   endZoom: () => Promise<void>;
   /** Back to the place's normal distance (where the camera props put you). */
   resetZoom: () => Promise<void>;
+  /**
+   * Live mode: you're now at this spot. The model center (and you with it)
+   * glides there natively, both eyes in step: at your own pace while fixes
+   * keep coming (it slides from fix to fix over the time between them, so
+   * a steady walk or ride is a steady glide), else over about a second;
+   * under Reduce Motion, a quick quarter-second glide. Unlike a new
+   * `center` prop it isn't a new place: no loading cover, no `onReady`, and
+   * the head look, zoom, orbit angle and eye separation all stay. A new
+   * `center` prop drops it. Send at most about one fix a second; the
+   * smoothing runs natively.
+   */
+  followTo: (latitude: number, longitude: number) => Promise<void>;
 };
 
 /**
@@ -215,6 +227,12 @@ export type DioramaMapViewProps = ViewProps &
   DioramaMiniatureProps & {
     /** Slow auto-rotate around `center`. Starts after the first full render. */
     orbit?: boolean;
+    /**
+     * Apple's blue location dot, drawn by every eye's map so it sits at the
+     * right depth in stereo. MapKit finds the location itself, so only set
+     * it while "while using" location access is on. Defaults to false.
+     */
+    showsUserLocation?: boolean;
     /**
      * Fires once every eye has fully rendered: after the first render at each
      * `center`, and again after switching to stereo. Until then the view

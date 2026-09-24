@@ -33,6 +33,7 @@ export function DioramaMapView({
   lensSpacing = DEFAULT_LENS_SPACING,
   windowDiameter = DEFAULT_WINDOW_DIAMETER,
   miniatureIntensity = 0,
+  showsUserLocation = false,
   ...props
 }: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
@@ -59,6 +60,9 @@ export function DioramaMapView({
     },
     resetZoom: async () => {
       await nativeRef.current?.resetZoom();
+    },
+    followTo: async (latitude, longitude) => {
+      await nativeRef.current?.followTo(latitude, longitude);
     },
   }));
 
@@ -90,6 +94,7 @@ export function DioramaMapView({
       lensSpacing={lensSpacing}
       windowDiameter={windowDiameter}
       miniatureIntensity={miniatureIntensity}
+      showsUserLocation={showsUserLocation}
       onReady={handleReady}
       onDegraded={handleDegraded}
       onEyeLayout={handleEyeLayout}

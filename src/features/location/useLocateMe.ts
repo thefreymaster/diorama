@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AccessibilityInfo, Linking } from 'react-native';
 
 import type { RecentCity } from '@/features/cities/recentsStore';
 import { selectionHaptic } from '@/ui';
 
-import { isAccessDenied, locateMe, readLocationAccess, type LocationAccess } from './locateMe';
+import { isAccessDenied, locateMe, type LocationAccess } from './locateMe';
+import { locationKeys, useLocationAccess } from './useLocationAccess';
 
 /**
  * Where the "Current location" row is: `locating` while it looks, `denied`
@@ -22,11 +23,6 @@ export const LOCATE_SUBTITLES = {
   unavailable: "Can't find your location",
 } as const satisfies Record<LocateStatus, string | undefined>;
 
-/** Query keys, so the hook and its cache updates agree on them. */
-export const locationKeys = {
-  access: ['location', 'access'] as const,
-};
-
 /**
  * Opens the diorama where you're standing. `locate(onLocated)` asks for
  * location access the first time (never before a tap), finds and names the
@@ -37,20 +33,14 @@ export const locationKeys = {
  */
 export function useLocateMe() {
   const queryClient = useQueryClient();
-
-  const access = useQuery({
-    queryKey: locationKeys.access,
-    queryFn: readLocationAccess,
-    // On the device: no connection needed, and cheap to read again.
-    networkMode: 'always',
-    // Refetches whenever the app returns to the front (see `queryClient`).
-    staleTime: 0,
-    retry: false,
-  });
+  const access = useLocationAccess();
 
   const mutation = useMutation({
     mutationFn: locateMe,
     networkMode: 'always',
+    // Found, so access is on (the prompt may just have turned it on): live
+    // mode can follow at once, without waiting for the next read.
+    onSuccess: () => queryClient.setQueryData<LocationAccess>(locationKeys.access, 'granted'),
     onError: (error) => {
       const denied = isAccessDenied(error);
       // Now known without waiting for the next read.
@@ -64,7 +54,7 @@ export function useLocateMe() {
 
   const status: LocateStatus = mutation.isPending
     ? 'locating'
-    : access.data === 'denied'
+    : access === 'denied'
       ? 'denied'
       : mutation.isError && !isAccessDenied(mutation.error)
         ? 'unavailable'

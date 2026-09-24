@@ -4,7 +4,7 @@ An iOS app that shows a real city as a tiny tabletop model. You pick a city, put
 
 ## Product
 
-- **Pick a city** (portrait, touch). Search box plus a curated list of cities that have Apple 3D coverage, plus recent cities.
+- **Pick a city** (portrait, touch). Search box plus a curated list of cities that have Apple 3D coverage, plus recent cities. "Current location" opens where you stand in **live mode** (`?live=1` on the preview and Viewer routes): the city follows your GPS as you walk or ride, foreground only; reopened from Recent it's a fixed place.
 - **Preview** (portrait). A single-lens 3D map of the city slowly orbiting, with an **Enter Diorama** button.
 - **Viewer** (full screen). Upright: one full-screen picture held like a window into the city; moving the phone turns the view and one finger drags to look around. Sideways: side-by-side stereo for a head-mounted viewer, after a 3-second "Put on your viewer" countdown. It switches live as the phone turns. Head motion is first person: you look around from a fixed spot, all the way up to the sky (see Motion below). There is no touch UI while it's worn; a double-tap on the headset recenters and a long press exits.
 - **Settings**. Eye separation ("model size"), tracking sensitivity, how strong the miniature blur is, and Two-eye view in landscape (on by default; off makes sideways full-screen mono too).
@@ -57,9 +57,12 @@ type DioramaMapViewProps = {
   trackingSensitivity: number;
   miniatureIntensity: number; // 0..1 tilt-shift + saturation
   orbit: boolean;            // slow auto-rotate (preview screen)
+  showsUserLocation?: boolean; // Apple's blue dot in every eye (live mode)
   onReady?: (e: { coverage: 'yes' | 'no' | 'unknown' }) => void; // 3D buildings here? From hand-checked lists
 };
-// ref methods: recenter(), setDebugLook(dx, dy), beginZoom(), setZoom(scale), endZoom(), resetZoom() (portrait pinch)
+// ref methods: recenter(), setDebugLook(dx, dy), beginZoom(), setZoom(scale), endZoom(), resetZoom() (portrait pinch),
+//   followTo(latitude, longitude) (live mode: the model center glides to a new GPS fix natively; not a new place,
+//   so no loading cover or onReady, and look, zoom, orbit and eye separation stay; JS sends at most ~1 fix a second)
 ```
 
 ### Folder layout (target)

@@ -46,6 +46,21 @@ describe('DioramaMapView', () => {
     expect(typeof ref.current?.resetZoom).toBe('function');
   });
 
+  it('exposes followTo() on its ref for live location', () => {
+    const ref = createRef<DioramaMapViewRef>();
+    render(<DioramaMapView ref={ref} {...CAMERA} />);
+    expect(typeof ref.current?.followTo).toBe('function');
+  });
+
+  it("hides Apple's location dot unless asked, and passes it on when asked", () => {
+    expect(render(<DioramaMapView {...CAMERA} />).toJSON()).toMatchObject({
+      props: { showsUserLocation: false },
+    });
+    expect(render(<DioramaMapView {...CAMERA} showsUserLocation />).toJSON()).toMatchObject({
+      props: { showsUserLocation: true },
+    });
+  });
+
   it('leaves head tracking off by default', () => {
     const view = render(<DioramaMapView {...CAMERA} />);
     expect(view.toJSON()).toMatchObject({

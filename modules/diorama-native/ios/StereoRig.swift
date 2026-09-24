@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import MapKit
 import UIKit
+import simd
 
 // The `mode` prop: one picture, or one per eye side by side.
 enum ViewMode: String, Enumerable {
@@ -36,6 +37,15 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // of that eye's map. Called for every eye, including one added later.
   var makeOverlay: (() -> UIView)? {
     didSet { for eye in eyes { eye.overlay = makeOverlay?() } }
+  }
+  // Apple's blue "you are here" dot (T40), in every eye. Each eye's map
+  // draws it from its own camera, so in stereo it sits at the right depth
+  // on the ground like everything else. MapKit finds the location itself.
+  var showsUserLocation = false {
+    didSet {
+      guard showsUserLocation != oldValue else { return }
+      for eye in eyes { eye.mapView.showsUserLocation = showsUserLocation }
+    }
   }
 
   // The eyes, left to right: one in mono, two in stereo.
@@ -250,6 +260,7 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   private func addEye() {
     let eye = EyeView()
     eye.mapView.delegate = self
+    eye.mapView.showsUserLocation = showsUserLocation
     eye.overlay = makeOverlay?()
     eyes.append(eye)
     view.addSubview(eye)
@@ -304,12 +315,14 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // up front (see `askSteepestPitch`). The trials look at the vantage
   // point's own model center from the gaze's distance (the cap doesn't
   // depend on where on the map), so the map never stands a camera on new
-  // ground. Asked once per vantage point and map size.
+  // ground. Asked once per vantage point and map size (and, as the model
+  // center glides along in live mode, again every so often on the way; see
+  // SteepestPitchKey).
   func steepestPitch(from firstPerson: FirstPersonCamera) -> Double? {
     let key = SteepestPitchKey(
-      latitude: firstPerson.base.center.latitude, longitude: firstPerson.base.center.longitude,
-      meters: firstPerson.eyeHeight, mapSize: eyes.first?.mapSize ?? .zero)
-    if let steepestGaze, steepestGaze.key == key { return steepestGaze.pitch }
+      center: firstPerson.base.center, meters: firstPerson.eyeHeight,
+      mapSize: eyes.first?.mapSize ?? .zero)
+    if let steepestGaze, steepestGaze.key.covers(key) { return steepestGaze.pitch }
     let pitch = askSteepestPitch(startingAt: firstPerson.base.pitch) { pitch in
       var trial = firstPerson.base
       trial.pitch = pitch
@@ -328,9 +341,8 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // map size.
   func steepestPitch(lookingAt camera: CameraPose) -> Double? {
     let key = SteepestPitchKey(
-      latitude: camera.center.latitude, longitude: camera.center.longitude,
-      meters: camera.altitude, mapSize: eyes.first?.mapSize ?? .zero)
-    if let steepestStart, steepestStart.key == key { return steepestStart.pitch }
+      center: camera.center, meters: camera.altitude, mapSize: eyes.first?.mapSize ?? .zero)
+    if let steepestStart, steepestStart.key.covers(key) { return steepestStart.pitch }
     let pitch = askSteepestPitch(startingAt: camera.pitch) { pitch in
       var trial = camera
       trial.pitch = pitch
@@ -441,9 +453,25 @@ final class StereoRig: NSObject, MKMapViewDelegate {
 // What the steepest pitch depends on: the place, how far out (the vantage
 // point's height for `steepestPitch(from:)`, the camera's distance for
 // `steepestPitch(lookingAt:)`), and how big the maps are.
-private struct SteepestPitchKey: Equatable {
-  var latitude: Double
-  var longitude: Double
+private struct SteepestPitchKey {
+  // How far the center may move (as a share of `meters`) before MapKit is
+  // asked again. The cap hardly changes from one spot to the next (it goes
+  // by how far out the camera is), but in live mode (T40) the center glides
+  // every frame, and asking every frame would cost a dozen trial cameras a
+  // frame. So it's asked again only once the center has moved a tenth of
+  // the camera's distance (70 m for a camera 700 m out), which still
+  // follows the ground's height as it rises and falls on the way.
+  static let sameSpotShare = 0.1
+
+  var center: CLLocationCoordinate2D
   var meters: Double
   var mapSize: CGSize
+
+  // True when a pitch found for this key holds for `other` too: the same
+  // distance and map size, and a center near enough.
+  func covers(_ other: SteepestPitchKey) -> Bool {
+    guard meters == other.meters, mapSize == other.mapSize else { return false }
+    let apart = FirstPersonCamera.offset(of: other.center, from: center)
+    return simd_length(apart) <= meters * Self.sameSpotShare
+  }
 }

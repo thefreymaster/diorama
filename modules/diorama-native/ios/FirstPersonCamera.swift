@@ -12,6 +12,8 @@ import simd
 //
 // Words used here:
 // - Model center: the `center` prop, the point the starting camera looks at.
+//   In live mode (T40, `Glide` below) it glides along as you walk or ride,
+//   and everything here moves with it.
 // - Vantage point: where your eyes are. It is the starting camera's own
 //   position: `altitude` meters (camera-to-center distance) back from the
 //   model center, `pitch` degrees from straight down, facing `heading`. It
@@ -379,6 +381,116 @@ extension FirstPersonCamera {
       startDistance: distance,
       origin: eye - shift,
       range: min(range.lowerBound, distance)...max(range.upperBound, distance))
+  }
+}
+
+// MARK: - Following your location (T40)
+
+// Live location moves where you stand: each GPS fix JS sends (at most one a
+// second) is a new spot for the model center, and the center glides there
+// rather than jumping. The glide is kept as an offset in meters (east,
+// north) from the `center` prop; the vantage point, the aim point and any
+// zoom (`shift`) are all measured from the model center, so they ride along
+// with it, and the way you look never changes.
+//
+// Two layers, like a CSS transition feeding Reanimated's `withSpring`:
+// - The target doesn't jump to a new fix. It slides there in a straight
+//   line over as long as the fixes came apart (a "leg"), so while you walk
+//   or ride at a steady pace it moves at that pace, with no stop between
+//   fixes. (Springing straight to each fix instead, the city would lurch
+//   ahead and stop once a fix: at 10 m/s it swung between 0.4 and 26 m/s.)
+// - The center follows the target on a critically damped spring (about a
+//   second, no bounce), which rounds off every start, stop and turn.
+// Fixes further apart than `maxLegSeconds` (the first one, or after a
+// pause) have no leg: the spring alone glides there, in about a second.
+extension FirstPersonCamera {
+  // One glide: where the center is now, how fast it's going, and the target
+  // it follows, all in meters (east, north) from the `center` prop. Like a
+  // plain JS object of numbers; DioramaMapView keeps it and steps it once
+  // per frame.
+  struct Glide {
+    // Seconds the spring takes to all but arrive (within 1% of the way).
+    static let seconds = 1.0
+    // Under Reduce Motion: no legs, and a very quick spring.
+    static let reducedMotionSeconds = 0.25
+    // The longest leg: slow walking (5 m in 4 s). Fixes further apart than
+    // this are a fresh start (the spring alone glides there).
+    static let maxLegSeconds = 4.0
+    // Nearer than this (meters, and meters a second) counts as there.
+    static let restMeters = 0.01
+    // (1 + x)·e^(−x) = 1% at x ≈ 6.64: a spring with no bounce covers 99%
+    // of the way in `6.64 ÷ stiffness` seconds (see `step`).
+    private static let settleRatio = 6.64
+
+    // A straight slide of the target from one spot to the next.
+    private struct Leg {
+      var from: simd_double2
+      var to: simd_double2
+      var seconds: Double
+      var elapsed = 0.0
+    }
+
+    private(set) var offset = simd_double2.zero
+    private(set) var velocity = simd_double2.zero
+    // The spot the spring pulls toward (sliding along `leg`, if any).
+    private(set) var target = simd_double2.zero
+    private var leg: Leg?
+    // When the last fix came (seconds on the display's clock).
+    private var lastFixAt: Double?
+
+    // True until the center has come to rest at the latest spot.
+    var isMoving: Bool { leg != nil || offset != target || velocity != .zero }
+
+    // A new fix, `spot`, at time `now` (seconds). `smooth` false (Reduce
+    // Motion) skips the leg: the spring alone takes it there.
+    mutating func head(to spot: simd_double2, at now: Double, smooth: Bool) {
+      let since = lastFixAt.map { now - $0 } ?? .infinity
+      lastFixAt = now
+      if smooth, since <= Self.maxLegSeconds, spot != target {
+        leg = Leg(from: target, to: spot, seconds: max(since, 0.05))
+      } else {
+        leg = nil
+        target = spot
+      }
+    }
+
+    // One frame, `seconds` long: slide the target along its leg, then one
+    // step of a critically damped spring toward it: the fastest way to
+    // arrive with no overshoot, and a change of target keeps the speed it
+    // has, so nothing jerks. Exact for any frame length (the closed-form
+    // solution, not a small-step estimate), so a dropped frame just catches
+    // up. `settleSeconds`: `seconds` above, or `reducedMotionSeconds`.
+    mutating func step(seconds: Double, settleSeconds: Double) {
+      guard isMoving else { return }
+      let t = max(seconds, 0)
+      if var leg {
+        leg.elapsed += t
+        let share = min(leg.elapsed / leg.seconds, 1)
+        target = leg.from + (leg.to - leg.from) * share
+        self.leg = share < 1 ? leg : nil
+      }
+      let stiffness = Self.settleRatio / max(settleSeconds, 0.01)
+      let gap = offset - target
+      let drift = velocity + stiffness * gap
+      let decay = exp(-stiffness * t)
+      let nextGap = (gap + drift * t) * decay
+      velocity = (velocity - stiffness * drift * t) * decay
+      offset = target + nextGap
+      if leg == nil, simd_length(nextGap) < Self.restMeters,
+        simd_length(velocity) < Self.restMeters
+      {
+        arrive()
+      }
+    }
+
+    // Straight to the latest spot, with no glide (nothing on screen to
+    // glide, or the map is reloading behind its cover).
+    mutating func arrive() {
+      if let leg { target = leg.to }
+      leg = nil
+      offset = target
+      velocity = .zero
+    }
   }
 }
 

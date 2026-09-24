@@ -9,7 +9,11 @@
     "typecheck": "expo customize tsconfig.json > /dev/null && tsc --noEmit",
     "lint": "expo lint",
     "format": "prettier --write .",
-    "test": "jest"
+    "test": "jest",
+    "ios:prepare": "bash scripts/ios-prepare.sh",
+    "ios:xcode": "bash scripts/ios-prepare.sh --open",
+    "ios:archive": "bash scripts/ios-archive.sh",
+    "bump": "node scripts/bump-build.mjs"
   },
   "dependencies": {
     "@react-native-community/slider": "5.2.0",

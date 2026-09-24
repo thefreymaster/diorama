@@ -1,7 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { SymbolView } from 'expo-symbols';
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, ScrollView } from 'react-native';
+import ReanimatedSwipeable, {
+  SwipeDirection,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import {
@@ -12,6 +15,12 @@ import {
   type ResolvedCity,
 } from '@diorama/native';
 
+import { CURATED_CITIES } from '@/features/cities/curated';
+import {
+  getHiddenFeatured,
+  hideFeatured,
+  restoreFeatured,
+} from '@/features/cities/hiddenFeaturedStore';
 import {
   addRecent,
   clearRecents,
@@ -34,12 +43,15 @@ jest.mock('@diorama/native', () => ({
 }));
 
 jest.mock('expo-haptics', () => ({
+  ...jest.requireActual<object>('expo-haptics'),
   selectionAsync: jest.fn(() => Promise.resolve()),
+  impactAsync: jest.fn(() => Promise.resolve()),
 }));
 
 const mockAutocomplete = jest.mocked(autocomplete);
 const mockResolve = jest.mocked(resolve);
 const mockSelectionHaptic = jest.mocked(Haptics.selectionAsync);
+const mockImpactHaptic = jest.mocked(Haptics.impactAsync);
 
 const routes = {
   _layout: RootLayout,
@@ -135,9 +147,11 @@ function pressSettingsButton() {
 beforeEach(() => {
   queryClient.clear();
   clearRecents();
+  restoreFeatured();
   mockAutocomplete.mockReset();
   mockResolve.mockReset();
   mockSelectionHaptic.mockClear();
+  mockImpactHaptic.mockClear();
 });
 
 describe('city picker, nothing typed', () => {
@@ -495,5 +509,180 @@ describe('city picker, opening an address or a place', () => {
     expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
     expect(router.getPathname()).toBe(`/city/${bistro.id}`);
     expect(getRecents().map((city) => city.id)).toEqual([bistro.id]);
+  });
+});
+
+/** The swipe row holding `title` in a section ("Recent" rows come first). */
+function swipeRow(title: string, which: 'first' | 'last' = 'first'): ReactTestInstance {
+  const rows = screen
+    .getAllByTestId('swipe-row')
+    .filter((row) => within(row).queryByText(title) !== null);
+  const row = which === 'first' ? rows[0] : rows.at(-1);
+  if (!row) throw new Error(`No row for ${title}`);
+  return row;
+}
+
+/** VoiceOver: the row's "Delete" action. */
+function voiceOverDelete(row: ReactTestInstance) {
+  fireEvent(within(row).getByRole('button'), 'accessibilityAction', {
+    nativeEvent: { actionName: 'delete' },
+  });
+}
+
+/** A tap on the red Delete action a swipe uncovers (VoiceOver doesn't see it). */
+function pressDelete(row: ReactTestInstance) {
+  fireEvent.press(within(row).getByTestId('swipe-delete-action', { includeHiddenElements: true }));
+}
+
+describe('city picker, deleting', () => {
+  beforeEach(() => {
+    // The row slides out and closes up (a spring) before it's gone.
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** Lets the delete animation play out. */
+  function finishAnimations() {
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+  }
+
+  function featuredTitles(): string[] {
+    return screen
+      .getAllByTestId('swipe-row')
+      .map((row) => within(row).getAllByText(/./)[0]?.props.children as string)
+      .slice(getRecents().length);
+  }
+
+  it('deletes a recent place from VoiceOver, from the list and the store', async () => {
+    addRecent(HOBOKEN);
+    addRecent(INFINITE_LOOP);
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Hoboken');
+
+    voiceOverDelete(swipeRow('Hoboken'));
+    expect(mockImpactHaptic).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    finishAnimations();
+
+    expect(getRecents()).toEqual([INFINITE_LOOP]);
+    expect(screen.queryByText('Hoboken')).toBeNull();
+    expect(screen.getByText('1 Infinite Loop')).toBeOnTheScreen();
+  });
+
+  it('deletes a recent place with the red Delete action, and Recent goes when empty', async () => {
+    addRecent(INFINITE_LOOP);
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('1 Infinite Loop');
+
+    pressDelete(swipeRow('1 Infinite Loop'));
+    finishAnimations();
+
+    expect(getRecents()).toEqual([]);
+    expect(screen.queryByText('1 Infinite Loop')).toBeNull();
+    expect(sectionHeaders()).toEqual(['Featured']);
+  });
+
+  it('deleting a featured city hides it, and leaves Recent alone', async () => {
+    addRecent({ ...HOBOKEN, id: 'paris', name: 'Paris', country: 'France' });
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Featured');
+    expect(screen.getAllByText('Paris')).toHaveLength(2);
+
+    // The Featured Paris is the second one; Recent comes first.
+    pressDelete(swipeRow('Paris', 'last'));
+    finishAnimations();
+
+    expect(getHiddenFeatured()).toEqual(['paris']);
+    expect(getRecents().map((city) => city.id)).toEqual(['paris']);
+    expect(screen.getAllByText('Paris')).toHaveLength(1);
+    expect(featuredTitles()).not.toContain('Paris');
+    expect(featuredTitles()).toContain('Tokyo');
+  });
+
+  it('leaves hidden featured cities out of the list from the start', async () => {
+    hideFeatured('tokyo');
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Featured');
+
+    expect(screen.queryByText('Tokyo')).toBeNull();
+    expect(screen.getByText('Paris')).toBeOnTheScreen();
+  });
+
+  it('drops the Featured header once every featured city is hidden', async () => {
+    addRecent(HOBOKEN);
+    for (const city of CURATED_CITIES) hideFeatured(city.id);
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Hoboken');
+
+    expect(sectionHeaders()).toEqual(['Recent']);
+    expect(screen.queryByText('Cities with 3D buildings in Apple Maps.')).toBeNull();
+  });
+
+  it('says what to do when there is nothing left to list', async () => {
+    for (const city of CURATED_CITIES) hideFeatured(city.id);
+    renderRouter(routes, { initialUrl: '/' });
+
+    expect(await screen.findByText('No places')).toBeOnTheScreen();
+    expect(screen.queryAllByRole('header')).toEqual([]);
+  });
+});
+
+describe('city picker, a swiped-open row', () => {
+  it('still opens a city with a tap', async () => {
+    addRecent(HOBOKEN);
+    const router = renderRouter(routes, { initialUrl: '/' });
+
+    fireEvent.press(await screen.findByText('Hoboken'));
+
+    expect(router.getPathname()).toBe(`/city/${HOBOKEN.id}`);
+  });
+
+  it('closes a swiped-open row on a tap elsewhere, and that tap opens nothing', async () => {
+    addRecent(HOBOKEN);
+    const router = renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Hoboken');
+    const [hobokenSwipe] = screen.UNSAFE_getAllByType(ReanimatedSwipeable);
+
+    // Hoboken is swiped open; then a finger lands on Paris.
+    act(() => hobokenSwipe.props.onSwipeableWillOpen(SwipeDirection.LEFT));
+    const parisRow = swipeRow('Paris');
+    fireEvent(parisRow, 'touchStart');
+    fireEvent(screen.UNSAFE_getByType(ScrollView), 'touchStart');
+    fireEvent.press(within(parisRow).getByText('Paris'));
+
+    expect(router.getPathname()).toBe('/');
+    expect(mockSelectionHaptic).not.toHaveBeenCalled();
+
+    // Now nothing is open: the next tap opens Paris.
+    fireEvent(parisRow, 'touchStart');
+    fireEvent(screen.UNSAFE_getByType(ScrollView), 'touchStart');
+    fireEvent.press(within(parisRow).getByText('Paris'));
+    expect(router.getPathname()).toBe('/city/paris');
+  });
+
+  it('closes a swiped-open row when the list scrolls', async () => {
+    addRecent(HOBOKEN);
+    const router = renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Hoboken');
+    const [hobokenSwipe] = screen.UNSAFE_getAllByType(ReanimatedSwipeable);
+
+    act(() => hobokenSwipe.props.onSwipeableWillOpen(SwipeDirection.LEFT));
+    fireEvent(screen.UNSAFE_getByType(ScrollView), 'scrollBeginDrag');
+
+    // Nothing open, so a tap goes straight through.
+    fireEvent.press(await screen.findByText('Paris'));
+    expect(router.getPathname()).toBe('/city/paris');
+  });
+
+  it('still opens a hidden featured city from a link', async () => {
+    hideFeatured('paris');
+    const router = renderRouter(routes, { initialUrl: '/city/paris' });
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/city/paris');
   });
 });

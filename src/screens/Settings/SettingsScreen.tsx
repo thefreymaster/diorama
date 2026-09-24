@@ -7,6 +7,7 @@ import { DeveloperSection } from './DeveloperSection';
 import { MiniatureSection } from './MiniatureSection';
 import { ResetSection } from './ResetSection';
 import { SliderSection } from './SliderSection';
+import { SuggestedPlacesSection } from './SuggestedPlacesSection';
 import { TwoEyeSection } from './TwoEyeSection';
 import { ViewerFitSection } from './ViewerFitSection';
 
@@ -26,6 +27,7 @@ export function SettingsScreen() {
         <SliderSection setting="cameraHeight" />
         <SliderSection setting="trackingSensitivity" />
         <ViewerFitSection />
+        <SuggestedPlacesSection />
         <DeveloperSection />
         <ResetSection />
       </View>

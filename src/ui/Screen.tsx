@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { colors, spacing } from '@/theme';
 
+import { closeOpenSwipeRow, screenTouched } from './openSwipeRow';
+
 export type ScreenProps = {
   children: ReactNode;
   /** `grouped` for inset-grouped lists (gray ground), `plain` for everything else. */
@@ -30,6 +32,9 @@ export function Screen({ children, background = 'plain', scroll = true }: Screen
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
+      // A row swiped open closes as soon as anything else is touched, or the list scrolls.
+      onTouchStart={screenTouched}
+      onScrollBeginDrag={closeOpenSwipeRow}
     >
       {children}
     </ScrollView>

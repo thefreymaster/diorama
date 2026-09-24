@@ -13,6 +13,14 @@ jest.mock('react-native-worklets', () => require('react-native-worklets/src/mock
 // (made Jest-safe by `setUpTests()` below), so route tests and unit tests match.
 jest.mock('react-native-reanimated/mock', () => jest.requireActual('react-native-reanimated'));
 
+// Jest loads gesture-handler's prebuilt CommonJS build, where the worklets Babel
+// plugin can't spot `_.Gesture.Pan()` callbacks, so ReanimatedSwipeable logs "some
+// callbacks are worklets and some are not". Metro uses its TypeScript source, which
+// is fine; use that here too.
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () =>
+  jest.requireActual('react-native-gesture-handler/src/components/ReanimatedSwipeable'),
+);
+
 // react-native-mmkv v4 reaches native code through Nitro. Under Jest, MMKV
 // switches to its own in-memory store, so Nitro only has to import cleanly.
 jest.mock('react-native-nitro-modules', () => ({

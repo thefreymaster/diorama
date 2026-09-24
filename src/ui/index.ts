@@ -7,6 +7,7 @@ export { ListRow, type ListRowProps } from './ListRow';
 export { PrimaryButton, type PrimaryButtonProps } from './PrimaryButton';
 export { Screen, type ScreenProps } from './Screen';
 export { SkeletonRow, type SkeletonRowProps } from './SkeletonRow';
+export { SwipeToDeleteRow, type SwipeToDeleteRowProps } from './SwipeToDeleteRow';
 export { SymbolIcon, type SymbolIconProps } from './SymbolIcon';
 export { Text, type TextProps } from './Text';
 export { ToggleRow, type ToggleRowProps } from './ToggleRow';

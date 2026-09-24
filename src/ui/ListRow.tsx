@@ -1,5 +1,5 @@
 import type { SFSymbol } from 'expo-symbols';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type ViewProps } from 'react-native';
 
 import { useIsAccessibilitySize, type ColorToken } from '@/theme';
 
@@ -31,8 +31,13 @@ export type ListRowProps = {
   chevron?: boolean;
   /** Red title, for an action that erases or resets (SwiftUI's destructive role). */
   destructive?: boolean;
+  /** Title in the app's tint, for a row that does something right here (SwiftUI's Button in a Form). */
+  tinted?: boolean;
   onPress?: () => void;
   accessibilityHint?: string;
+  /** Extra VoiceOver actions (swipe up or down to pick one), e.g. "Delete". */
+  accessibilityActions?: ViewProps['accessibilityActions'];
+  onAccessibilityAction?: ViewProps['onAccessibilityAction'];
 };
 
 /** One row of an inset-grouped list. Place inside `InsetGroupedSection`. */
@@ -45,8 +50,11 @@ export function ListRow({
   symbolTile,
   chevron,
   destructive = false,
+  tinted = false,
   onPress,
   accessibilityHint,
+  accessibilityActions,
+  onAccessibilityAction,
 }: ListRowProps) {
   const showChevron = chevron ?? onPress !== undefined;
   const rowStyle = [rowStyles.row, symbol ? null : rowStyles.textOnly];
@@ -59,7 +67,7 @@ export function ListRow({
       <View style={rowStyles.content}>
         <RowSeparator />
         <View style={rowStyles.text}>
-          <Text color={destructive ? 'systemRed' : 'label'}>
+          <Text color={destructive ? 'systemRed' : tinted ? 'tint' : 'label'}>
             {titleHighlights?.length
               ? titleRuns(title, titleHighlights).map((run, index) =>
                   run.highlighted ? (
@@ -89,7 +97,12 @@ export function ListRow({
 
   if (!onPress) {
     return (
-      <View style={rowStyle} accessible>
+      <View
+        style={rowStyle}
+        accessible
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
+      >
         {content}
       </View>
     );
@@ -100,6 +113,8 @@ export function ListRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityHint={accessibilityHint}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       style={({ pressed }) => [rowStyle, pressed && rowStyles.pressed]}
     >
       {content}

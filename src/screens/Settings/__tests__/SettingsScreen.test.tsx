@@ -1,8 +1,13 @@
 import * as Haptics from 'expo-haptics';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { AccessibilityInfo, Dimensions } from 'react-native';
 
 import type { DioramaMapViewProps } from '@diorama/native';
+import {
+  getHiddenFeatured,
+  hideFeatured,
+  restoreFeatured,
+} from '@/features/cities/hiddenFeaturedStore';
 import { addRecent, clearRecents, type RecentCity } from '@/features/cities/recentsStore';
 import {
   DEFAULT_SETTINGS,
@@ -105,6 +110,7 @@ let reduceMotionListener: ((enabled: boolean) => void) | undefined;
 beforeEach(() => {
   queryClient.clear();
   clearRecents();
+  restoreFeatured();
   resetSettings();
   mockImpact.mockClear();
   reduceMotionListener = undefined;
@@ -199,6 +205,8 @@ describe('settings', () => {
     expect(screen.queryByRole('switch', { name: 'Stereo' })).toBeNull();
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeOnTheScreen();
+    // Nothing deleted from the picker, so nothing to restore.
+    expect(screen.queryByText('Restore suggested places')).toBeNull();
   });
 
   it('shows what the store holds', async () => {
@@ -456,6 +464,64 @@ describe('settings', () => {
     expect(previewMap().altitude).toBe(1200);
     expect(fitValue('lensSpacing')).toBe('64 mm');
     expect(fitValue('windowDiameter')).toBe('35 mm');
+  });
+});
+
+describe('restore suggested places', () => {
+  const RESTORE = { name: 'Restore suggested places' };
+
+  /** Whether the picker, still under Settings in the stack (so hidden from VoiceOver), lists a city. */
+  function pickerLists(name: string): boolean {
+    const picker = screen.getByTestId('city-picker-screen', { includeHiddenElements: true });
+    return within(picker).queryByText(name, { includeHiddenElements: true }) !== null;
+  }
+
+  it('shows only while a featured city is deleted from the picker', async () => {
+    await openSettings();
+    expect(screen.queryByRole('button', RESTORE)).toBeNull();
+
+    act(() => hideFeatured('paris'));
+    expect(screen.getByRole('button', RESTORE)).toBeOnTheScreen();
+    expect(
+      screen.getByText('Puts the featured cities you deleted back in the list.'),
+    ).toBeOnTheScreen();
+
+    act(() => restoreFeatured());
+    expect(screen.queryByRole('button', RESTORE)).toBeNull();
+  });
+
+  it('brings them all back with a light tap, and says so', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    hideFeatured('paris');
+    hideFeatured('tokyo');
+    await openSettings();
+    expect(pickerLists('Paris')).toBe(false);
+
+    fireEvent.press(screen.getByRole('button', RESTORE));
+
+    expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    expect(announce).toHaveBeenCalledWith('Suggested places restored');
+    expect(getHiddenFeatured()).toEqual([]);
+    expect(screen.queryByRole('button', RESTORE)).toBeNull();
+    expect(pickerLists('Paris')).toBe(true);
+    expect(pickerLists('Tokyo')).toBe(true);
+  });
+
+  it('is not part of Reset to defaults, which is for how the view looks', async () => {
+    hideFeatured('paris');
+    await openSettings();
+
+    fireEvent.press(screen.getByRole('button', { name: 'Reset to defaults' }));
+
+    expect(getHiddenFeatured()).toEqual(['paris']);
+    expect(screen.getByRole('button', RESTORE)).toBeOnTheScreen();
+  });
+
+  it('leaves the preview on the first featured city even when it is hidden', async () => {
+    hideFeatured('new-york');
+    await openSettings();
+
+    expect(screen.getByLabelText('Preview of New York')).toBeOnTheScreen();
   });
 });
 

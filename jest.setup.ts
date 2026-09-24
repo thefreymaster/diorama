@@ -31,4 +31,27 @@ jest.mock('react-native-nitro-modules', () => ({
   },
 }));
 
+// expo-location talks to Core Location. Keep its real enums and types, and
+// swap the calls the app makes for mocks that never find anyone: Location
+// Services on, access not asked yet, "Don't Allow" if asked. Tests that
+// locate set their own answers (`jest.mocked(Location.getCurrentPositionAsync)`).
+jest.mock('expo-location', () => {
+  const permission = (status: 'granted' | 'denied' | 'undetermined') => ({
+    status,
+    granted: status === 'granted',
+    canAskAgain: status !== 'denied',
+    expires: 'never',
+  });
+  return {
+    ...jest.requireActual<object>('expo-location'),
+    hasServicesEnabledAsync: jest.fn(async () => true),
+    getForegroundPermissionsAsync: jest.fn(async () => permission('undetermined')),
+    requestForegroundPermissionsAsync: jest.fn(async () => permission('denied')),
+    getCurrentPositionAsync: jest.fn(async () => {
+      throw new Error('No location in Jest.');
+    }),
+    reverseGeocodeAsync: jest.fn(async () => []),
+  };
+});
+
 setUpTests();

@@ -66,6 +66,15 @@
         {
           "ios": {}
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Diorama uses your location to show the city around you.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false
+        }
       ]
     ],
     "experiments": {

@@ -17,8 +17,9 @@ export function openFailedMessage(title: string): string {
 /**
  * Opens a search suggestion. A suggestion is only a name, so it's resolved
  * into a city first (coordinates, altitude), then shown like any other,
- * addresses and places included. A suggestion that is a featured city opens
- * the featured one; an address or a place never does, even in that city.
+ * addresses and places included. A suggestion that is a featured city or a
+ * national park opens the built-in one (see `curatedMatch`); an address or a
+ * place never stands for a city, even in that city.
  */
 export function useOpenSearchResult() {
   const navigation = useNavigation();
@@ -33,8 +34,7 @@ export function useOpenSearchResult() {
       onSuccess: (place) => {
         // The user may have moved on (say, to Settings) while it resolved.
         if (!navigation.isFocused()) return;
-        const featured = place.kind === 'city' ? curatedMatch(place) : undefined;
-        showCity(featured ?? place);
+        showCity(curatedMatch(place) ?? place);
       },
       // The footer appears far from the row that was tapped, so say it too.
       onError: () =>

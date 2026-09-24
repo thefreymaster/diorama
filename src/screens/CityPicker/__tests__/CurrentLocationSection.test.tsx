@@ -139,6 +139,7 @@ describe('current location row', () => {
     expect(screen.getAllByRole('header').map((header) => header.props.children)).toEqual([
       'Recent',
       'Featured',
+      'National parks',
     ]);
     // Reading the access is fine; asking or looking waits for a tap.
     await waitFor(() => expect(mockGetPermission).toHaveBeenCalled());

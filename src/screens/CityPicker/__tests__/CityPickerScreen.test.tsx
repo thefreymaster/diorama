@@ -15,7 +15,7 @@ import {
   type ResolvedCity,
 } from '@diorama/native';
 
-import { CURATED_CITIES } from '@/features/cities/curated';
+import { CURATED_CITIES, CURATED_PARKS, CURATED_PLACES } from '@/features/cities/curated';
 import {
   getHiddenFeatured,
   hideFeatured,
@@ -172,7 +172,7 @@ describe('city picker, nothing typed', () => {
 
     await screen.findByText('Featured');
     const headers = screen.getAllByRole('header').map((header) => header.props.children);
-    expect(headers).toEqual(['Recent', 'Featured']);
+    expect(headers).toEqual(['Recent', 'Featured', 'National parks']);
     // Rome is in both sections; the Recent one comes first.
     expect(screen.getAllByText('Rome')).toHaveLength(2);
     expect(screen.getByText('Hoboken')).toBeOnTheScreen();
@@ -198,6 +198,33 @@ describe('city picker, nothing typed', () => {
 
     expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
     expect(router.getPathname()).toBe(`/city/${HOBOKEN.id}`);
+  });
+
+  it('lists the national parks below Featured, and Featured keeps cities only', async () => {
+    renderRouter(routes, { initialUrl: '/' });
+
+    await screen.findByText('Featured');
+    expect(sectionHeaders()).toEqual(['Featured', 'National parks']);
+    expect(screen.getByText('Grand Canyon')).toBeOnTheScreen();
+    expect(screen.getByText('Arizona, United States')).toBeOnTheScreen();
+    expect(screen.getByText('Yellowstone')).toBeOnTheScreen();
+    expect(screen.getByText('Landscapes with 3D terrain in Apple Maps.')).toBeOnTheScreen();
+    // One row per place: cities in Featured, then the parks, nothing twice.
+    const titles = screen
+      .getAllByTestId('swipe-row')
+      .map((row) => within(row).getAllByText(/./)[0]?.props.children as string);
+    expect(titles).toEqual(CURATED_PLACES.map((place) => place.name));
+  });
+
+  it('opens a park with a tick, and it becomes the newest recent', async () => {
+    const router = renderRouter(routes, { initialUrl: '/' });
+
+    fireEvent.press(await screen.findByText('Grand Canyon'));
+
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+    expect(router.getPathname()).toBe('/city/grand-canyon');
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(getRecents().map((city) => city.id)).toEqual(['grand-canyon']);
   });
 
   it('opens Settings from the gear in the header', async () => {
@@ -330,6 +357,49 @@ describe('city picker, opening a search result', () => {
     expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/city/paris');
     expect(getRecents().map((city) => city.id)).toEqual(['paris']);
+  });
+
+  it('opens the national park when the result is one', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('Grand Canyon National Park', 'AZ 86046', 12, 'place'),
+    ]);
+    mockResolve.mockResolvedValue({
+      id: 'grand-canyon-national-park_36.237_-112.191',
+      name: 'Grand Canyon National Park',
+      country: 'Grand Canyon Village, United States',
+      lat: 36.236859,
+      lon: -112.191467,
+      altitude: 900,
+      kind: 'place',
+    });
+    const router = renderRouter(routes, { initialUrl: '/?q=grand%20canyon' });
+
+    fireEvent.press(await screen.findByText('AZ 86046'));
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/city/grand-canyon');
+    expect(getRecents().map((city) => city.id)).toEqual(['grand-canyon']);
+  });
+
+  it('opens the national park for the canyon itself too', async () => {
+    mockAutocomplete.mockResolvedValue([
+      completion('Grand Canyon', 'Arizona, United States', 12, 'address'),
+    ]);
+    mockResolve.mockResolvedValue({
+      id: 'grand-canyon_36.219_-113.161',
+      name: 'Grand Canyon',
+      country: 'United States',
+      lat: 36.219038,
+      lon: -113.16096,
+      altitude: 3000,
+      kind: 'address',
+    });
+    const router = renderRouter(routes, { initialUrl: '/?q=grand%20canyon' });
+
+    fireEvent.press(await screen.findByText('Arizona, United States'));
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe('/city/grand-canyon');
   });
 
   it('ignores more taps while one is resolving', async () => {
@@ -583,7 +653,7 @@ describe('city picker, deleting', () => {
 
     expect(getRecents()).toEqual([]);
     expect(screen.queryByText('1 Infinite Loop')).toBeNull();
-    expect(sectionHeaders()).toEqual(['Featured']);
+    expect(sectionHeaders()).toEqual(['Featured', 'National parks']);
   });
 
   it('deleting a featured city hides it, and leaves Recent alone', async () => {
@@ -618,12 +688,54 @@ describe('city picker, deleting', () => {
     renderRouter(routes, { initialUrl: '/' });
     await screen.findByText('Hoboken');
 
-    expect(sectionHeaders()).toEqual(['Recent']);
+    expect(sectionHeaders()).toEqual(['Recent', 'National parks']);
     expect(screen.queryByText('Cities with 3D buildings in Apple Maps.')).toBeNull();
+    expect(screen.queryByText('No places')).toBeNull();
+  });
+
+  it('deleting a park hides it, and Restore in Settings brings it back', async () => {
+    const router = renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Grand Canyon');
+
+    pressDelete(swipeRow('Grand Canyon'));
+    finishAnimations();
+
+    expect(getHiddenFeatured()).toEqual(['grand-canyon']);
+    expect(screen.queryByText('Grand Canyon')).toBeNull();
+    expect(screen.getByText('Yellowstone')).toBeOnTheScreen();
+
+    act(() => pressSettingsButton());
+    expect(router.getPathname()).toBe('/settings');
+    fireEvent.press(await screen.findByRole('button', { name: 'Restore suggested places' }));
+
+    expect(getHiddenFeatured()).toEqual([]);
+    const picker = screen.getByTestId('city-picker-screen', { includeHiddenElements: true });
+    expect(
+      within(picker).queryByText('Grand Canyon', { includeHiddenElements: true }),
+    ).not.toBeNull();
+  });
+
+  it('drops the National parks header once every park is hidden', async () => {
+    for (const park of CURATED_PARKS) hideFeatured(park.id);
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Featured');
+
+    expect(sectionHeaders()).toEqual(['Featured']);
+    expect(screen.queryByText('Landscapes with 3D terrain in Apple Maps.')).toBeNull();
+    expect(screen.queryByText('No places')).toBeNull();
+  });
+
+  it('lists only the parks once every featured city is hidden', async () => {
+    for (const city of CURATED_CITIES) hideFeatured(city.id);
+    renderRouter(routes, { initialUrl: '/' });
+
+    expect(await screen.findByText('National parks')).toBeOnTheScreen();
+    expect(sectionHeaders()).toEqual(['National parks']);
+    expect(screen.queryByText('No places')).toBeNull();
   });
 
   it('says what to do when there is nothing left to list', async () => {
-    for (const city of CURATED_CITIES) hideFeatured(city.id);
+    for (const place of CURATED_PLACES) hideFeatured(place.id);
     renderRouter(routes, { initialUrl: '/' });
 
     expect(await screen.findByText('No places')).toBeOnTheScreen();

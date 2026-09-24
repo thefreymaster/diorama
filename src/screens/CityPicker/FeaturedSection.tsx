@@ -1,4 +1,4 @@
-import { CURATED_CITIES } from '@/features/cities/curated';
+import { CURATED_CITIES, CURATED_PARKS } from '@/features/cities/curated';
 import { hideFeatured, useHiddenFeatured } from '@/features/cities/hiddenFeaturedStore';
 import { useRecents } from '@/features/cities/recentsStore';
 import { InsetGroupedSection, SwipeToDeleteRow } from '@/ui';
@@ -18,8 +18,9 @@ export function FeaturedSection() {
   const cities = CURATED_CITIES.filter((city) => !hidden.includes(city.id));
 
   if (cities.length === 0) {
-    // With Recent empty too there'd be nothing under the search field at all.
-    return hasRecents ? null : (
+    // With Recent and National parks empty too there'd be nothing under the search field at all.
+    const hasParks = CURATED_PARKS.some((park) => !hidden.includes(park.id));
+    return hasRecents || hasParks ? null : (
       <PickerMessage
         symbol="magnifyingglass"
         title="No places"

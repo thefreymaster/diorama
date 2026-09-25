@@ -1,5 +1,11 @@
 export { getCameraAccess, requestCameraAccess, type CameraAccess } from './cameraAccess';
-export { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_DIAMETER, DioramaMapView } from './DioramaMapView';
+export {
+  DEFAULT_LENS_SPACING,
+  DEFAULT_MAP_STYLE,
+  DEFAULT_WINDOW_DIAMETER,
+  DioramaMapView,
+  MAP_STYLES,
+} from './DioramaMapView';
 export type {
   Coordinate,
   DioramaCameraProps,
@@ -12,6 +18,7 @@ export type {
   DioramaHeadPositionStats,
   DioramaHeadTrackingProps,
   DioramaLean,
+  DioramaMapStyle,
   DioramaMapViewProps,
   DioramaMapViewRef,
   DioramaMiniatureProps,

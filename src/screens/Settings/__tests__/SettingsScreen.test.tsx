@@ -22,6 +22,7 @@ import {
   setLeanGain,
   setLeanVertical,
   setLensSpacing,
+  setMapStyle,
   setMiniatureIntensity,
   setTrackingSensitivity,
   setTwoEyeLandscape,
@@ -273,6 +274,10 @@ describe('settings', () => {
     expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeOnTheScreen();
     // Nothing deleted from the picker, so nothing to restore.
     expect(screen.queryByText('Restore suggested places')).toBeNull();
+    // The map style is chosen on the city preview's map menu, not here.
+    expect(screen.queryByText(/map style/i)).toBeNull();
+    expect(screen.queryByText('Satellite')).toBeNull();
+    expect(screen.queryByText('Standard')).toBeNull();
   });
 
   it('shows what the store holds', async () => {
@@ -524,7 +529,10 @@ describe('settings', () => {
     fireEvent(screen.getByTestId('lean-vertical-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('lean-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
+    // Chosen on the preview's map menu, and reset here too.
+    act(() => setMapStyle('standard'));
     expect(previewMap().altitude).not.toBe(1200);
+    expect(previewMap().mapStyle).toBe('standard');
 
     fireEvent.press(screen.getByRole('button', { name: 'Reset to defaults' }));
 
@@ -546,6 +554,9 @@ describe('settings', () => {
     expect(previewMap().altitude).toBe(1200);
     expect(fitValue('lensSpacing')).toBe('64 mm');
     expect(fitValue('windowDiameter')).toBe('35 mm');
+    expect(getSettings().mapStyle).toBe('satellite');
+    expect(savedSettings().mapStyle).toBe('satellite');
+    expect(previewMap().mapStyle).toBe('satellite');
   });
 });
 
@@ -778,6 +789,18 @@ describe('settings preview', () => {
 
     expect(previewMap().mode ?? 'mono').toBe('mono');
     expect(previewMap().headTracking).toBeFalsy();
+  });
+
+  it('draws the map style chosen on the city preview, live', async () => {
+    setMapStyle('hybrid');
+    await openSettings();
+    expect(previewMap().mapStyle).toBe('hybrid');
+
+    act(() => setMapStyle('standard'));
+    expect(previewMap().mapStyle).toBe('standard');
+    // Same map, same camera: only the look changed.
+    expect(screen.getAllByTestId('settings-preview-map')).toHaveLength(1);
+    expect(previewMap()).toMatchObject(DOWNTOWN_BOSTON);
   });
 
   it.each<[string, () => void]>([

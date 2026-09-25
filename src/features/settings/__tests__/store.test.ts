@@ -1,6 +1,11 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_DIAMETER } from '@diorama/native';
+import {
+  DEFAULT_LENS_SPACING,
+  DEFAULT_MAP_STYLE,
+  DEFAULT_WINDOW_DIAMETER,
+  type DioramaMapStyle,
+} from '@diorama/native';
 
 import {
   resetSettings,
@@ -46,6 +51,7 @@ describe('settings store', () => {
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
+      mapStyle: 'satellite',
     });
   });
 
@@ -86,6 +92,7 @@ describe('settings store', () => {
     first.store.setDebugLook(true);
     first.store.setLensSpacing(62);
     first.store.setWindowDiameter(38);
+    first.store.setMapStyle('hybrid');
     const saved = first.disk.getString('settings');
 
     const second = launch(saved);
@@ -102,6 +109,7 @@ describe('settings store', () => {
       debugLook: true,
       lensSpacing: 62,
       windowDiameter: 38,
+      mapStyle: 'hybrid',
     });
   });
 
@@ -132,6 +140,7 @@ describe('settings store', () => {
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
+      mapStyle: 'satellite',
     });
 
     // The next change saves the whole set, viewer fit included.
@@ -174,6 +183,7 @@ describe('settings store', () => {
       debugLook: false,
       lensSpacing: 62,
       windowDiameter: 35,
+      mapStyle: 'satellite',
     });
     expect(store.getSettings()).not.toHaveProperty('windowWidth');
     expect(store.getSettings()).not.toHaveProperty('windowHeight');
@@ -194,6 +204,7 @@ describe('settings store', () => {
         debugLook: false,
         lensSpacing: 62,
         windowDiameter: 35,
+        mapStyle: 'satellite',
       },
       version: 1,
     });
@@ -246,6 +257,7 @@ describe('settings store', () => {
       debugLook: true,
       lensSpacing: 64,
       windowDiameter: 35,
+      mapStyle: 'satellite',
     });
   });
 
@@ -431,6 +443,7 @@ describe('settings store', () => {
       debugLook: false,
       lensSpacing: 63,
       windowDiameter: 36,
+      mapStyle: 'satellite',
     });
 
     // The next change saves the height too, and the launch after that keeps it.
@@ -532,6 +545,52 @@ describe('settings store', () => {
     });
   });
 
+  it('chooses the map style, saves it, and keeps it on the next launch', () => {
+    const { store, disk } = launch();
+    expect(store.getSettings().mapStyle).toBe(DEFAULT_MAP_STYLE);
+
+    for (const style of ['hybrid', 'standard', 'satellite', 'standard'] as const) {
+      store.setMapStyle(style);
+      expect(store.getSettings().mapStyle).toBe(style);
+      expect(JSON.parse(disk.getString('settings') ?? 'null').state.mapStyle).toBe(style);
+    }
+    // Nothing else moves.
+    expect(store.getSettings()).toEqual({ ...store.DEFAULT_SETTINGS, mapStyle: 'standard' });
+
+    expect(launch(disk.getString('settings')).store.getSettings().mapStyle).toBe('standard');
+  });
+
+  it('ignores a map style it does not know, set or on disk', () => {
+    const { store } = launch();
+    store.setMapStyle('hybrid');
+    // A caller outside TypeScript's reach (or a later build's style).
+    store.setMapStyle('terrain' as DioramaMapStyle);
+    expect(store.getSettings().mapStyle).toBe('hybrid');
+
+    for (const mapStyle of ['terrain', 'Standard', 3, null, { style: 'standard' }]) {
+      const saved = JSON.stringify({ state: { mapStyle, eyeSeparation: 2 }, version: 1 });
+      expect(launch(saved).store.getSettings()).toMatchObject({
+        mapStyle: 'satellite',
+        eyeSeparation: 2,
+      });
+    }
+  });
+
+  it('gives saves from before the map style photoreal imagery, keeping the rest', () => {
+    // What a T61 build saved: version 1, no map style.
+    const saved = JSON.stringify({
+      state: { eyeSeparation: 1.5, leanVertical: false, miniatureIntensity: 0.3 },
+      version: 1,
+    });
+
+    expect(launch(saved).store.getSettings()).toMatchObject({
+      eyeSeparation: 1.5,
+      leanVertical: false,
+      miniatureIntensity: 0.3,
+      mapStyle: 'satellite',
+    });
+  });
+
   it('keeps lean distance between true to scale (1×) and 5×', () => {
     const { store } = launch();
 
@@ -593,6 +652,7 @@ describe('settings store', () => {
     store.setHeadPosition(false);
     store.setLeanGain(4);
     store.setLeanVertical(false);
+    store.setMapStyle('standard');
 
     store.resetSettings();
 

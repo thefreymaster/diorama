@@ -1,6 +1,10 @@
 import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 
-import type { DioramaMapViewProps, DioramaMapViewRef } from './DioramaMapView.types';
+import type {
+  DioramaMapStyle,
+  DioramaMapViewProps,
+  DioramaMapViewRef,
+} from './DioramaMapView.types';
 import { forgetEyeLayout, reportEyeLayout } from './eyeLayoutStore';
 import { flyoverCoverageAt } from './flyoverCoverage';
 import {
@@ -17,11 +21,15 @@ import {
 export const DEFAULT_LENS_SPACING = 64;
 /** Millimeters across each stereo eye's round window, filling a 35 mm round lens hole. */
 export const DEFAULT_WINDOW_DIAMETER = 35;
+/** The map's look when it's told nothing: photoreal 3D imagery. */
+export const DEFAULT_MAP_STYLE: DioramaMapStyle = 'satellite';
+/** Every map style, in the order a menu lists them. */
+export const MAP_STYLES: readonly DioramaMapStyle[] = ['satellite', 'hybrid', 'standard'];
 
 /**
- * A photoreal 3D Apple Maps view with a camera driven by props. All
- * per-frame work (orbit, head tracking and position, true north, stereo
- * eyes, tilt-shift) runs natively.
+ * A 3D Apple Maps view (photoreal imagery by default, or another
+ * `mapStyle`) with a camera driven by props. All per-frame work (orbit, head
+ * tracking and position, true north, stereo eyes, tilt-shift) runs natively.
  */
 export function DioramaMapView({
   ref,
@@ -45,6 +53,7 @@ export function DioramaMapView({
   windowDiameter = DEFAULT_WINDOW_DIAMETER,
   miniatureIntensity = 0,
   showsUserLocation = false,
+  mapStyle = DEFAULT_MAP_STYLE,
   ...props
 }: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
@@ -126,6 +135,7 @@ export function DioramaMapView({
       windowDiameter={windowDiameter}
       miniatureIntensity={miniatureIntensity}
       showsUserLocation={showsUserLocation}
+      mapStyle={mapStyle}
       onReady={handleReady}
       onDegraded={handleDegraded}
       onEyeLayout={handleEyeLayout}

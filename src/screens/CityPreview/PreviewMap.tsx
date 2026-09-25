@@ -8,6 +8,7 @@ import { useFollowMyLocation } from '@/features/location/useFollowMyLocation';
 import { useCameraAltitude } from '@/features/map/cameraHeight';
 import { useMapReveal } from '@/features/map/useMapReveal';
 import { usePreviewOrbit } from '@/features/map/usePreviewOrbit';
+import { useSetting } from '@/features/settings/store';
 import { colors } from '@/theme';
 
 type PreviewMapProps = {
@@ -17,10 +18,12 @@ type PreviewMapProps = {
 };
 
 /**
- * The whole screen behind the card: one (mono) photoreal 3D map from the
- * city's own camera, at the Camera height set in Settings, turning slowly.
- * The orbit itself runs natively and only starts once the map has drawn.
- * In live mode the city glides along with you, around Apple's blue dot.
+ * The whole screen behind the card: one (mono) 3D map from the city's own
+ * camera, at the Camera height set in Settings, turning slowly, in the map
+ * style chosen from the header's map menu (it changes in place: the orbit
+ * carries on). The orbit itself runs natively and only starts once the map
+ * has drawn. In live mode the city glides along with you, around Apple's
+ * blue dot.
  */
 export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
   const mapRef = useRef<DioramaMapViewRef>(null);
@@ -28,6 +31,7 @@ export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
   const orbit = usePreviewOrbit();
   const coverStyle = useMapReveal(isReady);
   const following = useFollowMyLocation(mapRef);
+  const mapStyle = useSetting('mapStyle');
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -39,6 +43,7 @@ export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
         pitch={city.pitch}
         heading={city.heading}
         orbit={orbit}
+        mapStyle={mapStyle}
         showsUserLocation={following}
         onReady={onReady}
         accessible

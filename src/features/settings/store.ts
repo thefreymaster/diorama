@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { DEFAULT_MAP_STYLE, MAP_STYLES, type DioramaMapStyle } from '@diorama/native';
 import { createPersistStorage } from '@/providers/storage';
 
 export type Settings = {
@@ -44,6 +45,12 @@ export type Settings = {
   lensSpacing: number;
   /** Viewer fit: diameter of each eye's round window, in millimeters. Fills the lens hole. */
   windowDiameter: number;
+  /**
+   * How the map looks everywhere it's drawn (the preview, the Viewer, the
+   * Settings preview): satellite imagery, the same with labels (`hybrid`),
+   * or Apple Maps' standard map. Chosen from the preview's map menu.
+   */
+  mapStyle: DioramaMapStyle;
 };
 
 type NumericSetting =
@@ -72,6 +79,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   debugLook: false,
   lensSpacing: 64,
   windowDiameter: 35,
+  mapStyle: DEFAULT_MAP_STYLE,
 };
 
 /** Allowed range for each slider. Setters clamp to these. */
@@ -123,17 +131,23 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
   if (typeof saved.headPosition === 'boolean') clean.headPosition = saved.headPosition;
   if (typeof saved.leanVertical === 'boolean') clean.leanVertical = saved.leanVertical;
   if (typeof saved.debugLook === 'boolean') clean.debugLook = saved.debugLook;
+  if (isMapStyle(saved.mapStyle)) clean.mapStyle = saved.mapStyle;
   return clean;
+}
+
+function isMapStyle(value: unknown): value is DioramaMapStyle {
+  return MAP_STYLES.some((style) => style === value);
 }
 
 const useSettingsStore = create<Settings>()(
   persist(() => ({ ...DEFAULT_SETTINGS }), {
     name: 'settings',
-    // Still 1: new settings (like the viewer fit, camera height and lean)
-    // are simply missing from older saves, and `merge` fills them in from
-    // the defaults, while settings that are gone (the old window width and
-    // height) are left out, and the old Stereo switch (`mode`) is carried
-    // over into `twoEyeLandscape` (see `sanitizePersisted`).
+    // Still 1: new settings (like the viewer fit, camera height, lean and
+    // map style) are simply missing from older saves, and `merge` fills
+    // them in from the defaults, while settings that are gone (the old
+    // window width and height) are left out, and the old Stereo switch
+    // (`mode`) is carried over into `twoEyeLandscape` (see
+    // `sanitizePersisted`).
     // Bump it only when a saved value changes meaning, with a `migrate` to
     // convert it.
     version: 1,
@@ -202,6 +216,11 @@ export function setLensSpacing(value: number): void {
 
 export function setWindowDiameter(value: number): void {
   useSettingsStore.setState({ windowDiameter: clampSetting('windowDiameter', value) });
+}
+
+/** Anything but a known map style is ignored. */
+export function setMapStyle(mapStyle: DioramaMapStyle): void {
+  if (isMapStyle(mapStyle)) useSettingsStore.setState({ mapStyle });
 }
 
 export function resetSettings(): void {

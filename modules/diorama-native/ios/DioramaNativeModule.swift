@@ -122,6 +122,11 @@ public class DioramaNativeModule: Module {
       Prop("showsUserLocation", false) { (view: DioramaMapView, shows: Bool) in
         view.showsUserLocation = shows
       }
+      // T64: "satellite", "hybrid" (satellite with labels) or "standard".
+      // Expo turns the string into a MapStyle and refuses any other.
+      Prop("mapStyle", MapStyle.satellite) { (view: DioramaMapView, style: MapStyle) in
+        view.mapStyle = style
+      }
 
       // Runs once after a batch of prop changes, so the camera moves once.
       OnViewDidUpdateProps { (view: DioramaMapView) in

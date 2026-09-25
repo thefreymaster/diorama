@@ -47,6 +47,18 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       for eye in eyes { eye.mapView.showsUserLocation = showsUserLocation }
     }
   }
+  // How every eye's map looks (T64), switched in the same frame for both.
+  // MapKit's pitch cap measured the same for all three (iOS 27), but it's
+  // MapKit's to decide, so what was learned about it is asked afresh.
+  var mapStyle = MapStyle.satellite {
+    didSet {
+      guard mapStyle != oldValue else { return }
+      for eye in eyes { eye.mapStyle = mapStyle }
+      pitchCap = nil
+      steepestGazes = []
+      steepestStart = nil
+    }
+  }
 
   // The eyes, left to right: one in mono, two in stereo.
   private(set) var eyes: [EyeView] = []
@@ -86,8 +98,8 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       // can stand at a different height than a new one looking at the same
       // point, and the eyes would no longer line up.
       removeEye()
-      addEye()
-      addEye()
+      addEye(round: true)
+      addEye(round: true)
       return true
     }
     if !stereo, eyes.count == 2 {
@@ -250,7 +262,19 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     for eye in eyes { eye.appliedCamera = nil }
   }
 
-  // A new load (new place): wait for every eye to draw again.
+  // Every eye keeps showing what it shows now until `releasePictures`, so a
+  // new map style can load out of sight (T64). Both eyes are held and
+  // released together, so they never show different styles.
+  func holdPictures() {
+    for eye in eyes { eye.holdPicture() }
+  }
+
+  func releasePictures(animated: Bool) {
+    for eye in eyes { eye.releasePicture(animated: animated) }
+  }
+
+  // A new load (new place, or a new map style): wait for every eye to draw
+  // again.
   func restartRenderTracking() {
     for eye in eyes {
       eye.hasRendered = false
@@ -260,8 +284,10 @@ final class StereoRig: NSObject, MKMapViewDelegate {
 
   // MARK: - Eyes
 
-  private func addEye() {
-    let eye = EyeView()
+  // Adds an eye, round for stereo (so its map starts out as a stereo eye's;
+  // see MapStyle.pointsOfInterest).
+  private func addEye(round: Bool = false) {
+    let eye = EyeView(mapStyle: mapStyle, isRound: round)
     eye.mapView.delegate = self
     eye.mapView.showsUserLocation = showsUserLocation
     eye.overlay = makeOverlay?()
@@ -273,6 +299,7 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // Removes the last eye and frees its map.
   private func removeEye() {
     guard let eye = eyes.popLast() else { return }
+    eye.releasePicture(animated: false)
     eye.renderFallback?.cancel()
     eye.mapView.delegate = nil
     eye.removeFromSuperview()

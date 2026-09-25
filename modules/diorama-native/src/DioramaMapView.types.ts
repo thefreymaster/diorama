@@ -17,7 +17,9 @@ export type FlyoverCoverage = 'yes' | 'no' | 'unknown';
 export type DioramaReadyEvent = {
   /**
    * Photoreal 3D (Flyover) coverage at `center`. Only `no` means the view is
-   * terrain only; treat `unknown` as "probably fine" and say nothing.
+   * terrain only; treat `unknown` as "probably fine" and say nothing. It's
+   * about the imagery: the `standard` map style draws its own building
+   * models almost everywhere.
    */
   coverage: FlyoverCoverage;
   /**
@@ -31,6 +33,21 @@ export type DioramaReadyEvent = {
 
 /** One picture, or one per eye side by side for a head-mounted viewer. */
 export type DioramaViewMode = 'mono' | 'stereo';
+
+/**
+ * How the map looks. Every style keeps MapKit's 3D terrain and buildings,
+ * and the same pitch caps:
+ * - `satellite`: photoreal 3D imagery (Flyover) with nothing on top.
+ * - `hybrid`: the same imagery with street, district and city names
+ *   ("Satellite with labels"); no place icons.
+ * - `standard`: Apple Maps' drawn map, with roads, parks, water, names and
+ *   place icons, and MapKit's own 3D building models (where Apple has
+ *   them). Light or dark with the phone, like Apple Maps. In `stereo` the
+ *   place icons (and their names) are left out: each eye's map places its
+ *   own, and some showed in one eye only, which can't be fused. Street and
+ *   district names stay; they match in both eyes.
+ */
+export type DioramaMapStyle = 'satellite' | 'hybrid' | 'standard';
 
 /** A rectangle in the map view's own coordinates, in points. */
 export type DioramaRect = {
@@ -356,6 +373,15 @@ export type DioramaMapViewProps = ViewProps &
      * it while "while using" location access is on. Defaults to false.
      */
     showsUserLocation?: boolean;
+    /**
+     * How the map looks (see `DioramaMapStyle`), in every eye. It can change
+     * at any time: the camera, orbit, head look, zoom and lean stay where
+     * they are, and there's no loading cover or second `onReady`. Without
+     * head tracking the old look stays up until the new one has drawn
+     * (at most 2 s), then crossfades; with it, each map swaps its tiles in
+     * view. Defaults to `satellite`.
+     */
+    mapStyle?: DioramaMapStyle;
     /**
      * Fires once every eye has fully rendered: after the first render at each
      * `center`, and again after switching to stereo. Until then the view

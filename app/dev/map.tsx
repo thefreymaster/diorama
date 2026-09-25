@@ -4,8 +4,10 @@ import { Button, StyleSheet, View } from 'react-native';
 
 import {
   DioramaMapView,
+  MAP_STYLES,
   requestCameraAccess,
   type DioramaHeadPositionState,
+  type DioramaMapStyle,
   type DioramaHeadPositionStats,
   type DioramaLean,
   type DioramaMapViewRef,
@@ -40,6 +42,8 @@ type MapParams = {
   leanAfter?: string;
   leanLost?: string;
   stats?: string;
+  mapStyle?: string;
+  mapStyleFlip?: string;
 };
 
 type ScreenOrientation = 'portrait' | 'landscape' | 'landscape_left' | 'landscape_right';
@@ -146,6 +150,31 @@ function useFlippedLeanVertical(ready: boolean, on: boolean, flipAfter: number |
   return flippedScript === script ? !on : on;
 }
 
+function mapStyleParam(value: string | undefined, fallback: DioramaMapStyle): DioramaMapStyle {
+  return MAP_STYLES.find((style) => style === value) ?? fallback;
+}
+
+/**
+ * The map style as the dev map's params ask: `start`, then the next style
+ * (satellite → hybrid → standard → satellite) `flipAfter` seconds after
+ * the map is ready (to watch a switch mid-view, T64).
+ */
+function useFlippedMapStyle(
+  ready: boolean,
+  start: DioramaMapStyle,
+  flipAfter: number | null,
+): DioramaMapStyle {
+  const script = `${ready}:${start}:${flipAfter}`;
+  const [flippedScript, setFlippedScript] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ready || flipAfter === null) return;
+    const flip = setTimeout(() => setFlippedScript(script), flipAfter * 1000);
+    return () => clearTimeout(flip);
+  }, [ready, flipAfter, script]);
+  if (flippedScript !== script) return start;
+  return MAP_STYLES[(MAP_STYLES.indexOf(start) + 1) % MAP_STYLES.length] ?? start;
+}
+
 function formatLean({ right, up, forward }: DioramaLean, unit: number, digits: number): string {
   return [right, up, forward].map((value) => (value * unit).toFixed(digits)).join(' / ');
 }
@@ -188,7 +217,8 @@ function orientationParam(value: string | undefined, fallback: boolean): ScreenO
  * and `leanLost=8` acts as if ARKit lost track 8 s after ready. `leanVertical=0`
  * leaves up and down out of the lean (T61); `leanVerticalFlip=6` flips it 6 s
  * after ready. `stats=1` shows head position's numbers (ARKit timing and
- * jitter, the lean, height).
+ * jitter, the lean, height). `mapStyle=satellite|hybrid|standard` picks the
+ * map's look; `mapStyleFlip=6` switches to the next one 6 s after ready.
  * Unset params default to the Settings values (`mode` defaults to mono here).
  */
 export default function DevMapRoute() {
@@ -197,6 +227,7 @@ export default function DevMapRoute() {
   const savedDebugLook = useSetting('debugLook');
   const savedEyeSeparation = useSetting('eyeSeparation');
   const savedMiniature = useSetting('miniatureIntensity');
+  const savedMapStyle = useSetting('mapStyle');
   const mapRef = useRef<DioramaMapViewRef>(null);
   const [turn, setTurn] = useState(0);
   const [coverage, setCoverage] = useState<FlyoverCoverage | null>(null);
@@ -210,6 +241,12 @@ export default function DevMapRoute() {
     coverage !== null,
     flagParam(params.leanVertical, true),
     params.leanVerticalFlip === undefined ? null : numberParam(params.leanVerticalFlip, 0),
+  );
+
+  const mapStyle = useFlippedMapStyle(
+    coverage !== null,
+    mapStyleParam(params.mapStyle, savedMapStyle),
+    params.mapStyleFlip === undefined ? null : numberParam(params.mapStyleFlip, 0),
   );
 
   useScriptedLean(mapRef, {
@@ -271,6 +308,7 @@ export default function DevMapRoute() {
         mode={mode}
         eyeSeparation={numberParam(params.eyeSeparation, savedEyeSeparation)}
         miniatureIntensity={numberParam(params.miniature, savedMiniature)}
+        mapStyle={mapStyle}
         debugThermalState={thermalParam(params.thermal)}
         onReady={(event) => setCoverage(event.coverage)}
         onDegraded={() => setDegraded(true)}

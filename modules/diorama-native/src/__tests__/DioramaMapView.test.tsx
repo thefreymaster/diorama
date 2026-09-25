@@ -2,8 +2,10 @@ import { act, fireEvent, render, renderHook } from '@testing-library/react-nativ
 import { createRef } from 'react';
 
 import {
+  DEFAULT_MAP_STYLE,
   DEFAULT_WINDOW_DIAMETER,
   DioramaMapView,
+  MAP_STYLES,
   useStereoEyes,
   type DioramaEyeLayout,
   type DioramaMapViewRef,
@@ -83,6 +85,24 @@ describe('DioramaMapView', () => {
     expect(view.toJSON()).toMatchObject({
       props: { headPosition: true, leanVertical: false },
     });
+  });
+
+  it('draws photoreal imagery unless told another map style', () => {
+    const view = render(<DioramaMapView {...CAMERA} />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'satellite' } });
+    expect(DEFAULT_MAP_STYLE).toBe('satellite');
+  });
+
+  it('passes each map style to the native view, and a change in place', () => {
+    const view = render(<DioramaMapView {...CAMERA} mapStyle="standard" />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'standard' } });
+
+    view.rerender(<DioramaMapView {...CAMERA} mapStyle="hybrid" />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'hybrid', ...CAMERA } });
+  });
+
+  it('lists the map styles in menu order', () => {
+    expect(MAP_STYLES).toEqual(['satellite', 'hybrid', 'standard']);
   });
 
   it('passes head position props to the native view', () => {

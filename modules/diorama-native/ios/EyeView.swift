@@ -1,6 +1,62 @@
+import ExpoModulesCore
 import MapKit
 import UIKit
 import simd
+
+// The `mapStyle` prop (T64): how the map looks. Like a TS string union,
+// 'satellite' | 'hybrid' | 'standard'. Every style keeps MapKit's realistic
+// elevation, so terrain and 3D buildings stay, and the same pitch caps
+// (measured on iOS 27: identical in all three).
+enum MapStyle: String, Enumerable {
+  // Photoreal 3D imagery (Flyover) with nothing on top. The default.
+  case satellite
+  // The same imagery with street, district and city names ("Satellite with
+  // labels").
+  case hybrid
+  // Apple Maps' drawn map: roads, parks, water, names and place icons, with
+  // MapKit's own 3D building models; light or dark with the phone.
+  case standard
+
+  // MapKit's configuration for this style: a fresh one each time, like a
+  // new props object, since a map keeps the one it's given. `round`: for a
+  // stereo eye (see `pointsOfInterest`).
+  func makeConfiguration(round: Bool) -> MKMapConfiguration {
+    switch self {
+    case .satellite:
+      // The best MapKit offers on every iOS from 16.4 through 27 (T34): the
+      // iOS 27 SDK adds no map configuration, elevation style or quality
+      // setting, and apps can't ask for Apple's new iOS 27 Flyover (the
+      // Gaussian-splat cities); MapKit still draws the classic 3D mesh in
+      // apps. If a later SDK adds a way, it goes here behind `if #available`.
+      // See OVERVIEW.md's research table.
+      return MKImageryMapConfiguration(elevationStyle: .realistic)
+    case .hybrid:
+      let configuration = MKHybridMapConfiguration(elevationStyle: .realistic)
+      configuration.pointOfInterestFilter = pointsOfInterest(round: round)
+      return configuration
+    case .standard:
+      let configuration = MKStandardMapConfiguration(
+        elevationStyle: .realistic, emphasisStyle: .default)
+      configuration.pointOfInterestFilter = pointsOfInterest(round: round)
+      return configuration
+    }
+  }
+
+  // Which place icons (and their names) the map shows: Apple Maps' own on
+  // the standard map held upright, none on the imagery, and none in a
+  // stereo eye. Each eye's map places its own labels, and in the headset
+  // some place names showed in one eye only, which the eyes can't fuse
+  // (Boston, iOS 27: in 3 of 4 views after looking around; the muted
+  // emphasis style or a short list of categories didn't fix it). Street and
+  // district names come out the same in both eyes, so they stay.
+  func pointsOfInterest(round: Bool) -> MKPointOfInterestFilter {
+    showsPlaceIcons(round: round) ? .includingAll : .excludingAll
+  }
+
+  func showsPlaceIcons(round: Bool) -> Bool {
+    self == .standard && !round
+  }
+}
 
 // One eye's picture. Mono shows one EyeView filling the component; stereo
 // shows two round ones, one per headset lens (see StereoRig). Think of it as
@@ -95,7 +151,14 @@ final class EyeView: UIView {
   // outside it, like the round lens holes of a headset. Stereo eyes are
   // round; mono is not.
   var isRound = false {
-    didSet { if isRound != oldValue { setNeedsLayout() } }
+    didSet {
+      guard isRound != oldValue else { return }
+      setNeedsLayout()
+      // A round eye's map leaves out place icons (see MapStyle).
+      if mapStyle.showsPlaceIcons(round: isRound) != mapStyle.showsPlaceIcons(round: oldValue) {
+        applyMapStyle()
+      }
+    }
   }
 
   // Room MapKit's logo and Legal link keep from this eye's edges, in this
@@ -118,7 +181,20 @@ final class EyeView: UIView {
   var hasRendered = false
   var renderFallback: DispatchWorkItem?
 
-  init() {
+  // How the map looks (T64). Switching keeps the camera where it is.
+  var mapStyle: MapStyle {
+    didSet { if mapStyle != oldValue { applyMapStyle() } }
+  }
+
+  // A still of this eye's map as it was, held over the live map while a new
+  // map style loads (T64), so the switch is a crossfade rather than a flash
+  // of MapKit's empty loading grid. See `holdPicture()`.
+  private var heldPicture: UIView?
+  private static let releaseSeconds = 0.3
+
+  init(mapStyle: MapStyle = .satellite, isRound: Bool = false) {
+    self.mapStyle = mapStyle
+    self.isRound = isRound
     super.init(frame: .zero)
     clipsToBounds = true
     // With `clipsToBounds`, a corner radius of half the side clips this view
@@ -141,17 +217,11 @@ final class EyeView: UIView {
     fatalError("init(coder:) is not supported")
   }
 
-  // Photoreal 3D imagery with nothing on top: no labels, POIs, compass or
-  // scale, and no gestures (touches fall through to React Native).
+  // The map in `mapStyle` (see MapStyle), with no compass or scale, and no
+  // gestures (touches fall through to React Native).
   private func configureMap() {
-    // The best MapKit offers on every iOS from 16.4 through 27 (T34): the
-    // iOS 27 SDK adds no map configuration, elevation style or quality
-    // setting, and apps can't ask for Apple's new iOS 27 Flyover (the
-    // Gaussian-splat cities); MapKit still draws the classic 3D mesh in
-    // apps. If a later SDK adds a way, it goes here behind `if #available`.
-    // See OVERVIEW.md's research table.
-    mapView.preferredConfiguration = MKImageryMapConfiguration(elevationStyle: .realistic)
-    mapView.pointOfInterestFilter = .excludingAll
+    mapView.preferredConfiguration = mapStyle.makeConfiguration(round: isRound)
+    mapView.pointOfInterestFilter = mapStyle.pointsOfInterest(round: isRound)
     mapView.showsCompass = false
     mapView.showsScale = false
     mapView.showsUserLocation = false
@@ -164,6 +234,48 @@ final class EyeView: UIView {
     // default those include the safe area (notch, header, home indicator),
     // which differs per eye. Leave the safe area out; see layoutSubviews.
     mapView.insetsLayoutMarginsFromSafeArea = false
+  }
+
+  // A new look for the same view (T64). MapKit swaps its tiles and may move
+  // the camera to stand on the new map's ground, so the camera we asked for
+  // goes straight back: the view doesn't jump. (StereoRig sets it again
+  // once the new tiles are in; see DioramaMapView.eyesDidRender.)
+  private func applyMapStyle() {
+    UIView.performWithoutAnimation {
+      mapView.preferredConfiguration = mapStyle.makeConfiguration(round: isRound)
+      mapView.pointOfInterestFilter = mapStyle.pointsOfInterest(round: isRound)
+      if let camera = appliedCamera {
+        mapView.setCamera(camera.makeCamera(), animated: false)
+      }
+    }
+  }
+
+  // Freezes the map's picture as it is now, until `releasePicture`. Only
+  // the map's: the tilt-shift overlay on top stays live. Like a screenshot
+  // laid over the map, but taken by iOS without copying pixels.
+  func holdPicture() {
+    guard heldPicture == nil, window != nil, warpView.alpha > 0,
+      let still = warpView.snapshotView(afterScreenUpdates: false)
+    else { return }
+    still.frame = warpView.frame
+    still.isUserInteractionEnabled = false
+    insertSubview(still, aboveSubview: warpView)
+    heldPicture = still
+  }
+
+  // Fades the held picture away to the live map beneath (at once when not
+  // `animated`).
+  func releasePicture(animated: Bool) {
+    guard let still = heldPicture else { return }
+    heldPicture = nil
+    guard animated, window != nil else {
+      still.removeFromSuperview()
+      return
+    }
+    UIView.animate(
+      withDuration: Self.releaseSeconds, delay: 0, options: [.curveEaseInOut],
+      animations: { still.alpha = 0 },
+      completion: { _ in still.removeFromSuperview() })
   }
 
   override func layoutSubviews() {
@@ -376,6 +488,7 @@ final class EyeView: UIView {
     sky.center = CGPoint(x: bounds.midX, y: bounds.midY)
     hazeEdge.frame = CGRect(
       x: 0, y: 0, width: size.width, height: (size.height * HazeEdge.share).rounded())
+    heldPicture?.frame = warpView.frame
     let oldMapSize = mapView.bounds.size
     mapView.frame = warpView.bounds
     if mapView.bounds.size != oldMapSize {

@@ -397,7 +397,18 @@ describe('viewer', () => {
   it('hides the status bar and keeps the screen awake', async () => {
     await openViewer();
 
-    expect(screen.UNSAFE_getByType(StatusBar).props.hidden).toBe(true);
+    // Per screen (view-controller-based status bars, which iOS 27 requires):
+    // the Viewer's modal hides it, the picker underneath keeps it.
+    const viewer = screen.UNSAFE_root.findAll(
+      (node) => node.type === MODAL_SCREEN && node.props.stackPresentation === 'fullScreenModal',
+    );
+    expect(viewer.map((node) => node.props.statusBarHidden)).toEqual([true]);
+    const picker = screen.UNSAFE_root.findAll(
+      (node) => node.type === STACK_SCREEN && node.props.stackPresentation === 'push',
+    );
+    expect(picker.map((node) => node.props.statusBarHidden)).toEqual([undefined]);
+    // Never the app-wide API: with view-controller-based status bars it's an error.
+    expect(screen.UNSAFE_queryAllByType(StatusBar)).toHaveLength(0);
     expect(useKeepAwake).toHaveBeenCalled();
   });
 

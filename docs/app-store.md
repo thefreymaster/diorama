@@ -2,7 +2,7 @@
 
 Diorama ships as a local Xcode archive, without EAS. `ios/` is generated from `app.json` (Continuous Native Generation) and git-ignored, so every build starts by regenerating it. Change `app.json`, never `ios/`.
 
-`app.json` holds everything the store reads: team `3U62R986E5` with automatic signing, bundle ID `canvas23studios.diorama`, `version` and `ios.buildNumber`, export compliance (`usesNonExemptEncryption: false`, so App Store Connect asks no encryption questions), the Liquid Glass icon (`assets/expo.icon`), the motion permission string, and the privacy manifest (`ios.privacyManifests`). The app never asks for location, so it has no location string.
+`app.json` holds everything the store reads: team `3U62R986E5` with automatic signing, bundle ID `canvas23studios.diorama`, `version` and `ios.buildNumber`, export compliance (`usesNonExemptEncryption: false`, so App Store Connect asks no encryption questions), the Liquid Glass icon (`assets/expo.icon`), the motion and location (while using the app) permission strings, the UIScene life cycle (`ios.enableSceneSupport` under the `expo-build-properties` plugin; see Xcode 27 and iOS 27), and the privacy manifest (`ios.privacyManifests`).
 
 ## Commands
 
@@ -39,7 +39,7 @@ It checks, before anything leaves the Mac: the version and build number, `ITSApp
 
 Without a key, `ios:archive` still builds and signs the `.ipa` with the Apple ID signed in to Xcode (Xcode → Settings → Accounts). You then upload it with Xcode or Transporter (see Uploading).
 
-Signing needs nothing on the Mac's keychain. Xcode uses the team's cloud-managed Apple Distribution certificate and keeps an App Store profile for the bundle ID ("iOS Team Store Provisioning Profile: canvas23studios.diorama"), creating it when it's missing.
+The App Store signature needs no certificate on the Mac. Xcode uses the team's cloud-managed Apple Distribution certificate and keeps an App Store profile for the bundle ID ("iOS Team Store Provisioning Profile: canvas23studios.diorama"), creating it when it's missing. Builds before that step (the archive, and every `npx expo run:ios --device` build) sign with the Mac's own development identity, "Apple Development: evanjfreymiller@gmail.com" on team `3U62R986E5`, which lives in the login keychain. So build from a session logged in to the Mac's desktop, where the login keychain is unlocked. Over SSH or from a background job with the keychain locked, codesign can't use the key and the build fails at the signing step.
 
 ## Each release
 
@@ -98,6 +98,37 @@ It also declares no tracking, no tracking domains and no collected data.
 
 When you add a native dependency, look for its `PrivacyInfo.xcprivacy` (in `node_modules/<package>/ios/` or `ios/Pods/<Pod>/`). Add any category or reason it declares that isn't in `app.json` yet. `ios:prepare` fails if the generated manifest is missing anything `app.json` declares.
 
+## Xcode 27 and iOS 27
+
+The Mac has one Xcode, 27.0 (27A266a), so every build links against the iOS 27 SDK. Its Simulator runtimes are iOS 26.5 and 17.5. There is no iOS 27 Simulator, so check iOS 27 behavior on a real iPhone.
+
+iOS 27 won't launch an app built with its SDK unless the app uses the UIScene life cycle, where a window scene owns the window instead of the app delegate. Without it the app dies before any JavaScript loads, with `EXC_BREAKPOINT` in `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`. iOS 26 and older launch either kind.
+
+Diorama opts in with `"enableSceneSupport": true` in the `ios` options of the `expo-build-properties` plugin in `app.json`. Prebuild then:
+
+- adds `UIApplicationSceneManifest` to `Info.plist`: a single scene (`UIApplicationSupportsMultipleScenes` false) whose `UIWindowSceneSessionRoleApplication` configuration uses Expo's scene delegate, `EXExpoAppSceneDelegate`.
+- makes `AppDelegate` an `ExpoReactNativeFactoryProvider` that only creates the React Native factory in `didFinishLaunching`. The scene delegate creates the window and starts React Native in it. It passes URLs (including the one that cold-started the app), user activities and life-cycle events back to the app delegate, so `Linking`, expo-router and the Expo modules get them as before.
+
+Two more settings in `app.json` keep the screens right on iOS 27:
+
+- `UIViewControllerBasedStatusBarAppearance` is true, and the Viewer route hides the status bar with the screen option `statusBarHidden`. On iOS 27 the app-wide call behind React Native's `<StatusBar hidden />` left the status bar over the Viewer.
+- The `expo-screen-orientation` plugin's `initialOrientation: "PORTRAIT_UP"` makes the app portrait until the first screen says otherwise. Without it, a fresh Release launch on iOS 27 let the picker turn sideways, because iOS kept the orientations it read before React Native drew anything.
+
+To check a generated project: `/usr/libexec/PlistBuddy -c "Print :UIApplicationSceneManifest" ios/Diorama/Info.plist` prints the scene, and `ios/Diorama/AppDelegate.swift` has no `UIWindow(frame:)`. Expo SDK 58's template adopts scenes on its own. After that upgrade, remove `enableSceneSupport` (prebuild warns that it's no longer needed).
+
+Xcode 27's `devicectl` covers the rest of the iPhone work. The iPhone has to be unlocked to install or launch.
+
+| Task | Command |
+|---|---|
+| Install a build | `xcrun devicectl device install app --device <UDID> <path>/Diorama.app` |
+| Open the dev client on Metro | `xcrun devicectl device process launch --device <UDID> --terminate-existing --payload-url "exp+diorama://expo-development-client/?url=http%3A%2F%2F<Mac's LAN IP>%3A8081" canvas23studios.diorama` |
+| List crash logs | `xcrun devicectl device info files --device <UDID> --domain-type systemCrashLogs` |
+| Copy one | `xcrun devicectl device copy from --device <UDID> --domain-type systemCrashLogs --source <name>.ips --destination <file>.ips` |
+| Screenshot | `xcrun devicectl device capture screenshot --device <UDID> --destination <file>.png` |
+| Turn the phone without touching it | `xcrun devicectl device orientation set --device <UDID> landscapeLeft` (or `portrait`, `landscapeRight`). It works on a Simulator too, by its UDID. |
+
+`npx expo run:ios --device` builds and signs with Xcode 27, but its own install step can stall at "Connecting to: <iPhone>". Stop it, then install the app it built (`~/Library/Developer/Xcode/DerivedData/Diorama-*/Build/Products/Debug-iphoneos/Diorama.app`) with `devicectl` as above.
+
 ## Troubleshooting
 
 - **`ios:prepare` stops at a check** ("CFBundleVersion is …, but app.json says …"): fix `app.json` and run it again. Don't edit `ios/`; the next prepare deletes it.
@@ -108,4 +139,5 @@ When you add a native dependency, look for its `PrivacyInfo.xcprivacy` (in `node
 - **"No suitable application records were found"** when uploading: create the App Store Connect record (One-time setup, step 1), and check that its bundle ID matches `app.json`.
 - **"The bundle version must be higher than the previously uploaded version"**: run `npm run bump` and build again.
 - **An "ITMS-91053: Missing API declaration" email:** add the API it names, with a reason, under `ios.privacyManifests` in `app.json` (see Privacy manifest). Then bump, build and upload again.
+- **The app closes as soon as it opens on iOS 27** (its crash log names `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`): the build has no scene manifest. Check that `app.json` still sets `enableSceneSupport` (see Xcode 27 and iOS 27), then run `npm run ios:prepare` and build again.
 - **The dev launcher or dev menu shows up:** that's a Debug build (`npx expo run:ios`). Archives are always Release. `ios:archive` fails if either one ends up inside the app.

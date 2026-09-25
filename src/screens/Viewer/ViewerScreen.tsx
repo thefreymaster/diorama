@@ -1,5 +1,4 @@
 import { useKeepAwake } from 'expo-keep-awake';
-import { StatusBar } from 'expo-status-bar';
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -17,10 +16,11 @@ import { ViewerMap } from './ViewerMap';
  * The diorama. Held upright it's one full-screen picture, a window into the
  * city; turned sideways it's the two-eye view for a headset viewer, and it
  * switches as the phone turns (the route allows every orientation but
- * upside down, and hides the home indicator). The screen stays awake,
- * double-tap recenters, a long press exits, and the HUD appears only when it
- * has something to say. The one piece of chrome is a close button: always
- * there in stereo (in the black outside the eye windows), on a tap in mono.
+ * upside down, and hides the status bar and home indicator). The screen
+ * stays awake, double-tap recenters, a long press exits, and the HUD appears
+ * only when it has something to say. The one piece of chrome is a close
+ * button: always there in stereo (in the black outside the eye windows), on
+ * a tap in mono.
  */
 export function ViewerScreen() {
   useKeepAwake();
@@ -42,7 +42,6 @@ export function ViewerScreen() {
         onExit={viewer.exit}
         accessibilityLabel={`3D view of ${city.name}`}
       >
-        <StatusBar hidden />
         <ViewerMap
           ref={mapRef}
           city={city}

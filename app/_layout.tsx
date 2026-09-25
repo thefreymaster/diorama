@@ -33,6 +33,9 @@ export default function RootLayout() {
             // two-eye view. Leaving it, the preview turns the phone back upright.
             orientation: 'default',
             autoHideHomeIndicator: true,
+            // Per screen, the way iOS 27 still honors (Info.plist turns on
+            // view-controller-based status bars; the app-wide call is ignored).
+            statusBarHidden: true,
           }}
         />
       </Stack>

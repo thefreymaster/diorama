@@ -21,7 +21,8 @@
         "EXDevMenuIsOnboardingFinished": true,
         "EXDevMenuShowsAtLaunch": false,
         "EXDevMenuShowFloatingActionButton": false,
-        "NSMotionUsageDescription": "Diorama uses motion to turn the city as you turn your head."
+        "NSMotionUsageDescription": "Diorama uses motion to turn the city as you turn your head.",
+        "UIViewControllerBasedStatusBarAppearance": true
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,
@@ -64,7 +65,9 @@
       [
         "expo-build-properties",
         {
-          "ios": {}
+          "ios": {
+            "enableSceneSupport": true
+          }
         }
       ],
       [
@@ -75,7 +78,8 @@
           "locationAlwaysPermission": false,
           "isIosBackgroundLocationEnabled": false
         }
-      ]
+      ],
+      ["expo-screen-orientation", { "initialOrientation": "PORTRAIT_UP" }]
     ],
     "experiments": {
       "typedRoutes": true,

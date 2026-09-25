@@ -385,72 +385,81 @@ Details: Found by T34's implementer on 2026-09-25: on the iOS 26.5 Simulator the
 Acceptance: Release and Debug builds get past the splash to the picker on the iOS 26.5 and 17.5 Simulators and on iOS 27 (screenshots); the cause is named in Notes; a Jest test covers it if it's in JS; the Viewer on the iOS 27 Simulator opens level (or the Notes explain why it's Simulator-only); typecheck, lint and tests pass. NEEDS DEVICE CHECK — the app still launches on the owner's iOS 27 iPhone.
 Notes: NEEDS DEVICE CHECK — the app still launches on the owner's iOS 27 iPhone and the splash lifts cleanly onto the picker (Debug and Release). Cause: not a regression. For ~10–15 min after boot the iOS 26.5 Simulator's `locationd` deadlocks; the picker's launch-time location read (`hasServicesEnabledAsync`, T39) blocked Expo's single shared async-call queue, and expo-router's async splash hide waited behind it (sampled; hide arrived ~32 s late). Fix: `useHideSplashScreen()` in the root layout calls the synchronous `SplashScreen.hide()` one frame after the first commit; Jest covers a location read that never answers. Checked on iOS 26.5 (while the hang was active), 17.5 and 27.0, Release and Debug. The Viewer "sky" report didn't reproduce: the iOS 27 Simulator has no motion sensors and the Viewer opens on its usual view. Follow-up: while locationd hangs, other async native calls on that queue (keep-awake, `getCameraAccess`) also wait (Simulator only); could move location-access reads to their own queue.
 
-## Phase 4 — Native SwiftUI app (phase out React Native)
+## Phase 4 — Native SwiftUI app (phase out React Native) — PAUSED by owner 2026-09-25
 
 Owner decision 2026-09-25: replace the React Native/Expo app with a native SwiftUI app and ship it through TestFlight. Shared rules for T49–T57: the new app lives in `native/` (`native/Diorama.xcodeproj`, sources in `native/Diorama/`, tests in `native/DioramaTests/`), uses Xcode 16+ synchronized folders so adding a file never needs a `project.pbxproj` edit, same bundle id `canvas23studios.diorama`, team 3U62R986E5, URL scheme `diorama`, iOS 17.0 minimum (raised from 16.4 for `@Observable` and SwiftUI MapKit; say so in OVERVIEW.md), Swift 6 language mode with UI on the main actor. State lives in `@Observable` models injected through the SwiftUI environment (the native version of "no prop drilling"); persistence in `UserDefaults` as Codable JSON, sanitised and clamped like today's stores. Logic gets Swift Testing tests (`xcodebuild test`); screens are checked with Simulator screenshots through `diorama://` deep links like before. Keep the "made by Apple" bar and the comment style (the owner is learning Swift, so explain the non-obvious). The React Native app keeps working until T56 removes it; until then both apps compile against the same Swift core, never two copies.
 
 ### T49 Native app skeleton + split the map core from the Expo glue
-Status: todo
+Status: blocked
 Depends: T48
 Files: native/, modules/diorama-native/ios/, modules/diorama-native/DioramaNative.podspec, scripts/native-build.sh, docs/native.md
 Details: (1) Split `modules/diorama-native/ios/` so the map engine has no Expo dependency: today `CameraPose.swift` (`Coordinate: Record`), `StereoRig.swift` (`ViewMode: Enumerable`), `DioramaMapView.swift` (an `ExpoView` with `EventDispatcher`s), `PlacePickerMapView.swift`, `DioramaSearch.swift` and `DioramaSearchRecords.swift` (promises, `Record`s) import ExpoModulesCore. Move the engine (map views, cameras, head tracking, head position, stereo, sky, miniature, search) into `modules/diorama-native/ios/Core/` as plain Swift/UIKit with plain structs, enums, closures and `async` functions; keep only thin Expo adapters in `modules/diorama-native/ios/Expo/` (Records ↔ structs, `ExpoView` wrapping the core `UIView`, `EventDispatcher` ↔ closures, promise ↔ async). The RN app must behave exactly as before (Jest 630 tests, a Simulator build, stereo and lean screenshots unchanged). (2) Create the SwiftUI app in `native/` (App + a `WindowGroup` scene, `diorama://` URL handling, portrait by default) whose target compiles `modules/diorama-native/ios/Core/` through a synchronized folder reference (moved into `native/` in T56). It launches to a placeholder that shows one mono `DioramaMapView` (via `UIViewRepresentable`) over Manhattan. (3) A test target with one Swift Testing test. (4) `scripts/native-build.sh build|test|run-sim` wrapping `xcodebuild` (non-interactive) and `docs/native.md` with the commands.
 Acceptance: `npm run typecheck && npm run lint && npm test` still pass and the RN app's Simulator build still shows the same stereo view (before/after screenshots); `scripts/native-build.sh build` and `test` succeed with Xcode 27; the native app launches on the iOS 27 Simulator showing Manhattan in 3D (screenshot); no Swift file is duplicated between the apps.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T50 Native models: settings, recents, curated places, coverage, search
-Status: todo
+Status: blocked
 Depends: T49
 Files: native/Diorama/Models/, native/Diorama/Services/, native/DioramaTests/
 Details: Port the app's state and data to Swift, with the same behaviour and tests: `SettingsModel` (every setting in `src/features/settings/store.ts` with the same defaults, `SETTING_RANGES` clamps, reset; lean switch and gain; lens spacing and diameter; two-eye view; debug look in DEBUG), `RecentsModel` (max 8, newest first, unique, sanitised; `addRecent`/`removeRecent`), hidden featured ids, the curated data (`src/features/cities/curated.ts`: cities and parks with category, camera, symbol, tile color; `getCuratedCity`; the Settings-only Boston view from T45), `placeId`/slug rules, suggested altitudes and `PLACE_ALTITUDES`, curated matching (`curatedMatch.ts`, 50 km cities / 120 km parks), and flyover coverage (`flyoverCoverage.ts`, yes/no/unknown). A `SearchModel` over the core search (debounced ~100 ms, newest query wins, cities and places sections, title highlights, `resolve`). Port the Jest tests that cover these into Swift Testing (same cases, same numbers).
 Acceptance: `scripts/native-build.sh test` passes with the ported tests (list how many and which Jest suites they mirror); no UI yet; the RN app is untouched.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T51 Native city picker: search, Recent, Featured, National parks
-Status: todo
+Status: blocked
 Depends: T50
 Files: native/Diorama/Screens/Picker/, native/Diorama/UI/, native/Diorama/App/, native/DioramaTests/
 Details: Rebuild the picker in SwiftUI to match today's app: `NavigationStack` with the large title "Diorama", `.searchable` ("Search for a city or place", results in "Cities" and "Places" sections with bold matched text, skeleton rows while loading, quiet empty and error states), then Recent, Featured and National parks inset-grouped sections with SF Symbol tiles, swipe to delete (Recent removes; Featured and parks hide), a Settings gear toolbar button, haptics on selection. Tapping a row adds it to Recent and pushes the preview route (a placeholder until T53). Leave room at the top for T52's "Current location" and "Choose on map" rows. Deep links `diorama://` and `diorama://?q=par`.
 Acceptance: Simulator screenshots (light and dark) of the picker and of `diorama://?q=par` results next to the RN app's; swipe-delete and restore covered by model tests; `scripts/native-build.sh test` passes. NEEDS DEVICE CHECK — search feel and swipe on the iPhone.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T52 Native location: Current location, live follow, Choose on map
-Status: todo
+Status: blocked
 Depends: T51
 Files: native/Diorama/Screens/Picker/, native/Diorama/Screens/PlacePicker/, native/Diorama/Services/Location*, native/DioramaTests/
 Details: Port T39, T40 and T43 with CoreLocation directly (when-in-use only, `NSLocationWhenInUseUsageDescription` with the same text, never at launch): the "Current location" row (states: locating, access off → open Settings, can't find you → retry), reverse-geocoded naming, live mode (`live` flag through preview and Viewer, High-accuracy updates, 50 m accuracy filter, ≤1 fix/s to the map's `followTo`, stops when not visible or inactive), and "Choose on map" (a sheet with an interactive SwiftUI `Map` or the core `PlacePickerMapView`, fixed center pin, name and coverage card, "Open diorama", `diorama://pick?lat=&lon=&span=`). Location reads must never block launch (see T48).
 Acceptance: Swift tests for the accuracy filter, throttle, naming fallback and span→altitude; Simulator: `xcrun simctl location` set and a route drive the row and live follow (screenshots), `diorama://pick?lat=48.8584&lon=2.2945&span=2000` shows the Eiffel Tower card; `scripts/native-build.sh test` passes. NEEDS DEVICE CHECK — permission prompt, real GPS, map dragging.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T53 Native city preview
-Status: todo
+Status: blocked
 Depends: T51
 Files: native/Diorama/Screens/Preview/, native/DioramaTests/
 Details: Port the preview (T11/T20/T28/T40): full-bleed mono map with a slow orbit (paused off screen and under Reduce Motion), transparent header with the place's name as the back title, a glass card with name and subtitle, the "3D buildings aren't available here" note only for `no` coverage, the live-mode "Following your location" line, the loading cover until the map has drawn, and a capsule "Enter Diorama" button that opens the Viewer full screen (a placeholder until T54). Deep link `diorama://city/<id>`; unknown ids show the quiet not-found state.
 Acceptance: Simulator screenshots of Paris, Dubai (terrain note) and Grand Canyon previews in light and dark next to the RN app's; `scripts/native-build.sh test` passes. NEEDS DEVICE CHECK — orbit smoothness.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T54 Native Viewer: upright window, headset stereo, gestures, lean
-Status: todo
+Status: blocked
 Depends: T53
 Files: native/Diorama/Screens/Viewer/, native/Diorama/App/, native/DioramaTests/
 Details: Port the Viewer (T12, T22–T27, T30–T32, T37, T46, T47): a full-screen cover that alone may rotate (portrait lock elsewhere, via the scene's supported orientations); upright = full-screen mono with drag to look and pinch zoom (`beginZoom`/`setZoom`/`endZoom`); sideways = two-eye stereo after the 3-second "Put on your viewer" countdown (unless Two-eye view is off); double-tap recenters with the brief HUD, long press exits, the glass ✕ in the black margin; status bar and home indicator hidden, screen kept awake; head tracking, lean (camera permission asked once, upright, before the countdown; hints "Look around the room to start" / "Hold still, finding your place"), live follow, all settings live. Deep link `diorama://view/<id>`.
 Acceptance: Simulator screenshots upright and sideways stereo (logo and Legal aligned as in T44), countdown, HUD; debugLook drag and fake lean work; exit returns to the preview upright; `scripts/native-build.sh test` passes (gesture and state logic in models, tested). NEEDS DEVICE CHECK — head tracking, lean, stereo in the headset, rotation both ways.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T55 Native Settings
-Status: todo
+Status: blocked
 Depends: T50, T53
 Files: native/Diorama/Screens/Settings/, native/DioramaTests/
 Details: Port Settings (T13, T24, T30, T33, T45, T47): the live downtown Boston preview map, sliders with SF Symbol end caps (Model size, Camera height, Tracking sensitivity, Miniature effect, Lean distance), the "Lean to move closer" switch with the "Camera access is off" row, Viewer fit (Lens spacing, Diameter, dimmed when Two-eye view is off), Two-eye view in landscape, Restore suggested places (only when something is hidden), Reset to defaults, and the DEBUG-only Developer section. Same footers and copy. Deep link `diorama://settings`.
 Acceptance: Simulator screenshots in light and dark next to the RN app's; settings persist across relaunch and reset (tests); `scripts/native-build.sh test` passes.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T56 Switch over: the SwiftUI app becomes the app, React Native removed
-Status: todo
+Status: blocked
 Depends: T52, T54, T55
 Files: native/, modules/, app/, src/, package.json, package-lock.json, app.json, tsconfig.json, babel.config.js, jest.config.js, jest.setup.ts, eslint.config.js, plugins/, scripts/, ios-export/, store/, docs/, OVERVIEW.md, CLAUDE.md, .claude/agents/implementer.md, .claude/commands/, .gitignore
 Details: Parity check first: walk every feature and deep link of the RN app against the native one and list gaps (fix small ones, file tasks for big ones before deleting anything). Then: move the core from `modules/diorama-native/ios/Core/` into `native/Diorama/Core/`; carry over the privacy manifest (T35's required-reason APIs, minus Expo/MMKV-only ones), Info.plist purpose strings, app icon (Icon Composer) and launch screen, `ITSAppUsesNonExemptEncryption` = NO, build number and version; delete the Expo/React Native app (`app/`, `src/`, `modules/`, `plugins/`, Node config, `package.json` and friends, generated `ios/`); rewrite `scripts/ios-prepare.sh`/`ios-archive.sh`/`bump-build.mjs` as native equivalents (`scripts/archive.sh`, `scripts/bump.sh`), and `scripts/screenshots.sh` to build the native app; update CLAUDE.md (commands, "SwiftUI app, no React Native"), OVERVIEW.md (architecture, folder layout, props contract → Swift API), the implementer agent and the slash commands so future cycles run `xcodebuild` instead of npm. The owner's data (recents, settings) doesn't need migrating.
 Acceptance: the parity list is in Notes with every item ticked or filed as a task; `scripts/native-build.sh test` passes; `scripts/archive.sh` produces a signed App Store `.ipa` from `native/` (Apple Distribution, App Store profile, privacy manifest inside); `scripts/screenshots.sh` regenerates the store screenshots from the native app; no Node/Expo files remain; the Release app runs on the owner's iPhone without a Mac attached. NEEDS DEVICE CHECK — a full pass through every feature on the iPhone.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ### T57 TestFlight pipeline for the SwiftUI app
-Status: todo
+Status: blocked
 Depends: T56
 Files: scripts/testflight.sh, scripts/archive.sh, ios-export/ExportOptions.plist, docs/app-store.md, docs/native.md
 Details: One non-interactive command, `scripts/testflight.sh`, that bumps the build number, archives Release from `native/`, exports with `method: app-store-connect` and `destination: upload`, and uploads to TestFlight using an App Store Connect API key (`ASC_KEY_ID`, `ASC_ISSUER_ID`, key file in `~/.appstoreconnect/private_keys/`; `xcodebuild -allowProvisioningUpdates -authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`), then waits for processing (`xcrun altool` or the App Store Connect API) and prints the build's TestFlight status. Also document setting up Xcode Cloud as an alternative (a workflow that archives on push to `main` and distributes to internal testers). This supersedes T17's upload step: the owner must first create the App Store Connect app record for `canvas23studios.diorama` and an API key (App Manager role) — list the exact clicks in docs/app-store.md.
 Acceptance: without the key env vars the script stops early with a clear message saying what's missing; with them, a build appears in TestFlight (NEEDS OWNER: App Store Connect record + API key); docs list both paths.
+Notes: PAUSED by owner 2026-09-25: the React Native app is working well, so the SwiftUI rewrite is on hold. Don't start this task (or any of T49–T57) until the owner says to resume; then set Status back to todo.
 
 ## Backlog (not scheduled)
 Notes: NEEDS DEVICE CHECK — the camera prompt appears once, on the first Viewer visit with the switch on, before the headset countdown; answering starts the countdown and Allow starts leaning; Don't Allow keeps head turning and Settings shows "Camera access is off" (tap opens Diorama's iOS Settings page, clears on return); the hints read well through the lenses ("Look around the room to start" wraps to three lines in the eye circles); Lean distance feels right at 1×, 2× and 5×. Settings: `headPosition` (on) and `leanGain` (1–5×, by ratio) after Tracking sensitivity; the slider dims while the switch is off (`stereoOnly` became `requires: 'twoEyeLandscape' | 'headPosition'`); "Camera access is off" is its own row under the switch. `useViewerLean` asks only while undetermined and upright/loading, never mid-headset, at most once per visit; the countdown waits for the answer, which is written into the camera-access query so Settings updates at once. `useLeanHints`: "Look around the room to start" while starting (≤5 s); "Hold still, finding your place" after 3 s limited (≤4 s); both stay ≥1.5 s. Camera privacy answer and review-note text are in docs/app-store.md for T36 (store/ didn't exist yet).

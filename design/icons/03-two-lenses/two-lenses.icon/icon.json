@@ -1,0 +1,87 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "srgb:0.33333,0.33333,0.36078,1.00000",
+      "srgb:0.10980,0.10980,0.12549,1.00000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0.5,
+        "y": 0
+      },
+      "stop": {
+        "x": 0.5,
+        "y": 1.0
+      }
+    }
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "lenses.svg",
+          "name": "lenses"
+        }
+      ],
+      "name": "lenses",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "city.svg",
+          "name": "city"
+        }
+      ],
+      "name": "city",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "view.svg",
+          "name": "view",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.45
+            }
+          ]
+        }
+      ],
+      "name": "view",
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

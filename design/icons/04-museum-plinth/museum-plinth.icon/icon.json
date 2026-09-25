@@ -1,0 +1,140 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "srgb:0.13333,0.82745,0.54118,1.00000",
+      "srgb:0.02353,0.47843,0.33333,1.00000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0.5,
+        "y": 0
+      },
+      "stop": {
+        "x": 0.5,
+        "y": 1.0
+      }
+    }
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "model.svg",
+          "name": "model"
+        }
+      ],
+      "name": "model",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "mountains.svg",
+          "name": "mountains"
+        }
+      ],
+      "name": "mountains",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "board.svg",
+          "name": "board"
+        },
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.38824,0.38824,0.40000,1.00000"
+              }
+            }
+          ],
+          "image-name": "plinth-top.svg",
+          "name": "plinth-top",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.6
+            }
+          ]
+        },
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.22745,0.22745,0.23529,1.00000"
+              }
+            }
+          ],
+          "image-name": "plinth-front.svg",
+          "name": "plinth-front",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.6
+            }
+          ]
+        },
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.17255,0.17255,0.18039,1.00000"
+              }
+            }
+          ],
+          "image-name": "plinth-foot.svg",
+          "name": "plinth-foot",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.6
+            }
+          ]
+        }
+      ],
+      "name": "plinth",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

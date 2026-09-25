@@ -1,0 +1,128 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.43529,0.75686,1.00000,1.00000",
+          "srgb:0.82353,0.92941,1.00000,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 0.55
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.04314,0.10196,0.21961,1.00000",
+          "srgb:0.13333,0.25098,0.43137,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 0.6
+          }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "near.png",
+          "name": "near",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "dark",
+              "value": 0.7
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.6
+            }
+          ]
+        }
+      ],
+      "name": "near",
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "street.svg",
+          "name": "street"
+        }
+      ],
+      "name": "street",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "far.png",
+          "name": "far",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "dark",
+              "value": 0.55
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.45
+            }
+          ]
+        }
+      ],
+      "name": "far",
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

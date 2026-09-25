@@ -1,0 +1,120 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "srgb:0.49020,0.54510,1.00000,1.00000",
+      "srgb:0.27451,0.21569,0.81569,1.00000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0.5,
+        "y": 0
+      },
+      "stop": {
+        "x": 0.5,
+        "y": 1.0
+      }
+    }
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "base.svg",
+          "name": "base"
+        }
+      ],
+      "name": "base",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "glass.svg",
+          "name": "glass",
+          "opacity-specializations": [
+            {
+              "value": 1.0
+            },
+            {
+              "appearance": "dark",
+              "value": 0.35
+            }
+          ]
+        }
+      ],
+      "name": "glass",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ],
+          "image-name": "snow.svg",
+          "name": "snow"
+        },
+        {
+          "image-name": "trees.svg",
+          "name": "trees"
+        },
+        {
+          "image-name": "buildings.svg",
+          "name": "buildings"
+        }
+      ],
+      "name": "city",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "ground.svg",
+          "name": "ground"
+        }
+      ],
+      "name": "ground",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

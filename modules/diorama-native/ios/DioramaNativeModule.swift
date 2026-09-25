@@ -2,7 +2,8 @@ import ExpoModulesCore
 
 // The module's public surface, like an `index.ts` for native code. It lists
 // what JS can use: the city search functions, the <DioramaMapView>
-// component, its props, its events and the methods available on its ref.
+// component, its props, its events and the methods available on its ref,
+// and the <PlacePickerMapView> behind "Choose on map".
 // The TS types live in ../src.
 public class DioramaNativeModule: Module {
   // One search service for the whole app, like a module-level singleton in JS.
@@ -145,6 +146,30 @@ public class DioramaNativeModule: Module {
       // The model center glides there natively; JS sends one now and then.
       AsyncFunction("followTo") { (view: DioramaMapView, latitude: Double, longitude: Double) in
         view.followTo(latitude: latitude, longitude: longitude)
+      }
+    }
+
+    // The second view (T43): requireNativeView('DioramaNative',
+    // 'PlacePickerMapView') in JS. An interactive map you move under a pin.
+    View(PlacePickerMapView.self) {
+      Events("onRegionChangeEnd")
+
+      // Where the map starts: its middle, and the meters across the view.
+      Prop("center") { (view: PlacePickerMapView, center: Coordinate) in
+        view.startCenter = center.clLocation
+      }
+      Prop("span", 2000.0) { (view: PlacePickerMapView, span: Double) in
+        view.startSpan = span
+      }
+      Prop("showsUserLocation", false) { (view: PlacePickerMapView, shows: Bool) in
+        view.showsUserLocation = shows
+      }
+      Prop("attributionInset", 0.0) { (view: PlacePickerMapView, inset: Double) in
+        view.attributionInset = inset.isFinite ? CGFloat(inset) : 0
+      }
+
+      OnViewDidUpdateProps { (view: PlacePickerMapView) in
+        view.propsDidUpdate()
       }
     }
   }

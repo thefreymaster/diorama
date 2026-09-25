@@ -31,6 +31,8 @@ export {
   type FlatArea,
   type FlyoverArea,
 } from './flyoverCoverage';
+export { DEFAULT_PICKER_SPAN, PlacePickerMapView } from './PlacePickerMapView';
+export type { PlacePickerMapViewProps, PlacePickerRegion } from './PlacePickerMapView.types';
 export {
   PLACE_ALTITUDES,
   SEARCH_SUPERSEDED,

@@ -16,6 +16,7 @@ import { queryClient } from '@/providers/queryClient';
 
 import * as CityRoute from '../../../../app/city/[cityId]';
 import * as IndexRoute from '../../../../app/index';
+import * as PickRoute from '../../../../app/pick';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
@@ -40,6 +41,7 @@ const routes = {
   'city/[cityId]': CityRoute,
   'view/[cityId]': ViewerRoute,
   settings: SettingsRoute,
+  pick: PickRoute,
 };
 
 const { GRANTED, DENIED, UNDETERMINED } = Location.PermissionStatus;
@@ -285,10 +287,30 @@ describe('current location row', () => {
     expect(getRecents()).toEqual([]);
   });
 
+  it('offers "Choose on map" under it, which opens the map picker', async () => {
+    const router = renderRouter(routes, { initialUrl: '/' });
+
+    const row = await screen.findByRole('button', { name: 'Choose on map' });
+    // Row glyphs top to bottom (chevrons aside): the pin right after the location arrow.
+    const glyphs = screen
+      .UNSAFE_getAllByType(SymbolView)
+      .map((symbol) => symbol.props.name)
+      .filter((name) => name !== 'chevron.right');
+    expect(glyphs.indexOf('mappin.and.ellipse')).toBe(glyphs.indexOf('location.fill') + 1);
+    fireEvent.press(row);
+
+    await waitFor(() => expect(router.getPathname()).toBe('/pick'));
+    expect(await screen.findByTestId('place-picker-screen')).toBeOnTheScreen();
+    // Opening the map asks for nothing.
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    expect(mockPosition).not.toHaveBeenCalled();
+  });
+
   it('is hidden while searching', async () => {
     renderRouter(routes, { initialUrl: '/?q=par' });
 
     await waitFor(() => expect(screen.getByTestId('city-picker-screen')).toBeOnTheScreen());
     expect(screen.queryByText('Current location')).toBeNull();
+    expect(screen.queryByText('Choose on map')).toBeNull();
   });
 });

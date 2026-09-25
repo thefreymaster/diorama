@@ -4,6 +4,15 @@ Diorama ships as a local Xcode archive, without EAS. `ios/` is generated from `a
 
 `app.json` holds everything the store reads: team `3U62R986E5` with automatic signing, bundle ID `canvas23studios.diorama`, `version` and `ios.buildNumber`, export compliance (`usesNonExemptEncryption: false`, so App Store Connect asks no encryption questions), the Liquid Glass icon (`assets/expo.icon`), the motion, location (while using the app) and camera permission strings, the UIScene life cycle (`ios.enableSceneSupport` under the `expo-build-properties` plugin; see Xcode 27 and iOS 27), and the privacy manifest (`ios.privacyManifests`).
 
+## Store listing
+
+Everything the App Store Connect pages ask for is in `store/`, ready to paste:
+
+- [`store/metadata.md`](../store/metadata.md): open questions for you at the top, then the name (and fallbacks), subtitle, promotional text, description, keywords, categories, URLs, copyright and the screenshot order.
+- [`store/privacy.md`](../store/privacy.md): the App Privacy answers (Data Not Collected) with the reasons, and the privacy policy text to host.
+- [`store/review-notes.md`](../store/review-notes.md): the notes for App Review, the age rating answers (4+), export compliance, and the risks to check before submitting.
+- [`store/screenshots/`](../store/screenshots/): 6.9-inch iPhone screenshots. `bash scripts/screenshots.sh` regenerates them: a Release build on the iOS 27 Simulator, light mode, clean status bar, each screen opened by deep link, on its own "Diorama Screenshots 6.9" Simulator (about 5 minutes; `--skip-build` reuses the last build).
+
 ## Commands
 
 Run them from the repo root. None of them asks questions.
@@ -31,7 +40,7 @@ It checks, before anything leaves the Mac: the version and build number, `ITSApp
 1. **App record.** In [App Store Connect](https://appstoreconnect.apple.com), go to Apps → **+** → New App. Choose platform iOS, name "Diorama", bundle ID `canvas23studios.diorama`, SKU `diorama`. App Store names must be unique. If "Diorama" is taken, pick another store name; the home-screen name stays "Diorama".
    - The bundle ID is already registered: the first `npm run ios:archive` let Xcode register it, so it's listed as "XC canvas23studios diorama". If it's ever missing, register it at developer.apple.com → Certificates, IDs & Profiles → Identifiers → **+** → App IDs → App, with Explicit bundle ID `canvas23studios.diorama`. It needs no capabilities.
    - If you use a different ID, change `ios.bundleIdentifier` in `app.json` to match.
-2. **App privacy.** In the app record, App Privacy → Get Started: choose **Data Not Collected**. Diorama keeps settings and recent places on the phone. City searches go to Apple Maps through MapKit, and Apple says developers aren't responsible for disclosing data Apple collects. The camera (Settings → Lean to move closer) is used on the phone only, to track how your head moves; its frames are never stored or sent anywhere, so it isn't collected data either. The app has no accounts, no analytics and no tracking. The App Store also needs a privacy policy URL.
+2. **App privacy.** In the app record, App Privacy → Get Started: choose **Data Not Collected** (the full answers are in [`store/privacy.md`](../store/privacy.md)). Diorama keeps settings and recent places on the phone. City searches go to Apple Maps through MapKit, and Apple says developers aren't responsible for disclosing data Apple collects. The camera (Settings → Lean to move closer) is used on the phone only, to track how your head moves; its frames are never stored or sent anywhere, so it isn't collected data either. The app has no accounts, no analytics and no tracking. The App Store also needs a privacy policy URL; the policy text to host is in `store/privacy.md`.
 3. **API key (optional, only for uploading from the terminal).** In App Store Connect, go to Users and Access → Integrations → App Store Connect API → Team Keys → **+**, with **Admin** access. xcodebuild uses the key to sign for the App Store and to upload.
    - Download `AuthKey_<KEY_ID>.p8` into `~/.appstoreconnect/private_keys/`. Apple lets you download it only once.
    - Keep it out of the repo. `*.p8` is git-ignored.
@@ -76,9 +85,9 @@ Processing usually takes 5–30 minutes. Apple emails you when the build shows u
 
 ## App Store review
 
-1. In the app record, fill in the version page: screenshots, description, keywords, support URL, and the privacy policy URL. Also set the age rating and the category.
+1. In the app record, fill in the version page: screenshots, description, keywords, support URL, and the privacy policy URL. Also set the age rating and the category. All of it is in `store/` (see Store listing).
 2. Under Build, choose the uploaded build. Export compliance is already answered by `ITSAppUsesNonExemptEncryption` = NO.
-3. Write review notes. The reviewer has no headset: tell them to hold the phone upright for the full-screen view, drag to look around, and turn the phone sideways for the two-eye view. Also tell them about the camera prompt: the first time the diorama opens with "Lean to move closer" on (it is by default), iOS asks for the camera. It's used on the phone only, to track leaning in toward the city, and nothing is recorded. Declining just turns leaning off; looking around still works, and Settings then says "Camera access is off".
+3. Write review notes: paste the text from [`store/review-notes.md`](../store/review-notes.md). The reviewer has no headset: tell them to hold the phone upright for the full-screen view, drag to look around, and turn the phone sideways for the two-eye view. Also tell them about the camera prompt: the first time the diorama opens with "Lean to move closer" on (it is by default), iOS asks for the camera. It's used on the phone only, to track leaning in toward the city, and nothing is recorded. Declining just turns leaning off; looking around still works, and Settings then says "Camera access is off".
 4. Choose **Add for Review**, then **Submit**. Review usually takes a day or two. You get an email when the status changes.
 
 ## Privacy manifest

@@ -11,6 +11,7 @@ import { FollowingNote } from './FollowingNote';
 import { TerrainNote } from './TerrainNote';
 import { useCardFrame } from './useCardFrame';
 import { useEnterDiorama } from './useEnterDiorama';
+import { ViewpointsRow } from './ViewpointsRow';
 
 type PreviewCardProps = {
   city: City;
@@ -21,7 +22,8 @@ type PreviewCardProps = {
 /**
  * The glass card floating over the bottom of the map: where you are, and
  * the one thing to do here. In live mode it says the city is following
- * you. Under the button, how to get to the headset view (it's the sideways
+ * you. Around a national park or a natural place, a "Viewpoints" button
+ * lists the scenic views nearby. Under the main button, how to get to the headset view (it's the sideways
  * one); with the two-eye view off in Settings there's no headset view, so
  * no word about one.
  */
@@ -44,6 +46,7 @@ export function PreviewCard({ city, showTerrainNote }: PreviewCardProps) {
         ) : null}
         {following ? <FollowingNote /> : null}
         {showTerrainNote ? <TerrainNote /> : null}
+        <ViewpointsRow city={city} />
       </View>
       <View style={styles.action}>
         <PrimaryButton

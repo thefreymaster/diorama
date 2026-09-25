@@ -23,6 +23,16 @@ public class DioramaNativeModule: Module {
       self.search.resolve(completionId, promise: promise)
     }.runOnQueue(.main)
 
+    // `pointsOfInterest(latitude, longitude, radiusMeters, categories)` in
+    // src/search.ts (T60): scenic views, visitor centers and other outdoor
+    // places near a spot. [] before iOS 27, which has no such categories.
+    AsyncFunction("pointsOfInterest") {
+      (latitude: Double, longitude: Double, radius: Double, categories: [PointOfInterestKind],
+        promise: Promise) in
+      self.search.pointsOfInterest(
+        latitude: latitude, longitude: longitude, radius: radius, kinds: categories, promise: promise)
+    }.runOnQueue(.main)
+
     // `getCameraAccess()` in src/cameraAccess.ts (T46): may head position use
     // the camera? "granted", "denied", "undetermined" or "unsupported".
     AsyncFunction("getCameraAccess") { () -> String in

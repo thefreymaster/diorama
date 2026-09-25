@@ -7,18 +7,26 @@ import {
   placeId,
   placeKind,
   placeSubtitle,
+  pointsOfInterest,
   resolve,
   suggestedAltitude,
   toCompletion,
+  toPointOfInterest,
   toResolvedCity,
   type Completion,
   type NativeCompletion,
   type NativePlace,
+  type NativePointOfInterest,
+  type PointOfInterestCategory,
 } from '../search';
 
 const mockNative = {
   autocomplete: jest.fn<Promise<NativeCompletion[]>, [string]>(),
   resolve: jest.fn<Promise<NativePlace>, [string]>(),
+  pointsOfInterest: jest.fn<
+    Promise<NativePointOfInterest[]>,
+    [number, number, number, PointOfInterestCategory[]]
+  >(),
 };
 
 jest.mock('expo', () => ({
@@ -365,6 +373,72 @@ describe('native calls', () => {
 
     await expect(resolve('1 Infinite Loop\u001fCupertino, CA, United States')).resolves.toEqual(
       toResolvedCity(INFINITE_LOOP),
+    );
+  });
+});
+
+// What Swift sends for the Grand Canyon's South Rim (checked against Apple
+// Maps on iOS 27).
+const MATHER_POINT: NativePointOfInterest = {
+  name: 'Mather Point',
+  latitude: 36.06166723,
+  longitude: -112.10778591,
+  category: 'scenicView',
+};
+
+describe('pointsOfInterest', () => {
+  beforeEach(() => mockNative.pointsOfInterest.mockReset());
+
+  it('asks Swift for the kinds around a spot and gives each place its URL id', async () => {
+    mockNative.pointsOfInterest.mockResolvedValue([MATHER_POINT]);
+
+    await expect(pointsOfInterest(36.061, -112.1078, 25_000, ['scenicView'])).resolves.toEqual([
+      {
+        id: 'mather-point_36.062_-112.108',
+        name: 'Mather Point',
+        latitude: 36.061667,
+        longitude: -112.107786,
+        category: 'scenicView',
+      },
+    ]);
+    expect(mockNative.pointsOfInterest).toHaveBeenCalledWith(36.061, -112.1078, 25_000, [
+      'scenicView',
+    ]);
+  });
+
+  it("keeps Swift's order, kind by kind (older iOS answers nothing)", async () => {
+    const visitorCenter: NativePointOfInterest = {
+      name: 'South Rim Visitor Center',
+      latitude: 36.05914,
+      longitude: -112.10933,
+      category: 'visitorCenter',
+    };
+    mockNative.pointsOfInterest.mockResolvedValueOnce([MATHER_POINT, visitorCenter]);
+    mockNative.pointsOfInterest.mockResolvedValueOnce([]);
+
+    const both = await pointsOfInterest(36.061, -112.1078, 25_000, ['scenicView', 'visitorCenter']);
+    expect(both.map((place) => place.name)).toEqual(['Mather Point', 'South Rim Visitor Center']);
+    await expect(pointsOfInterest(36.061, -112.1078, 25_000, ['scenicView'])).resolves.toEqual([]);
+  });
+
+  it("doesn't ask Apple Maps for no kinds at all", async () => {
+    await expect(pointsOfInterest(36.061, -112.1078, 25_000, [])).resolves.toEqual([]);
+    expect(mockNative.pointsOfInterest).not.toHaveBeenCalled();
+  });
+
+  it('passes Swift errors through', async () => {
+    mockNative.pointsOfInterest.mockRejectedValue(new Error('Place search failed: offline'));
+
+    await expect(pointsOfInterest(36.061, -112.1078, 25_000, ['scenicView'])).rejects.toThrow(
+      'offline',
+    );
+  });
+
+  it('gives a place the id it gets when opened, however Apple rounds it', () => {
+    const again = { ...MATHER_POINT, latitude: 36.0616675, longitude: -112.1077862 };
+    expect(toPointOfInterest(again).id).toBe(toPointOfInterest(MATHER_POINT).id);
+    expect(toPointOfInterest(MATHER_POINT).id).toBe(
+      placeId('Mather Point', 36.061667, -112.107786),
     );
   });
 });

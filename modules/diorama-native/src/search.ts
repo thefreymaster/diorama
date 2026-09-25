@@ -72,10 +72,39 @@ export type NativePlace = {
   isCity: boolean;
 };
 
+/**
+ * Kinds of outdoor place Apple Maps can list from iOS 27 (MapKit's new
+ * point-of-interest categories): scenic views (lookouts, overlooks),
+ * visitor centers, ranger stations, picnic areas and rest areas.
+ */
+export type PointOfInterestCategory =
+  'scenicView' | 'visitorCenter' | 'rangerStation' | 'picnicArea' | 'restArea';
+
+/** A point of interest as Swift sends it (`PointOfInterestRecord` in DioramaSearchRecords.swift). */
+export type NativePointOfInterest = {
+  /** "Mather Point" */
+  name: string;
+  latitude: number;
+  longitude: number;
+  category: PointOfInterestCategory;
+};
+
+/** A point of interest near a place, from `pointsOfInterest()`. */
+export type PointOfInterest = NativePointOfInterest & {
+  /** The id it gets when opened as a place (`placeId`), e.g. `mather-point_36.062_-112.108`. */
+  id: string;
+};
+
 /** The search functions in DioramaNativeModule.swift. */
 type NativeSearchModule = {
   autocomplete(query: string): Promise<NativeCompletion[]>;
   resolve(completionId: string): Promise<NativePlace>;
+  pointsOfInterest(
+    latitude: number,
+    longitude: number,
+    radiusMeters: number,
+    categories: PointOfInterestCategory[],
+  ): Promise<NativePointOfInterest[]>;
 };
 
 let nativeModule: NativeSearchModule | undefined;
@@ -125,6 +154,27 @@ export function autocomplete(
 /** Turns a suggestion into a place with coordinates, a kind and a suggested altitude. */
 export async function resolve(completionId: string): Promise<ResolvedCity> {
   return toResolvedCity(await native().resolve(completionId));
+}
+
+/**
+ * Apple Maps' places of these kinds within `radiusMeters` of a spot, e.g.
+ * the scenic views around the Grand Canyon. Grouped by kind in the order
+ * asked, each kind in Apple's order; Apple can list a place twice. Each
+ * kind is one Apple Maps request (Apple allows ~100 a minute), so ask only
+ * where it's worth it. The kinds are new in iOS 27: older iOS answers `[]`.
+ *
+ * Apple's nearby-places request reaches only 2 km, so Swift uses it up to
+ * there and, farther out, a search of the area filtered to each kind.
+ */
+export async function pointsOfInterest(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number,
+  categories: readonly PointOfInterestCategory[],
+): Promise<PointOfInterest[]> {
+  if (categories.length === 0) return [];
+  const found = await native().pointsOfInterest(latitude, longitude, radiusMeters, [...categories]);
+  return found.map(toPointOfInterest);
 }
 
 // Pure helpers (exported for tests)
@@ -245,6 +295,13 @@ export function placeId(name: string, lat: number, lon: number): string {
 
 function roundCoordinate(degrees: number): number {
   return Math.round(degrees * 1e6) / 1e6;
+}
+
+/** Adds the URL id to a point of interest from Swift (coordinates rounded like a resolved place's). */
+export function toPointOfInterest(place: NativePointOfInterest): PointOfInterest {
+  const latitude = roundCoordinate(place.latitude);
+  const longitude = roundCoordinate(place.longitude);
+  return { ...place, id: placeId(place.name, latitude, longitude), latitude, longitude };
 }
 
 /** Adds the kind, URL id, subtitle and suggested altitude to a place from Swift. */

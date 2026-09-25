@@ -87,6 +87,63 @@ struct PlaceRecord: Record {
   }
 }
 
+// The kinds of outdoor place `pointsOfInterest()` can look for, named as in
+// TS (`PointOfInterestCategory` in search.ts). They're Apple Maps categories
+// new in iOS 27. Like a TS string union: Expo turns each JS string into one
+// of these, and rejects any other string.
+enum PointOfInterestKind: String, Enumerable {
+  case scenicView
+  case visitorCenter
+  case rangerStation
+  case picnicArea
+  case restArea
+
+  // Apple's category for this kind. Only iOS 27 has them.
+  @available(iOS 27.0, *)
+  var mapKitCategory: MKPointOfInterestCategory {
+    switch self {
+    case .scenicView: return .scenicView
+    case .visitorCenter: return .visitorCenter
+    case .rangerStation: return .rangerStation
+    case .picnicArea: return .picnicArea
+    case .restArea: return .restArea
+    }
+  }
+
+  // Words for Apple's text search over a wide area. The category filter
+  // does the real picking ("scenic view", "viewpoint" and "overlook" found
+  // the same places); the search just needs some text.
+  var searchText: String {
+    switch self {
+    case .scenicView: return "scenic view"
+    case .visitorCenter: return "visitor center"
+    case .rangerStation: return "ranger station"
+    case .picnicArea: return "picnic area"
+    case .restArea: return "rest area"
+    }
+  }
+}
+
+// One place from `pointsOfInterest()`, e.g. { name: "Mather Point",
+// category: "scenicView", … } (`NativePointOfInterest` in search.ts). TS
+// adds its URL id.
+struct PointOfInterestRecord: Record {
+  @Field var name: String = ""
+  @Field var latitude: Double = 0
+  @Field var longitude: Double = 0
+  // Its kind, as TS names it ("scenicView").
+  @Field var category: String = ""
+
+  init() {}
+
+  init(name: String, coordinate: CLLocationCoordinate2D, kind: PointOfInterestKind) {
+    self.name = name
+    latitude = coordinate.latitude
+    longitude = coordinate.longitude
+    category = kind.rawValue
+  }
+}
+
 // Errors JS can see. Expo derives each `code` from the class name, e.g.
 // SearchSupersededException → "ERR_SEARCH_SUPERSEDED". (`@unchecked Sendable`
 // just repeats what Expo's base class already promises: safe across threads.)

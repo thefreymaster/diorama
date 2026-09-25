@@ -11,6 +11,9 @@ import MapKit
 // - resolve(id): turns one suggestion into a coordinate and a size
 //   (MKLocalSearch), plus what TS needs to tell a city from an address or a
 //   landmark. TS picks the URL id and camera altitude from those.
+// - pointsOfInterest(...): scenic views, visitor centers and other outdoor
+//   places around a spot (iOS 27's new categories), for a park's
+//   "Viewpoints" list.
 //
 // DioramaNativeModule runs both on the main thread, and MapKit answers on
 // the main thread too, so no locks are needed.
@@ -260,6 +263,112 @@ final class DioramaSearch: NSObject, MKLocalSearchCompleterDelegate {
       }
       promise.resolve(
         PlaceRecord(item: item, region: response.boundingRegion, fallbackName: title, isCity: isCity))
+    }
+  }
+
+  // MARK: - pointsOfInterest(latitude, longitude, radius, kinds)
+
+  // One `pointsOfInterest()` call's answers, one slot per kind: like the
+  // array Promise.all fills in as each fetch settles.
+  private final class PointsOfInterestAnswers {
+    var slots: [Result<[PointOfInterestRecord], Error>?]
+
+    init(count: Int) {
+      slots = Array(repeating: nil, count: count)
+    }
+
+    var isComplete: Bool {
+      slots.allSatisfy { $0 != nil }
+    }
+  }
+
+  // Places of these kinds within `radius` meters of a spot, e.g. the scenic
+  // views around the Grand Canyon: one Apple Maps request per kind, all at
+  // once. JS gets them kind by kind, in the order asked, each kind in
+  // Apple's order. The kinds are new in iOS 27, so older iOS gets [].
+  func pointsOfInterest(
+    latitude: Double, longitude: Double, radius: Double, kinds: [PointOfInterestKind],
+    promise: Promise
+  ) {
+    let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    guard #available(iOS 27.0, *), !kinds.isEmpty, radius.isFinite, radius > 0,
+      CLLocationCoordinate2DIsValid(center)
+    else {
+      promise.resolve([PointOfInterestRecord]())
+      return
+    }
+
+    let answers = PointsOfInterestAnswers(count: kinds.count)
+    for (index, kind) in kinds.enumerated() {
+      Self.searchPointsOfInterest(kind, around: center, radius: radius) { answer in
+        answers.slots[index] = answer
+        guard answers.isComplete else { return }
+        let found = answers.slots.compactMap { try? $0?.get() }
+        // Every kind failed (no network, too many requests): say why.
+        // Otherwise the kinds that answered are enough to show something.
+        if found.isEmpty {
+          let failure = answers.slots.lazy.compactMap { slot -> Error? in
+            if case .failure(let error) = slot { return error }
+            return nil
+          }.first
+          promise.reject(SearchFailedException(failure?.localizedDescription ?? "no answer"))
+        } else {
+          promise.resolve(found.flatMap { $0 })
+        }
+      }
+    }
+  }
+
+  // One kind's places around a spot, handed to `completion` on the main
+  // thread (think `.then` / `.catch`).
+  @available(iOS 27.0, *)
+  private static func searchPointsOfInterest(
+    _ kind: PointOfInterestKind, around center: CLLocationCoordinate2D, radius: CLLocationDistance,
+    completion: @escaping (Result<[PointOfInterestRecord], Error>) -> Void
+  ) {
+    let filter = MKPointOfInterestFilter(including: [kind.mapKitCategory])
+    let search: MKLocalSearch
+    if radius <= MKLocalPointsOfInterestRequest.maxRadius {
+      // Close by: Apple's "what's around here" request. It reaches only
+      // 2 km (`maxRadius`) and quietly shrinks anything bigger.
+      let request = MKLocalPointsOfInterestRequest(center: center, radius: radius)
+      request.pointOfInterestFilter = filter
+      search = MKLocalSearch(request: request)
+    } else {
+      // Farther (a park is ~25 km across): a text search held to a square
+      // around the spot, filtered to this one kind.
+      let request = MKLocalSearch.Request()
+      request.naturalLanguageQuery = kind.searchText
+      request.region = MKCoordinateRegion(
+        center: center, latitudinalMeters: radius * 2, longitudinalMeters: radius * 2)
+      request.regionPriority = .required
+      request.resultTypes = .pointOfInterest
+      request.pointOfInterestFilter = filter
+      search = MKLocalSearch(request: request)
+    }
+
+    let here = CLLocation(latitude: center.latitude, longitude: center.longitude)
+    // MapKit calls this closure on the main thread when the search is done.
+    search.start { response, error in
+      if let error {
+        // "Nothing here" is an empty list, not an error.
+        if (error as? MKError)?.code == .placemarkNotFound {
+          completion(.success([]))
+        } else {
+          completion(.failure(error))
+        }
+        return
+      }
+      let records = (response?.mapItems ?? []).compactMap { item -> PointOfInterestRecord? in
+        // Only this kind, named, and inside the circle (the square's
+        // corners reach ~40% farther).
+        guard item.pointOfInterestCategory == kind.mapKitCategory,
+          let name = item.name, !name.isEmpty,
+          item.location.distance(from: here) <= radius
+        else { return nil }
+        return PointOfInterestRecord(name: name, coordinate: item.location.coordinate, kind: kind)
+      }
+      completion(.success(records))
     }
   }
 }

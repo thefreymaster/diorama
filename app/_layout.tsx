@@ -47,6 +47,21 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+        {/*
+          A place's viewpoints (T60): a half-height sheet with a grabber that
+          pulls up to full height; swipe down to close. Only ever one.
+        */}
+        <Stack.Screen
+          name="viewpoints/[cityId]"
+          dangerouslySingular
+          options={{
+            title: 'Viewpoints',
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.5, 1],
+            sheetGrabberVisible: true,
+            headerShown: false,
+          }}
+        />
         <Stack.Screen
           name="view/[cityId]"
           options={{

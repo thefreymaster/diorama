@@ -20,8 +20,8 @@ type PreviewMapProps = {
 /**
  * The whole screen behind the card: one (mono) 3D map from the city's own
  * camera, at the Camera height set in Settings, turning slowly, in the map
- * style chosen from the header's map menu (it changes in place: the orbit
- * carries on). The orbit itself runs natively and only starts once the map
+ * style chosen from the header's map menu, with live traffic if it's on
+ * there (both change in place: the orbit carries on). The orbit itself runs natively and only starts once the map
  * has drawn. In live mode the city glides along with you, around Apple's
  * blue dot.
  */
@@ -32,6 +32,7 @@ export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
   const coverStyle = useMapReveal(isReady);
   const following = useFollowMyLocation(mapRef);
   const mapStyle = useSetting('mapStyle');
+  const showsTraffic = useSetting('showsTraffic');
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -44,6 +45,7 @@ export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
         heading={city.heading}
         orbit={orbit}
         mapStyle={mapStyle}
+        showsTraffic={showsTraffic}
         showsUserLocation={following}
         onReady={onReady}
         accessible

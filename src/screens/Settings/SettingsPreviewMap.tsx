@@ -16,15 +16,17 @@ const ASPECT_RATIO = 3 / 2;
 
 /**
  * A small live picture of a city in the miniature look, from the chosen
- * camera height and in the map style chosen on the preview, so a slider
- * move shows at once. One (mono) map, turning slowly unless Reduce Motion
- * is on. It's only a picture: touches pass through to the list.
+ * camera height and in the map style (and traffic) chosen on the preview,
+ * so a slider move shows at once. One (mono) map, turning slowly unless
+ * Reduce Motion is on. It's only a picture: touches pass through to the
+ * list.
  */
 export function SettingsPreviewMap() {
   const city = useSampleCity();
   const altitude = useCameraAltitude(city.altitude);
   const miniatureIntensity = useSetting('miniatureIntensity');
   const mapStyle = useSetting('mapStyle');
+  const showsTraffic = useSetting('showsTraffic');
   const orbit = usePreviewOrbit();
   const [isReady, setReady] = useState(false);
   const coverStyle = useMapReveal(isReady);
@@ -40,6 +42,7 @@ export function SettingsPreviewMap() {
         heading={city.heading}
         miniatureIntensity={miniatureIntensity}
         mapStyle={mapStyle}
+        showsTraffic={showsTraffic}
         orbit={orbit}
         onReady={() => setReady(true)}
         accessible

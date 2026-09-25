@@ -47,13 +47,14 @@ final class StereoRig: NSObject, MKMapViewDelegate {
       for eye in eyes { eye.mapView.showsUserLocation = showsUserLocation }
     }
   }
-  // How every eye's map looks (T64), switched in the same frame for both.
-  // MapKit's pitch cap measured the same for all three (iOS 27), but it's
-  // MapKit's to decide, so what was learned about it is asked afresh.
-  var mapStyle = MapStyle.satellite {
+  // How every eye's map looks (T64 style, T63 traffic), switched in the
+  // same frame for both. MapKit's pitch cap measured the same for every
+  // style (iOS 27), but it's MapKit's to decide, so what was learned about
+  // it is asked afresh.
+  var mapLook = MapLook() {
     didSet {
-      guard mapStyle != oldValue else { return }
-      for eye in eyes { eye.mapStyle = mapStyle }
+      guard mapLook != oldValue else { return }
+      for eye in eyes { eye.mapLook = mapLook }
       pitchCap = nil
       steepestGazes = []
       steepestStart = nil
@@ -263,7 +264,7 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   }
 
   // Every eye keeps showing what it shows now until `releasePictures`, so a
-  // new map style can load out of sight (T64). Both eyes are held and
+  // new map look can load out of sight (T64). Both eyes are held and
   // released together, so they never show different styles.
   func holdPictures() {
     for eye in eyes { eye.holdPicture() }
@@ -273,7 +274,7 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     for eye in eyes { eye.releasePicture(animated: animated) }
   }
 
-  // A new load (new place, or a new map style): wait for every eye to draw
+  // A new load (new place, or a new map look): wait for every eye to draw
   // again.
   func restartRenderTracking() {
     for eye in eyes {
@@ -285,9 +286,9 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // MARK: - Eyes
 
   // Adds an eye, round for stereo (so its map starts out as a stereo eye's;
-  // see MapStyle.pointsOfInterest).
+  // see MapLook.pointsOfInterest).
   private func addEye(round: Bool = false) {
-    let eye = EyeView(mapStyle: mapStyle, isRound: round)
+    let eye = EyeView(mapLook: mapLook, isRound: round)
     eye.mapView.delegate = self
     eye.mapView.showsUserLocation = showsUserLocation
     eye.overlay = makeOverlay?()

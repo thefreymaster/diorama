@@ -51,6 +51,13 @@ export type Settings = {
    * or Apple Maps' standard map. Chosen from the preview's map menu.
    */
   mapStyle: DioramaMapStyle;
+  /**
+   * Apple Maps' live traffic on the roads, wherever the map is drawn.
+   * Satellite imagery can't show it, so while it's on, Satellite is drawn
+   * with labels (see `mapStyleShown` in `@diorama/native`). Switched in the
+   * preview's map menu.
+   */
+  showsTraffic: boolean;
 };
 
 type NumericSetting =
@@ -80,6 +87,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   lensSpacing: 64,
   windowDiameter: 35,
   mapStyle: DEFAULT_MAP_STYLE,
+  showsTraffic: false,
 };
 
 /** Allowed range for each slider. Setters clamp to these. */
@@ -132,6 +140,7 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
   if (typeof saved.leanVertical === 'boolean') clean.leanVertical = saved.leanVertical;
   if (typeof saved.debugLook === 'boolean') clean.debugLook = saved.debugLook;
   if (isMapStyle(saved.mapStyle)) clean.mapStyle = saved.mapStyle;
+  if (typeof saved.showsTraffic === 'boolean') clean.showsTraffic = saved.showsTraffic;
   return clean;
 }
 
@@ -142,8 +151,8 @@ function isMapStyle(value: unknown): value is DioramaMapStyle {
 const useSettingsStore = create<Settings>()(
   persist(() => ({ ...DEFAULT_SETTINGS }), {
     name: 'settings',
-    // Still 1: new settings (like the viewer fit, camera height, lean and
-    // map style) are simply missing from older saves, and `merge` fills
+    // Still 1: new settings (like the viewer fit, camera height, lean, map
+    // style and traffic) are simply missing from older saves, and `merge` fills
     // them in from the defaults, while settings that are gone (the old
     // window width and height) are left out, and the old Stereo switch
     // (`mode`) is carried over into `twoEyeLandscape` (see
@@ -221,6 +230,10 @@ export function setWindowDiameter(value: number): void {
 /** Anything but a known map style is ignored. */
 export function setMapStyle(mapStyle: DioramaMapStyle): void {
   if (isMapStyle(mapStyle)) useSettingsStore.setState({ mapStyle });
+}
+
+export function setShowsTraffic(showsTraffic: boolean): void {
+  useSettingsStore.setState({ showsTraffic });
 }
 
 export function resetSettings(): void {

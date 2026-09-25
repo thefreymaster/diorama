@@ -5,6 +5,7 @@ export {
   DEFAULT_WINDOW_DIAMETER,
   DioramaMapView,
   MAP_STYLES,
+  mapStyleShown,
 } from './DioramaMapView';
 export type {
   Coordinate,

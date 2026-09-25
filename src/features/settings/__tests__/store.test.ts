@@ -52,6 +52,7 @@ describe('settings store', () => {
       lensSpacing: 64,
       windowDiameter: 35,
       mapStyle: 'satellite',
+      showsTraffic: false,
     });
   });
 
@@ -93,6 +94,7 @@ describe('settings store', () => {
     first.store.setLensSpacing(62);
     first.store.setWindowDiameter(38);
     first.store.setMapStyle('hybrid');
+    first.store.setShowsTraffic(true);
     const saved = first.disk.getString('settings');
 
     const second = launch(saved);
@@ -110,6 +112,7 @@ describe('settings store', () => {
       lensSpacing: 62,
       windowDiameter: 38,
       mapStyle: 'hybrid',
+      showsTraffic: true,
     });
   });
 
@@ -141,6 +144,7 @@ describe('settings store', () => {
       lensSpacing: 64,
       windowDiameter: 35,
       mapStyle: 'satellite',
+      showsTraffic: false,
     });
 
     // The next change saves the whole set, viewer fit included.
@@ -184,6 +188,7 @@ describe('settings store', () => {
       lensSpacing: 62,
       windowDiameter: 35,
       mapStyle: 'satellite',
+      showsTraffic: false,
     });
     expect(store.getSettings()).not.toHaveProperty('windowWidth');
     expect(store.getSettings()).not.toHaveProperty('windowHeight');
@@ -205,6 +210,7 @@ describe('settings store', () => {
         lensSpacing: 62,
         windowDiameter: 35,
         mapStyle: 'satellite',
+        showsTraffic: false,
       },
       version: 1,
     });
@@ -258,6 +264,7 @@ describe('settings store', () => {
       lensSpacing: 64,
       windowDiameter: 35,
       mapStyle: 'satellite',
+      showsTraffic: false,
     });
   });
 
@@ -444,6 +451,7 @@ describe('settings store', () => {
       lensSpacing: 63,
       windowDiameter: 36,
       mapStyle: 'satellite',
+      showsTraffic: false,
     });
 
     // The next change saves the height too, and the launch after that keeps it.
@@ -591,6 +599,40 @@ describe('settings store', () => {
     });
   });
 
+  it('switches traffic on and off, saves it, and keeps it on the next launch', () => {
+    const { store, disk } = launch();
+    expect(store.getSettings().showsTraffic).toBe(false);
+
+    store.setShowsTraffic(true);
+    expect(store.getSettings().showsTraffic).toBe(true);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state.showsTraffic).toBe(true);
+    // Nothing else moves: the map style stays the one chosen.
+    expect(store.getSettings()).toEqual({ ...store.DEFAULT_SETTINGS, showsTraffic: true });
+    expect(launch(disk.getString('settings')).store.getSettings().showsTraffic).toBe(true);
+
+    store.setShowsTraffic(false);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state.showsTraffic).toBe(false);
+    expect(launch(disk.getString('settings')).store.getSettings().showsTraffic).toBe(false);
+  });
+
+  it('ignores a saved traffic value that is not a switch, and older saves leave it off', () => {
+    for (const showsTraffic of ['true', 1, null, { on: true }]) {
+      const saved = JSON.stringify({ state: { showsTraffic, mapStyle: 'standard' }, version: 1 });
+      expect(launch(saved).store.getSettings()).toMatchObject({
+        showsTraffic: false,
+        mapStyle: 'standard',
+      });
+    }
+
+    // What a T64 build saved: a map style, no traffic.
+    const t64 = JSON.stringify({ state: { mapStyle: 'hybrid', eyeSeparation: 1.5 }, version: 1 });
+    expect(launch(t64).store.getSettings()).toMatchObject({
+      mapStyle: 'hybrid',
+      eyeSeparation: 1.5,
+      showsTraffic: false,
+    });
+  });
+
   it('keeps lean distance between true to scale (1×) and 5×', () => {
     const { store } = launch();
 
@@ -653,6 +695,7 @@ describe('settings store', () => {
     store.setLeanGain(4);
     store.setLeanVertical(false);
     store.setMapStyle('standard');
+    store.setShowsTraffic(true);
 
     store.resetSettings();
 

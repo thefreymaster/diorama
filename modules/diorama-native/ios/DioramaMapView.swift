@@ -25,8 +25,9 @@ import simd
 // `trueNorth`, live mode), the base camera turns to face the real compass
 // heading you face, so the city lines up with the world (HeadTracker's
 // "True north"). The map's look (T64, `mapStyle`: satellite, satellite with
-// labels, or Apple Maps' standard map) can change at any time without
-// moving the camera.
+// labels, or Apple Maps' standard map; T63, `showsTraffic`: Apple Maps'
+// live traffic on the roads) can change at any time without moving the
+// camera.
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady(...)` fires the JS `onReady` callback.
   // Payload: `{ mode }`, the eyes that just finished drawing ("mono" or
@@ -104,6 +105,9 @@ final class DioramaMapView: ExpoView {
   // How the map looks (T64): satellite, hybrid (satellite with labels) or
   // standard (Apple Maps' drawn map). Applied in `propsDidUpdate()`.
   var mapStyle = MapStyle.satellite
+  // Apple Maps' live traffic on the roads (T63), in the hybrid and standard
+  // styles (see MapLook). Applied in `propsDidUpdate()`, with `mapStyle`.
+  var showsTraffic = false
 
   // Orbit speed: one full turn every two minutes.
   private static let orbitDegreesPerSecond = 3.0
@@ -125,8 +129,8 @@ final class DioramaMapView: ExpoView {
   private static let pitchCapMargin = 0.25
   // Fade from the loading cover to the city (stereo; mono lifts at once).
   private static let revealSeconds = 0.3
-  // The longest the old map style's picture stays up while a new one loads
-  // (T64), should MapKit be slow to say it has drawn.
+  // The longest the old map look's picture stays up while a new one loads
+  // (T64, and T63's traffic), should MapKit be slow to say it has drawn.
   private static let maxRestyleHoldSeconds = 2.0
   // Pinch to zoom: the meters from the vantage point to the aim point it
   // may come to rest at. The same range as the Camera height setting
@@ -157,7 +161,7 @@ final class DioramaMapView: ExpoView {
   }
   // The eye frames last sent to JS with onEyeLayout.
   private var reportedEyeFrames: [CGRect] = []
-  // Lets go of the old map style's picture if the new one takes too long.
+  // Lets go of the old map look's picture if the new one takes too long.
   private var restyleHoldTimeout: DispatchWorkItem?
   // Degrees the orbit has turned away from `pose.heading`. recenter() zeroes it.
   private var orbitOffset = 0.0
@@ -266,14 +270,15 @@ final class DioramaMapView: ExpoView {
     updateHeadTracking()
     thermal.debugState = debugThermalState
     fallBackToMonoIfTooHot()
-    // A new map style goes to the rig first, so any eyes added below start
-    // in it (T64). While nothing follows a head, the city on screen stays up
-    // as it was until the new style has drawn, then crossfades to it. (A
-    // still picture would stop turning with a tracked head, so then MapKit
-    // swaps its tiles in view.)
-    let styleChanged = rig.mapStyle != mapStyle
-    if styleChanged, isReady, !headTracker.isRunning { holdPicturesForRestyle() }
-    rig.mapStyle = mapStyle
+    // A new map look (style or traffic) goes to the rig first, so any eyes
+    // added below start in it (T64, T63). While nothing follows a head, the
+    // city on screen stays up as it was until the new look has drawn, then
+    // crossfades to it. (A still picture would stop turning with a tracked
+    // head, so then MapKit swaps its tiles in view.)
+    let look = MapLook(style: mapStyle, showsTraffic: showsTraffic)
+    let lookChanged = rig.mapLook != look
+    if lookChanged, isReady, !headTracker.isRunning { holdPicturesForRestyle() }
+    rig.mapLook = look
     let wasStereo = rig.isStereo
     let newEyes = rig.setStereo(mode == .stereo && !isDegraded)
     let separationChanged = rig.isStereo && appliedEyeSeparation != eyeSeparation
@@ -281,7 +286,7 @@ final class DioramaMapView: ExpoView {
     if rig.isStereo != wasStereo || separationChanged { setNeedsLayout() }
     // New camera props are a new place to stand: the zoom starts over.
     if let appliedPose, appliedPose != pose { dropZoom() }
-    guard appliedPose != pose || newEyes || separationChanged || styleChanged else { return }
+    guard appliedPose != pose || newEyes || separationChanged || lookChanged else { return }
     let isNewPlace = appliedPose.map { !$0.hasSameCenter(as: pose) } ?? true
     if isNewPlace {
       // New place: jump there, and wait for its tiles before orbiting and
@@ -291,7 +296,7 @@ final class DioramaMapView: ExpoView {
       glide = FirstPersonCamera.Glide()
       headTracker.dropHeadingTurn()
       rig.restartRenderTracking()
-    } else if styleChanged && !newEyes {
+    } else if lookChanged && !newEyes {
       // Same place, new look: no cover and no onReady, and the camera, look,
       // orbit, zoom and lean all stay. The cameras are set again now, under
       // the new style's pitch cap, and once more when every eye has drawn
@@ -303,7 +308,7 @@ final class DioramaMapView: ExpoView {
     layoutIfNeeded()
     // Glide when adjusting the view of the same place.
     applyCamera(
-      animated: !isNewPlace && !newEyes && !separationChanged && !styleChanged
+      animated: !isNewPlace && !newEyes && !separationChanged && !lookChanged
         && !ticker.isRunning)
     appliedPose = pose
   }
@@ -850,7 +855,7 @@ final class DioramaMapView: ExpoView {
     updateCover(animated: false)
   }
 
-  // Holds every eye's picture while a new map style loads (T64), at most
+  // Holds every eye's picture while a new map look loads (T64, T63), at most
   // `maxRestyleHoldSeconds`.
   private func holdPicturesForRestyle() {
     rig.holdPictures()
@@ -873,7 +878,7 @@ final class DioramaMapView: ExpoView {
   private func eyesDidRender() {
     guard appliedPose != nil else { return }
     guard !isReady else {
-      // Already showing: a new map style has drawn in every eye (T64). Set
+      // Already showing: a new map look has drawn in every eye (T64). Set
       // the stereo cameras again as below, so the eyes stay level on the new
       // map's ground, and crossfade from the old style's picture, if held.
       if rig.isStereo {

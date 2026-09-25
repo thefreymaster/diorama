@@ -27,9 +27,19 @@ export const DEFAULT_MAP_STYLE: DioramaMapStyle = 'satellite';
 export const MAP_STYLES: readonly DioramaMapStyle[] = ['satellite', 'hybrid', 'standard'];
 
 /**
+ * The style the map is drawn in: the chosen one, except that satellite
+ * imagery can't show traffic, so with traffic on it's drawn with labels
+ * (`hybrid`), which can.
+ */
+export function mapStyleShown(mapStyle: DioramaMapStyle, showsTraffic: boolean): DioramaMapStyle {
+  return showsTraffic && mapStyle === 'satellite' ? 'hybrid' : mapStyle;
+}
+
+/**
  * A 3D Apple Maps view (photoreal imagery by default, or another
- * `mapStyle`) with a camera driven by props. All per-frame work (orbit, head
- * tracking and position, true north, stereo eyes, tilt-shift) runs natively.
+ * `mapStyle`, optionally with live traffic) with a camera driven by props.
+ * All per-frame work (orbit, head tracking and position, true north, stereo
+ * eyes, tilt-shift) runs natively.
  */
 export function DioramaMapView({
   ref,
@@ -54,6 +64,7 @@ export function DioramaMapView({
   miniatureIntensity = 0,
   showsUserLocation = false,
   mapStyle = DEFAULT_MAP_STYLE,
+  showsTraffic = false,
   ...props
 }: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
@@ -135,7 +146,8 @@ export function DioramaMapView({
       windowDiameter={windowDiameter}
       miniatureIntensity={miniatureIntensity}
       showsUserLocation={showsUserLocation}
-      mapStyle={mapStyle}
+      mapStyle={mapStyleShown(mapStyle, showsTraffic)}
+      showsTraffic={showsTraffic}
       onReady={handleReady}
       onDegraded={handleDegraded}
       onEyeLayout={handleEyeLayout}

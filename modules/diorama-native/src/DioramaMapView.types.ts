@@ -383,6 +383,15 @@ export type DioramaMapViewProps = ViewProps &
      */
     mapStyle?: DioramaMapStyle;
     /**
+     * Apple Maps' live traffic: green, orange and red lines along the roads,
+     * where Apple has traffic data (busy places, mostly by day). MapKit
+     * draws traffic on the `hybrid` and `standard` maps only, so while it's
+     * on, `satellite` is drawn as `hybrid` (see `mapStyleShown`). Place icons
+     * stay as the style has them (none in `hybrid`, none in a stereo eye).
+     * It changes in place like `mapStyle`. Defaults to false.
+     */
+    showsTraffic?: boolean;
+    /**
      * Fires once every eye has fully rendered: after the first render at each
      * `center`, and again after switching to stereo. Until then the view
      * stays black, in every mode, and it shows the city at this very moment

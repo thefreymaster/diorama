@@ -44,6 +44,8 @@ type MapParams = {
   stats?: string;
   mapStyle?: string;
   mapStyleFlip?: string;
+  traffic?: string;
+  trafficFlip?: string;
 };
 
 type ScreenOrientation = 'portrait' | 'landscape' | 'landscape_left' | 'landscape_right';
@@ -135,10 +137,11 @@ function useScriptedLean(
 }
 
 /**
- * `leanVertical` as the dev map's params ask: `on` to start, flipped once
- * `flipAfter` seconds after the map is ready (to watch a switch mid-lean).
+ * A switch (`leanVertical`, traffic) as the dev map's params ask: `on` to
+ * start, flipped once `flipAfter` seconds after the map is ready (to watch
+ * a switch mid-lean or mid-view).
  */
-function useFlippedLeanVertical(ready: boolean, on: boolean, flipAfter: number | null): boolean {
+function useFlippedFlag(ready: boolean, on: boolean, flipAfter: number | null): boolean {
   // Which script the flip belonged to: new params start over, unflipped.
   const script = `${ready}:${on}:${flipAfter}`;
   const [flippedScript, setFlippedScript] = useState<string | null>(null);
@@ -219,6 +222,7 @@ function orientationParam(value: string | undefined, fallback: boolean): ScreenO
  * after ready. `stats=1` shows head position's numbers (ARKit timing and
  * jitter, the lean, height). `mapStyle=satellite|hybrid|standard` picks the
  * map's look; `mapStyleFlip=6` switches to the next one 6 s after ready.
+ * `traffic=1` shows live traffic (T63); `trafficFlip=6` flips it 6 s after ready.
  * Unset params default to the Settings values (`mode` defaults to mono here).
  */
 export default function DevMapRoute() {
@@ -228,6 +232,7 @@ export default function DevMapRoute() {
   const savedEyeSeparation = useSetting('eyeSeparation');
   const savedMiniature = useSetting('miniatureIntensity');
   const savedMapStyle = useSetting('mapStyle');
+  const savedTraffic = useSetting('showsTraffic');
   const mapRef = useRef<DioramaMapViewRef>(null);
   const [turn, setTurn] = useState(0);
   const [coverage, setCoverage] = useState<FlyoverCoverage | null>(null);
@@ -237,7 +242,7 @@ export default function DevMapRoute() {
   const debugLook = flagParam(params.debugLook, savedDebugLook);
   const headPosition = flagParam(params.headPosition, false);
   const showStats = flagParam(params.stats, false);
-  const leanVertical = useFlippedLeanVertical(
+  const leanVertical = useFlippedFlag(
     coverage !== null,
     flagParam(params.leanVertical, true),
     params.leanVerticalFlip === undefined ? null : numberParam(params.leanVerticalFlip, 0),
@@ -247,6 +252,12 @@ export default function DevMapRoute() {
     coverage !== null,
     mapStyleParam(params.mapStyle, savedMapStyle),
     params.mapStyleFlip === undefined ? null : numberParam(params.mapStyleFlip, 0),
+  );
+
+  const showsTraffic = useFlippedFlag(
+    coverage !== null,
+    flagParam(params.traffic, savedTraffic),
+    params.trafficFlip === undefined ? null : numberParam(params.trafficFlip, 0),
   );
 
   useScriptedLean(mapRef, {
@@ -309,6 +320,7 @@ export default function DevMapRoute() {
         eyeSeparation={numberParam(params.eyeSeparation, savedEyeSeparation)}
         miniatureIntensity={numberParam(params.miniature, savedMiniature)}
         mapStyle={mapStyle}
+        showsTraffic={showsTraffic}
         debugThermalState={thermalParam(params.thermal)}
         onReady={(event) => setCoverage(event.coverage)}
         onDegraded={() => setDegraded(true)}

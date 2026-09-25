@@ -24,6 +24,7 @@ import {
   setLensSpacing,
   setMapStyle,
   setMiniatureIntensity,
+  setShowsTraffic,
   setTrackingSensitivity,
   setTwoEyeLandscape,
   setWindowDiameter,
@@ -278,6 +279,9 @@ describe('settings', () => {
     expect(screen.queryByText(/map style/i)).toBeNull();
     expect(screen.queryByText('Satellite')).toBeNull();
     expect(screen.queryByText('Standard')).toBeNull();
+    // Traffic too: it's in the same menu.
+    expect(screen.queryByText(/traffic/i)).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Traffic' })).toBeNull();
   });
 
   it('shows what the store holds', async () => {
@@ -531,8 +535,10 @@ describe('settings', () => {
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
     // Chosen on the preview's map menu, and reset here too.
     act(() => setMapStyle('standard'));
+    act(() => setShowsTraffic(true));
     expect(previewMap().altitude).not.toBe(1200);
     expect(previewMap().mapStyle).toBe('standard');
+    expect(previewMap().showsTraffic).toBe(true);
 
     fireEvent.press(screen.getByRole('button', { name: 'Reset to defaults' }));
 
@@ -557,6 +563,9 @@ describe('settings', () => {
     expect(getSettings().mapStyle).toBe('satellite');
     expect(savedSettings().mapStyle).toBe('satellite');
     expect(previewMap().mapStyle).toBe('satellite');
+    expect(getSettings().showsTraffic).toBe(false);
+    expect(savedSettings().showsTraffic).toBe(false);
+    expect(previewMap().showsTraffic).toBe(false);
   });
 });
 
@@ -801,6 +810,20 @@ describe('settings preview', () => {
     // Same map, same camera: only the look changed.
     expect(screen.getAllByTestId('settings-preview-map')).toHaveLength(1);
     expect(previewMap()).toMatchObject(DOWNTOWN_BOSTON);
+  });
+
+  it('draws traffic when it is on on the city preview, live', async () => {
+    await openSettings();
+    expect(previewMap().showsTraffic).toBe(false);
+
+    act(() => setShowsTraffic(true));
+    expect(previewMap()).toMatchObject({ mapStyle: 'satellite', showsTraffic: true });
+    // Same map, same camera: only the look changed.
+    expect(screen.getAllByTestId('settings-preview-map')).toHaveLength(1);
+    expect(previewMap()).toMatchObject(DOWNTOWN_BOSTON);
+
+    act(() => setShowsTraffic(false));
+    expect(previewMap().showsTraffic).toBe(false);
   });
 
   it.each<[string, () => void]>([

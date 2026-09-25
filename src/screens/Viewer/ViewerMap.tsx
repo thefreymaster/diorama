@@ -45,8 +45,9 @@ type ViewerMapProps = {
  * real world, so the tower you face is ahead of you in the model too; a
  * fixed place faces its own heading. With lean to move closer on, leaning
  * in brings you nearer, as far per lean as Lean distance says, and up and
- * down too unless "Move up and down" is off. The map style is the one chosen
- * on the preview; a change reaches the map live, and the view stays put.
+ * down too unless "Move up and down" is off. The map style and traffic are
+ * the ones chosen on the preview; a change reaches the map live, and the
+ * view stays put.
  */
 export function ViewerMap({
   city,
@@ -83,6 +84,7 @@ export function ViewerMap({
       leanVertical={settings.leanVertical}
       miniatureIntensity={settings.miniatureIntensity}
       mapStyle={settings.mapStyle}
+      showsTraffic={settings.showsTraffic}
       showsUserLocation={following}
       trueNorth={following}
       // Drag to look stands in for the gyro in the Simulator; never in release.

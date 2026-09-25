@@ -16,12 +16,25 @@ enum MapStyle: String, Enumerable {
   // Apple Maps' drawn map: roads, parks, water, names and place icons, with
   // MapKit's own 3D building models; light or dark with the phone.
   case standard
+}
 
-  // MapKit's configuration for this style: a fresh one each time, like a
+// Everything about how the map looks, in one value: the style (T64) and
+// live traffic (T63). Like a small props object `{ style, showsTraffic }`,
+// handed to each eye whole, so a change swaps the map's configuration once.
+struct MapLook: Equatable {
+  var style = MapStyle.satellite
+  // Apple Maps' live traffic (T63): green, orange and red lines along the
+  // roads, where Apple has traffic data. MapKit draws it only on the hybrid
+  // and standard maps; the imagery map has none, so the TS wrapper sends
+  // `hybrid` rather than `satellite` while traffic is on, and here it's
+  // ignored for `satellite`.
+  var showsTraffic = false
+
+  // MapKit's configuration for this look: a fresh one each time, like a
   // new props object, since a map keeps the one it's given. `round`: for a
   // stereo eye (see `pointsOfInterest`).
   func makeConfiguration(round: Bool) -> MKMapConfiguration {
-    switch self {
+    switch style {
     case .satellite:
       // The best MapKit offers on every iOS from 16.4 through 27 (T34): the
       // iOS 27 SDK adds no map configuration, elevation style or quality
@@ -33,11 +46,13 @@ enum MapStyle: String, Enumerable {
     case .hybrid:
       let configuration = MKHybridMapConfiguration(elevationStyle: .realistic)
       configuration.pointOfInterestFilter = pointsOfInterest(round: round)
+      configuration.showsTraffic = showsTraffic
       return configuration
     case .standard:
       let configuration = MKStandardMapConfiguration(
         elevationStyle: .realistic, emphasisStyle: .default)
       configuration.pointOfInterestFilter = pointsOfInterest(round: round)
+      configuration.showsTraffic = showsTraffic
       return configuration
     }
   }
@@ -48,13 +63,14 @@ enum MapStyle: String, Enumerable {
   // some place names showed in one eye only, which the eyes can't fuse
   // (Boston, iOS 27: in 3 of 4 views after looking around; the muted
   // emphasis style or a short list of categories didn't fix it). Street and
-  // district names come out the same in both eyes, so they stay.
+  // district names come out the same in both eyes, so they stay, and so
+  // does traffic (drawn on the roads themselves).
   func pointsOfInterest(round: Bool) -> MKPointOfInterestFilter {
     showsPlaceIcons(round: round) ? .includingAll : .excludingAll
   }
 
   func showsPlaceIcons(round: Bool) -> Bool {
-    self == .standard && !round
+    style == .standard && !round
   }
 }
 
@@ -154,9 +170,9 @@ final class EyeView: UIView {
     didSet {
       guard isRound != oldValue else { return }
       setNeedsLayout()
-      // A round eye's map leaves out place icons (see MapStyle).
-      if mapStyle.showsPlaceIcons(round: isRound) != mapStyle.showsPlaceIcons(round: oldValue) {
-        applyMapStyle()
+      // A round eye's map leaves out place icons (see MapLook).
+      if mapLook.showsPlaceIcons(round: isRound) != mapLook.showsPlaceIcons(round: oldValue) {
+        applyMapLook()
       }
     }
   }
@@ -181,19 +197,20 @@ final class EyeView: UIView {
   var hasRendered = false
   var renderFallback: DispatchWorkItem?
 
-  // How the map looks (T64). Switching keeps the camera where it is.
-  var mapStyle: MapStyle {
-    didSet { if mapStyle != oldValue { applyMapStyle() } }
+  // How the map looks (T64 style, T63 traffic). Switching keeps the camera
+  // where it is.
+  var mapLook: MapLook {
+    didSet { if mapLook != oldValue { applyMapLook() } }
   }
 
   // A still of this eye's map as it was, held over the live map while a new
-  // map style loads (T64), so the switch is a crossfade rather than a flash
+  // map look loads (T64), so the switch is a crossfade rather than a flash
   // of MapKit's empty loading grid. See `holdPicture()`.
   private var heldPicture: UIView?
   private static let releaseSeconds = 0.3
 
-  init(mapStyle: MapStyle = .satellite, isRound: Bool = false) {
-    self.mapStyle = mapStyle
+  init(mapLook: MapLook = MapLook(), isRound: Bool = false) {
+    self.mapLook = mapLook
     self.isRound = isRound
     super.init(frame: .zero)
     clipsToBounds = true
@@ -217,11 +234,11 @@ final class EyeView: UIView {
     fatalError("init(coder:) is not supported")
   }
 
-  // The map in `mapStyle` (see MapStyle), with no compass or scale, and no
+  // The map in `mapLook` (see MapLook), with no compass or scale, and no
   // gestures (touches fall through to React Native).
   private func configureMap() {
-    mapView.preferredConfiguration = mapStyle.makeConfiguration(round: isRound)
-    mapView.pointOfInterestFilter = mapStyle.pointsOfInterest(round: isRound)
+    mapView.preferredConfiguration = mapLook.makeConfiguration(round: isRound)
+    mapView.pointOfInterestFilter = mapLook.pointsOfInterest(round: isRound)
     mapView.showsCompass = false
     mapView.showsScale = false
     mapView.showsUserLocation = false
@@ -236,14 +253,14 @@ final class EyeView: UIView {
     mapView.insetsLayoutMarginsFromSafeArea = false
   }
 
-  // A new look for the same view (T64). MapKit swaps its tiles and may move
-  // the camera to stand on the new map's ground, so the camera we asked for
-  // goes straight back: the view doesn't jump. (StereoRig sets it again
-  // once the new tiles are in; see DioramaMapView.eyesDidRender.)
-  private func applyMapStyle() {
+  // A new look for the same view (T64, T63). MapKit swaps its tiles and may
+  // move the camera to stand on the new map's ground, so the camera we
+  // asked for goes straight back: the view doesn't jump. (StereoRig sets it
+  // again once the new tiles are in; see DioramaMapView.eyesDidRender.)
+  private func applyMapLook() {
     UIView.performWithoutAnimation {
-      mapView.preferredConfiguration = mapStyle.makeConfiguration(round: isRound)
-      mapView.pointOfInterestFilter = mapStyle.pointsOfInterest(round: isRound)
+      mapView.preferredConfiguration = mapLook.makeConfiguration(round: isRound)
+      mapView.pointOfInterestFilter = mapLook.pointsOfInterest(round: isRound)
       if let camera = appliedCamera {
         mapView.setCamera(camera.makeCamera(), animated: false)
       }

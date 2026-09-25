@@ -13,7 +13,7 @@ export function ResetSection() {
         destructive
         chevron={false}
         onPress={reset}
-        accessibilityHint="Puts every setting back the way it started, the map style too."
+        accessibilityHint="Puts every setting back the way it started, the map style and traffic too."
       />
     </InsetGroupedSection>
   );

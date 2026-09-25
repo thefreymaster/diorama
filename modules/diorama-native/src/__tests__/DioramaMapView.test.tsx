@@ -6,6 +6,7 @@ import {
   DEFAULT_WINDOW_DIAMETER,
   DioramaMapView,
   MAP_STYLES,
+  mapStyleShown,
   useStereoEyes,
   type DioramaEyeLayout,
   type DioramaMapViewRef,
@@ -103,6 +104,44 @@ describe('DioramaMapView', () => {
 
   it('lists the map styles in menu order', () => {
     expect(MAP_STYLES).toEqual(['satellite', 'hybrid', 'standard']);
+  });
+
+  it('draws no traffic unless asked', () => {
+    const view = render(<DioramaMapView {...CAMERA} mapStyle="standard" />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'standard', showsTraffic: false } });
+  });
+
+  it('passes traffic to the native view in the styles that draw it, and a change in place', () => {
+    const view = render(<DioramaMapView {...CAMERA} mapStyle="standard" showsTraffic />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'standard', showsTraffic: true } });
+
+    view.rerender(<DioramaMapView {...CAMERA} mapStyle="hybrid" showsTraffic />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'hybrid', showsTraffic: true } });
+
+    view.rerender(<DioramaMapView {...CAMERA} mapStyle="hybrid" showsTraffic={false} />);
+    expect(view.toJSON()).toMatchObject({
+      props: { mapStyle: 'hybrid', showsTraffic: false, ...CAMERA },
+    });
+  });
+
+  it('draws satellite with labels while traffic is on, since imagery alone has none', () => {
+    const view = render(<DioramaMapView {...CAMERA} mapStyle="satellite" showsTraffic />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'hybrid', showsTraffic: true } });
+
+    // Traffic off: back to the imagery with nothing on top.
+    view.rerender(<DioramaMapView {...CAMERA} mapStyle="satellite" />);
+    expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'satellite', showsTraffic: false } });
+  });
+
+  it.each([
+    ['satellite', false, 'satellite'],
+    ['satellite', true, 'hybrid'],
+    ['hybrid', false, 'hybrid'],
+    ['hybrid', true, 'hybrid'],
+    ['standard', false, 'standard'],
+    ['standard', true, 'standard'],
+  ] as const)('shows %s with traffic %s as %s', (style, traffic, shown) => {
+    expect(mapStyleShown(style, traffic)).toBe(shown);
   });
 
   it('passes head position props to the native view', () => {

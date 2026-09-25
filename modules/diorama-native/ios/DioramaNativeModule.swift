@@ -127,6 +127,11 @@ public class DioramaNativeModule: Module {
       Prop("mapStyle", MapStyle.satellite) { (view: DioramaMapView, style: MapStyle) in
         view.mapStyle = style
       }
+      // T63: Apple Maps' live traffic, drawn in the "hybrid" and "standard"
+      // styles only (the TS wrapper sends "hybrid" for "satellite" while on).
+      Prop("showsTraffic", false) { (view: DioramaMapView, shows: Bool) in
+        view.showsTraffic = shows
+      }
 
       // Runs once after a batch of prop changes, so the camera moves once.
       OnViewDidUpdateProps { (view: DioramaMapView) in

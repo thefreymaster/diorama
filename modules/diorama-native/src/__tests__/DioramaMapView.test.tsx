@@ -69,9 +69,20 @@ describe('DioramaMapView', () => {
     ]);
   });
 
-  it('leaves head position off by default, at the true-to-scale gain', () => {
+  it('leaves head position off by default, at the true-to-scale gain, up and down included', () => {
     const view = render(<DioramaMapView {...CAMERA} headTracking />);
-    expect(view.toJSON()).toMatchObject({ props: { headPosition: false, leanGain: 1 } });
+    expect(view.toJSON()).toMatchObject({
+      props: { headPosition: false, leanGain: 1, leanVertical: true },
+    });
+  });
+
+  it('passes leaving up and down out of the lean to the native view', () => {
+    const view = render(
+      <DioramaMapView {...CAMERA} headTracking headPosition leanVertical={false} />,
+    );
+    expect(view.toJSON()).toMatchObject({
+      props: { headPosition: true, leanVertical: false },
+    });
   });
 
   it('passes head position props to the native view', () => {

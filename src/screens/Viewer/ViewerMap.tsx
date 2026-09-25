@@ -44,7 +44,8 @@ type ViewerMapProps = {
  * It also faces true north there (`trueNorth`): the city lines up with the
  * real world, so the tower you face is ahead of you in the model too; a
  * fixed place faces its own heading. With lean to move closer on, leaning
- * in brings you nearer, as far per lean as Lean distance says.
+ * in brings you nearer, as far per lean as Lean distance says, and up and
+ * down too unless "Move up and down" is off.
  */
 export function ViewerMap({
   city,
@@ -78,6 +79,7 @@ export function ViewerMap({
       trackingSensitivity={settings.trackingSensitivity}
       headPosition={headPosition}
       leanGain={settings.leanGain}
+      leanVertical={settings.leanVertical}
       miniatureIntensity={settings.miniatureIntensity}
       showsUserLocation={following}
       trueNorth={following}

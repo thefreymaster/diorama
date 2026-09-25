@@ -68,6 +68,9 @@ enum CameraAccess: String {
 //    finds its place again the position picks up from wherever it had eased
 //    to. A new reference eases to its zero rather than snapping.
 //
+// With `usesVertical` off (T61), up and down are left out before step 4:
+// only the level part of the move (right and forward) counts.
+//
 // The Simulator has no ARKit: with debug look on, `setDebugLean` stands in
 // for the head's move and goes through steps 4 and 5 like the real thing.
 final class HeadPosition: NSObject, ARSessionDelegate {
@@ -107,6 +110,16 @@ final class HeadPosition: NSObject, ARSessionDelegate {
       stop()
       start()
     }
+  }
+
+  // Whether up and down count (T61, the `leanVertical` prop). Off, standing
+  // up, sitting down or bobbing leaves your height over the city alone, and
+  // only leaning forward and sideways moves you. ARKit's world is level (y
+  // up, along gravity), so "up" is its y. Neither way jumps: switched off,
+  // the height a lean had given eases back to none; switched on, up and
+  // down count from wherever the head is then (see `track`).
+  var usesVertical = true {
+    didSet { if usesVertical != oldValue { verticalDidChange = true } }
   }
 
   // The most camera frames a second the phone's temperature allows
@@ -151,6 +164,8 @@ final class HeadPosition: NSObject, ARSessionDelegate {
   // tracked (setDebugLean).
   private var debugMove = simd_double3.zero
   private var debugTracking = true
+  // `usesVertical` changed since the last tracked frame (handled there).
+  private var verticalDidChange = false
   private var observers: [NSObjectProtocol] = []
 
   #if DEBUG
@@ -262,6 +277,10 @@ final class HeadPosition: NSObject, ARSessionDelegate {
   // One tracked frame: from the eyes' position to the move.
   private func track(_ sample: Sample, screen: ScreenAxes, seconds: Double) {
     hasTracked = true
+    if verticalDidChange {
+      verticalDidChange = false
+      switchVertical(at: sample)
+    }
     if reference == nil || referenceScreen != screen {
       // A new zero: at start, on recenter, or when the phone turned (the
       // same pose then means a different head). The move eases to it.
@@ -272,7 +291,7 @@ final class HeadPosition: NSObject, ARSessionDelegate {
       handoff.rezero(to: .zero, settleSeconds: PositionHandoff.recenterSeconds)
     } else if var frame = reference,
       worldDidReset || handoff.lostSeconds > PositionHandoff.holdSeconds
-        || simd_length(frame.offset(of: sample.eyes)) > Self.maxMove
+        || simd_length(counted(frame.offset(of: sample.eyes))) > Self.maxMove
     {
       // Back after a while lost (ARKit may have drifted meanwhile), after
       // ARKit started over, or after a jump no head makes: carry on from
@@ -288,12 +307,34 @@ final class HeadPosition: NSObject, ARSessionDelegate {
       resetFilters()
     }
     guard let reference else { return }
-    let raw = reference.offset(of: sample.eyes)
+    let raw = counted(reference.offset(of: sample.eyes))
     let smoothed = simd_double3(
       filters[0].filter(raw.x, seconds: seconds),
       filters[1].filter(raw.y, seconds: seconds),
       filters[2].filter(raw.z, seconds: seconds))
     move = handoff.step(tracked: smoothed, seconds: seconds, holds: true)
+  }
+
+  // The part of a move that counts: all of it, or with up and down off
+  // (T61) only the level part, right and forward. (Also what the jump check
+  // measures, so standing up with it off never reads as ARKit jumping.)
+  private func counted(_ move: simd_double3) -> simd_double3 {
+    usesVertical ? move : simd_double3(move.x, 0, move.z)
+  }
+
+  // `usesVertical` just changed (T61), handled on the next tracked frame.
+  // Off: the height the lean had given moves from the tracked move into the
+  // hand-off's carry, which eases it back to none. On: the height the head
+  // is at now becomes up and down's zero, so nothing moves. Either way the
+  // up-and-down smoothing starts afresh (its next sample passes straight
+  // through: zero, or the height the move is at).
+  private func switchVertical(at sample: Sample) {
+    if usesVertical {
+      reference?.origin.y = sample.eyes.y
+    } else {
+      handoff.dropVertical(settleSeconds: PositionHandoff.verticalSeconds)
+    }
+    filters[1].reset()
   }
 
   // Where the eyes are now (in ARKit's world: meters, y up) and which ways
@@ -620,6 +661,9 @@ struct PositionHandoff {
   static let recenterSeconds = 0.35
   // Seconds a comeback takes to catch up with the tracked position.
   static let resumeSeconds = 0.5
+  // Seconds the height a lean had given takes to ease out when up and down
+  // stop counting (T61).
+  static let verticalSeconds = 0.5
 
   private(set) var output = simd_double3.zero
   // The last tracked move handed in (`output` without the carry).
@@ -636,6 +680,18 @@ struct PositionHandoff {
   // over `settleSeconds` instead.
   mutating func rezero(to tracked: simd_double3, settleSeconds: Double) {
     carry = Settle(value: output - tracked)
+    carrySeconds = settleSeconds
+  }
+
+  // Up and down stop counting (T61): the tracked move's height moves into
+  // the carry, which eases it to none over `settleSeconds`, so the output
+  // doesn't change this frame and the tracked moves after it come in level.
+  // Only while tracking: lost (or off), the move is easing out anyway, and
+  // a comeback picks up from wherever it has got to.
+  mutating func dropVertical(settleSeconds: Double) {
+    guard isTracking else { return }
+    carry.value.y += tracked.y
+    tracked.y = 0
     carrySeconds = settleSeconds
   }
 

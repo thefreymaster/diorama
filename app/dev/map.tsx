@@ -34,6 +34,8 @@ type MapParams = {
   miniature?: string;
   headPosition?: string;
   leanGain?: string;
+  leanVertical?: string;
+  leanVerticalFlip?: string;
   lean?: string;
   leanAfter?: string;
   leanLost?: string;
@@ -128,6 +130,22 @@ function useScriptedLean(
   }, [mapRef, ready, hasLean, right, up, forward, after, lostAfter]);
 }
 
+/**
+ * `leanVertical` as the dev map's params ask: `on` to start, flipped once
+ * `flipAfter` seconds after the map is ready (to watch a switch mid-lean).
+ */
+function useFlippedLeanVertical(ready: boolean, on: boolean, flipAfter: number | null): boolean {
+  // Which script the flip belonged to: new params start over, unflipped.
+  const script = `${ready}:${on}:${flipAfter}`;
+  const [flippedScript, setFlippedScript] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ready || flipAfter === null) return;
+    const flip = setTimeout(() => setFlippedScript(script), flipAfter * 1000);
+    return () => clearTimeout(flip);
+  }, [ready, flipAfter, script]);
+  return flippedScript === script ? !on : on;
+}
+
 function formatLean({ right, up, forward }: DioramaLean, unit: number, digits: number): string {
   return [right, up, forward].map((value) => (value * unit).toFixed(digits)).join(' / ');
 }
@@ -167,8 +185,10 @@ function orientationParam(value: string | undefined, fallback: boolean): ScreenO
  * `leanGain=2`. On a device it asks for the camera first. In the Simulator
  * (with `debugLook=1`) a fake head stands in: `lean=0,-0.2,0` (meters right,
  * up, forward) glides it there `leanAfter=3` seconds after the map is ready,
- * and `leanLost=8` acts as if ARKit lost track 8 s after ready. `stats=1`
- * shows head position's numbers (ARKit timing and jitter, the lean, height).
+ * and `leanLost=8` acts as if ARKit lost track 8 s after ready. `leanVertical=0`
+ * leaves up and down out of the lean (T61); `leanVerticalFlip=6` flips it 6 s
+ * after ready. `stats=1` shows head position's numbers (ARKit timing and
+ * jitter, the lean, height).
  * Unset params default to the Settings values (`mode` defaults to mono here).
  */
 export default function DevMapRoute() {
@@ -186,6 +206,11 @@ export default function DevMapRoute() {
   const debugLook = flagParam(params.debugLook, savedDebugLook);
   const headPosition = flagParam(params.headPosition, false);
   const showStats = flagParam(params.stats, false);
+  const leanVertical = useFlippedLeanVertical(
+    coverage !== null,
+    flagParam(params.leanVertical, true),
+    params.leanVerticalFlip === undefined ? null : numberParam(params.leanVerticalFlip, 0),
+  );
 
   useScriptedLean(mapRef, {
     ready: coverage !== null,
@@ -242,6 +267,7 @@ export default function DevMapRoute() {
         trackingSensitivity={numberParam(params.sensitivity, savedSensitivity)}
         headPosition={headPosition}
         leanGain={numberParam(params.leanGain, 1)}
+        leanVertical={leanVertical}
         mode={mode}
         eyeSeparation={numberParam(params.eyeSeparation, savedEyeSeparation)}
         miniatureIntensity={numberParam(params.miniature, savedMiniature)}

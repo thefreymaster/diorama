@@ -32,6 +32,12 @@ export type Settings = {
    * size), higher moves you farther for the same lean.
    */
   leanGain: number;
+  /**
+   * Leaning moves you up and down too: standing up, sitting down or leaning
+   * down changes your height over the city. Off, your height stays put and
+   * only leaning forward and sideways moves you.
+   */
+  leanVertical: boolean;
   /** Simulator only: drag to look around instead of using the gyro. */
   debugLook: boolean;
   /** Viewer fit: millimeters between the centers of the headset's two lenses. */
@@ -62,6 +68,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   twoEyeLandscape: true,
   headPosition: true,
   leanGain: 1,
+  leanVertical: true,
   debugLook: false,
   lensSpacing: 64,
   windowDiameter: 35,
@@ -114,6 +121,7 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
     clean.twoEyeLandscape = saved.mode === 'stereo';
   }
   if (typeof saved.headPosition === 'boolean') clean.headPosition = saved.headPosition;
+  if (typeof saved.leanVertical === 'boolean') clean.leanVertical = saved.leanVertical;
   if (typeof saved.debugLook === 'boolean') clean.debugLook = saved.debugLook;
   return clean;
 }
@@ -178,6 +186,10 @@ export function setHeadPosition(headPosition: boolean): void {
 
 export function setLeanGain(value: number): void {
   useSettingsStore.setState({ leanGain: clampSetting('leanGain', value) });
+}
+
+export function setLeanVertical(leanVertical: boolean): void {
+  useSettingsStore.setState({ leanVertical });
 }
 
 export function setDebugLook(debugLook: boolean): void {

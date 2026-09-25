@@ -112,7 +112,7 @@ export type DioramaHeadPositionStats = {
   predictionErrorMm: number;
   /** How much the head's move wobbles (RMS). Read it holding still. */
   jitterMm: number;
-  /** The head's move since recenter, smoothed: real meters. */
+  /** The head's move since recenter, smoothed: real meters (`up` stays 0 with `leanVertical` off). */
   move: DioramaLean;
   /** Where that puts you in the city: meters, as the camera props measure them. */
   lean: DioramaLean;
@@ -242,6 +242,16 @@ export type DioramaHeadTrackingProps = {
    * 375 m per real meter from 1.2 km out). Defaults to 1.
    */
   leanGain?: number;
+  /**
+   * Whether up and down count when leaning: standing up, sitting down or
+   * leaning down changes your height over the city. False keeps your height
+   * (only the level part of the head's move is used), while leaning forward
+   * and sideways still moves you, held upright and in stereo alike. Switched
+   * off mid-lean, the height eases back; switched on, up and down count from
+   * where the head is then, so neither jumps. `setDebugLean` goes through
+   * it too. Defaults to true.
+   */
+  leanVertical?: boolean;
   /**
    * Head position started, found its place, lost it, or stopped. Fires on
    * each change, and again (with the same state) when the map is ready.

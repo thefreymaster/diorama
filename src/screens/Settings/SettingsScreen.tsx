@@ -5,6 +5,7 @@ import { Screen } from '@/ui';
 
 import { DeveloperSection } from './DeveloperSection';
 import { LeanSection } from './LeanSection';
+import { LeanVerticalSection } from './LeanVerticalSection';
 import { MiniatureSection } from './MiniatureSection';
 import { ResetSection } from './ResetSection';
 import { SliderSection } from './SliderSection';
@@ -28,6 +29,7 @@ export function SettingsScreen() {
         <SliderSection setting="cameraHeight" />
         <SliderSection setting="trackingSensitivity" />
         <LeanSection />
+        <LeanVerticalSection />
         <SliderSection setting="leanGain" />
         <ViewerFitSection />
         <SuggestedPlacesSection />

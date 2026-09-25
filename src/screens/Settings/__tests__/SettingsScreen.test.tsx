@@ -20,6 +20,7 @@ import {
   setEyeSeparation,
   setHeadPosition,
   setLeanGain,
+  setLeanVertical,
   setLensSpacing,
   setMiniatureIntensity,
   setTrackingSensitivity,
@@ -29,6 +30,7 @@ import {
 import { cameraKeys } from '@/features/viewer/useCameraAccess';
 import { queryClient } from '@/providers/queryClient';
 import { storage } from '@/providers/storage';
+import { colors } from '@/theme';
 
 import * as CityRoute from '../../../../app/city/[cityId]';
 import * as IndexRoute from '../../../../app/index';
@@ -36,6 +38,7 @@ import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
 import { CAMERA_OFF, LEAN_FOOTER, LEAN_TITLE } from '../LeanSection';
+import { LEAN_VERTICAL_FOOTER, LEAN_VERTICAL_TITLE } from '../LeanVerticalSection';
 import { SLIDER_SETTINGS, type FitSetting, type SliderSetting } from '../sliderSettings';
 
 // Camera access for lean to move closer: read without asking, and the prompt.
@@ -128,6 +131,7 @@ const HEADER_CONFIG: string = 'RNSScreenStackHeaderConfig';
 
 const TWO_EYE = { name: 'Two-eye view in landscape' };
 const LEAN = { name: LEAN_TITLE };
+const LEAN_VERTICAL = { name: LEAN_VERTICAL_TITLE };
 const TWO_EYE_FOOTER =
   'Shows a picture for each eye when your iPhone is sideways, for a headset viewer. Upright, the city always fills the screen.';
 
@@ -260,6 +264,8 @@ describe('settings', () => {
     expect(screen.getByText(TWO_EYE_FOOTER)).toBeOnTheScreen();
     expect(screen.getByRole('switch', LEAN)).toBeOnTheScreen();
     expect(screen.getByText(LEAN_FOOTER)).toBeOnTheScreen();
+    expect(screen.getByRole('switch', LEAN_VERTICAL)).toBeOnTheScreen();
+    expect(screen.getByText(LEAN_VERTICAL_FOOTER)).toBeOnTheScreen();
     expect(screen.getByText(SLIDER_SETTINGS.leanGain.footer)).toBeOnTheScreen();
     // The Stereo switch is gone: how the phone is held picks the view.
     expect(screen.queryByRole('switch', { name: 'Stereo' })).toBeNull();
@@ -280,9 +286,12 @@ describe('settings', () => {
     setWindowDiameter(25);
     setHeadPosition(false);
     setLeanGain(5);
+    setLeanVertical(false);
     await openSettings();
 
     expect(screen.getByRole('switch', LEAN)).not.toBeChecked();
+    expect(screen.getByRole('switch', LEAN_VERTICAL)).not.toBeChecked();
+    expect(screen.getByTestId('lean-vertical-switch').props.value).toBe(false);
     expect(screen.getByTestId('lean-switch').props.value).toBe(false);
     expect(sliderPosition('leanGain')).toBeCloseTo(1);
 
@@ -512,6 +521,7 @@ describe('settings', () => {
     slideTo('windowDiameter', 1);
     slideTo('leanGain', 0.7);
     fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('lean-vertical-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('lean-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
     expect(previewMap().altitude).not.toBe(1200);
@@ -525,6 +535,8 @@ describe('settings', () => {
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
     expect(screen.getByRole('switch', TWO_EYE)).toBeChecked();
     expect(screen.getByRole('switch', LEAN)).toBeChecked();
+    expect(screen.getByRole('switch', LEAN_VERTICAL)).toBeChecked();
+    expect(screen.getByRole('switch', LEAN_VERTICAL)).not.toBeDisabled();
     expect(sliderPosition('leanGain')).toBeCloseTo(0);
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
     expect(previewMap().miniatureIntensity).toBe(0.6);
@@ -567,6 +579,47 @@ describe('lean to move closer', () => {
     expect(getSettings().headPosition).toBe(true);
     expect(savedSettings().headPosition).toBe(true);
     expect(slider('leanGain').props.disabled).toBe(false);
+  });
+
+  it('moves you up and down to start; off, it saves and your height stays put', async () => {
+    await openSettings();
+    const row = screen.getByRole('switch', LEAN_VERTICAL);
+    expect(row).toBeChecked();
+    expect(row).not.toBeDisabled();
+    expect(getSettings().leanVertical).toBe(true);
+
+    fireEvent(screen.getByTestId('lean-vertical-switch'), 'valueChange', false);
+    expect(getSettings().leanVertical).toBe(false);
+    expect(savedSettings().leanVertical).toBe(false);
+    expect(row).not.toBeChecked();
+    // Only up and down: the rest of lean stays on.
+    expect(getSettings()).toMatchObject({ headPosition: true, leanGain: 1 });
+    expect(slider('leanGain').props.disabled).toBe(false);
+
+    // VoiceOver: a double-tap anywhere on the row flips it back.
+    fireEvent(row, 'accessibilityTap');
+    expect(getSettings().leanVertical).toBe(true);
+    expect(savedSettings().leanVertical).toBe(true);
+  });
+
+  it('dims "Move up and down" while lean is off, keeping its choice', async () => {
+    await openSettings();
+    fireEvent(screen.getByTestId('lean-vertical-switch'), 'valueChange', false);
+
+    fireEvent(screen.getByTestId('lean-switch'), 'valueChange', false);
+    const row = screen.getByRole('switch', LEAN_VERTICAL);
+    expect(row).toBeDisabled();
+    expect(screen.getByTestId('lean-vertical-switch').props.disabled).toBe(true);
+    expect(screen.getByText(LEAN_VERTICAL_TITLE)).toHaveStyle({ color: colors.tertiaryLabel });
+    // VoiceOver can't flip it either.
+    fireEvent(row, 'accessibilityTap');
+    expect(getSettings().leanVertical).toBe(false);
+
+    fireEvent(screen.getByTestId('lean-switch'), 'valueChange', true);
+    expect(row).not.toBeDisabled();
+    expect(screen.getByTestId('lean-vertical-switch').props.disabled).toBe(false);
+    expect(screen.getByText(LEAN_VERTICAL_TITLE)).toHaveStyle({ color: colors.label });
+    expect(row).not.toBeChecked();
   });
 
   it('saves lean distance as it moves, from 1× to 5× by ratio', async () => {
@@ -812,12 +865,30 @@ describe('settings in the Viewer', () => {
     await screen.findByTestId('viewer-map');
     await waitFor(() => expect(viewerMap().headPosition).toBe(true));
     expect(viewerMap().leanGain).toBeCloseTo(5);
+    expect(viewerMap().leanVertical).toBe(true);
 
     // Live, like every setting.
     act(() => setLeanGain(2));
     expect(viewerMap().leanGain).toBe(2);
+    act(() => setLeanVertical(false));
+    expect(viewerMap().leanVertical).toBe(false);
     act(() => setHeadPosition(false));
     expect(viewerMap().headPosition).toBe(false);
+  });
+
+  it('keeps your height in the Viewer with "Move up and down" off here', async () => {
+    await openSettings();
+    fireEvent(screen.getByTestId('lean-vertical-switch'), 'valueChange', false);
+    screen.unmount();
+
+    renderRouter(routes, { initialUrl: '/view/paris' });
+    const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
+    await screen.findByTestId('viewer-map');
+    await waitFor(() => expect(viewerMap().headPosition).toBe(true));
+    expect(viewerMap().leanVertical).toBe(false);
+
+    act(() => setLeanVertical(true));
+    expect(viewerMap().leanVertical).toBe(true);
   });
 
   it('fits the eye circles to the viewer as set here', async () => {

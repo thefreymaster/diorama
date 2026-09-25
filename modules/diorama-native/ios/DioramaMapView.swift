@@ -20,7 +20,8 @@ import simd
 // center glides there, taking you, your zoom and your gaze along with it.
 // With head position on (T46, `headPosition`), leaning moves where you
 // stand too: ARKit tracks the head's real move (HeadPosition), scaled to the
-// city (FirstPersonCamera's "Leaning in"). With true north on (T59,
+// city (FirstPersonCamera's "Leaning in"); with `leanVertical` off (T61),
+// only its level part, so your height stays put. With true north on (T59,
 // `trueNorth`, live mode), the base camera turns to face the real compass
 // heading you face, so the city lines up with the world (HeadTracker's
 // "True north").
@@ -64,6 +65,9 @@ final class DioramaMapView: ExpoView {
   // tracking on). `leanGain` scales the move: 1 = true to the model's scale.
   var headPosition = false
   var leanGain = 1.0
+  // Whether leaning up and down (standing up, sitting down) changes your
+  // height (T61). Off, only leaning forward and sideways moves you.
+  var leanVertical = true
   // True north (T59, live mode): face the real compass heading instead of
   // the `heading` prop (only with head tracking and a trusted compass).
   var trueNorth = false
@@ -456,6 +460,8 @@ final class DioramaMapView: ExpoView {
     }
     headTracker.trueNorth = trueNorth
     positionTracker.usesDebugLean = debugLook
+    // Up and down on or off (T61): the tracker eases the change itself.
+    positionTracker.usesVertical = leanVertical
     let shouldTrack = headTracking && window != nil
     debugPan.isEnabled = shouldTrack && debugLook
     // Head position (T46) only adds to head tracking, and pauses while the

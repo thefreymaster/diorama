@@ -10,6 +10,11 @@ export type ToggleRowProps = {
   onValueChange: (value: boolean) => void;
   /** Put on the switch itself. */
   testID?: string;
+  /**
+   * Dims the row and locks the switch, like a setting that only matters
+   * while another one is on. VoiceOver reads it as dimmed.
+   */
+  disabled?: boolean;
 };
 
 /**
@@ -18,17 +23,25 @@ export type ToggleRowProps = {
  * row as one switch ("Stereo, switch, on") that a double-tap flips. The
  * title wraps at large text sizes; the switch stays put.
  */
-export function ToggleRow({ title, value, onValueChange, testID }: ToggleRowProps) {
+export function ToggleRow({
+  title,
+  value,
+  onValueChange,
+  testID,
+  disabled = false,
+}: ToggleRowProps) {
   return (
     <ControlRow
       accessible
       accessibilityRole="switch"
       accessibilityLabel={title}
-      accessibilityState={{ checked: value }}
-      onAccessibilityTap={() => onValueChange(!value)}
+      accessibilityState={{ checked: value, disabled }}
+      onAccessibilityTap={disabled ? undefined : () => onValueChange(!value)}
     >
-      <Text style={rowStyles.text}>{title}</Text>
-      <Switch testID={testID} value={value} onValueChange={onValueChange} />
+      <Text style={rowStyles.text} color={disabled ? 'tertiaryLabel' : 'label'}>
+        {title}
+      </Text>
+      <Switch testID={testID} value={value} onValueChange={onValueChange} disabled={disabled} />
     </ControlRow>
   );
 }

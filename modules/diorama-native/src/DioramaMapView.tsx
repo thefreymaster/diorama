@@ -37,6 +37,7 @@ export function DioramaMapView({
   trackingSensitivity = 1,
   headPosition = false,
   leanGain = 1,
+  leanVertical = true,
   trueNorth = false,
   mode = 'mono',
   eyeSeparation = 1,
@@ -117,6 +118,7 @@ export function DioramaMapView({
       trackingSensitivity={trackingSensitivity}
       headPosition={headPosition}
       leanGain={leanGain}
+      leanVertical={leanVertical}
       trueNorth={trueNorth}
       mode={mode}
       eyeSeparation={eyeSeparation}

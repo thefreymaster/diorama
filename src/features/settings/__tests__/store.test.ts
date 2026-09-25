@@ -42,6 +42,7 @@ describe('settings store', () => {
       twoEyeLandscape: true,
       headPosition: true,
       leanGain: 1,
+      leanVertical: true,
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -81,6 +82,7 @@ describe('settings store', () => {
     first.store.setTwoEyeLandscape(false);
     first.store.setHeadPosition(false);
     first.store.setLeanGain(3.5);
+    first.store.setLeanVertical(false);
     first.store.setDebugLook(true);
     first.store.setLensSpacing(62);
     first.store.setWindowDiameter(38);
@@ -96,6 +98,7 @@ describe('settings store', () => {
       twoEyeLandscape: false,
       headPosition: false,
       leanGain: 3.5,
+      leanVertical: false,
       debugLook: true,
       lensSpacing: 62,
       windowDiameter: 38,
@@ -125,6 +128,7 @@ describe('settings store', () => {
       twoEyeLandscape: false,
       headPosition: true,
       leanGain: 1,
+      leanVertical: true,
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -166,6 +170,7 @@ describe('settings store', () => {
       twoEyeLandscape: true,
       headPosition: true,
       leanGain: 1,
+      leanVertical: true,
       debugLook: false,
       lensSpacing: 62,
       windowDiameter: 35,
@@ -185,6 +190,7 @@ describe('settings store', () => {
         twoEyeLandscape: false,
         headPosition: true,
         leanGain: 1,
+        leanVertical: true,
         debugLook: false,
         lensSpacing: 62,
         windowDiameter: 35,
@@ -218,6 +224,7 @@ describe('settings store', () => {
         miniatureIntensity: 7,
         headPosition: 'yes',
         leanGain: '2x',
+        leanVertical: 0,
         debugLook: true,
         lensSpacing: '64 mm',
         windowDiameter: null,
@@ -235,6 +242,7 @@ describe('settings store', () => {
       twoEyeLandscape: true,
       headPosition: true,
       leanGain: 1,
+      leanVertical: true,
       debugLook: true,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -419,6 +427,7 @@ describe('settings store', () => {
       twoEyeLandscape: true,
       headPosition: true,
       leanGain: 1,
+      leanVertical: true,
       debugLook: false,
       lensSpacing: 63,
       windowDiameter: 36,
@@ -484,6 +493,45 @@ describe('settings store', () => {
     expect(JSON.parse(disk.getString('settings') ?? 'null').state.headPosition).toBe(true);
   });
 
+  it('turns moving up and down when leaning off and on, and saves it', () => {
+    const { store, disk } = launch();
+    expect(store.getSettings().leanVertical).toBe(true);
+
+    store.setLeanVertical(false);
+    expect(store.getSettings().leanVertical).toBe(false);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state.leanVertical).toBe(false);
+    // The rest of lean stays as it was.
+    expect(store.getSettings()).toMatchObject({ headPosition: true, leanGain: 1 });
+
+    // Off is kept on the next launch.
+    expect(launch(disk.getString('settings')).store.getSettings().leanVertical).toBe(false);
+
+    store.setLeanVertical(true);
+    expect(store.getSettings().leanVertical).toBe(true);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state.leanVertical).toBe(true);
+  });
+
+  it('gives saves from before the up-and-down switch the lean as it was, up and down included', () => {
+    // What a T47 build saved: version 1, lean without the up-and-down switch.
+    const saved = JSON.stringify({
+      state: { headPosition: false, leanGain: 2, debugLook: false },
+      version: 1,
+    });
+
+    const { store, disk } = launch(saved);
+
+    expect(store.getSettings()).toMatchObject({
+      headPosition: false,
+      leanGain: 2,
+      leanVertical: true,
+    });
+    store.setHeadPosition(true);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state).toMatchObject({
+      headPosition: true,
+      leanVertical: true,
+    });
+  });
+
   it('keeps lean distance between true to scale (1×) and 5×', () => {
     const { store } = launch();
 
@@ -544,6 +592,7 @@ describe('settings store', () => {
     store.setWindowDiameter(30);
     store.setHeadPosition(false);
     store.setLeanGain(4);
+    store.setLeanVertical(false);
 
     store.resetSettings();
 

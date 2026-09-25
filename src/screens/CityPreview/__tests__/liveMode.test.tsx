@@ -221,8 +221,8 @@ describe('live mode', () => {
     expect(mockFollowTo).toHaveBeenCalledWith('diorama-map', TREMONT.latitude, TREMONT.longitude);
     mockFollowTo.mockClear();
 
-    // Enter Diorama keeps following: the Viewer watches, the preview under it stops.
-    fireEvent.press(screen.getByRole('button', { name: 'Enter Diorama' }));
+    // Enter Mini City keeps following: the Viewer watches, the preview under it stops.
+    fireEvent.press(screen.getByRole('button', { name: 'Enter Mini City' }));
     expect(await screen.findByTestId('viewer-map')).toBeOnTheScreen();
     expect(router.getPathnameWithParams()).toBe(`/view/${HERE.id}?live=1`);
     expect(mapProps('viewer-map').showsUserLocation).toBe(true);
@@ -263,7 +263,7 @@ describe('live mode', () => {
     expect(screen.queryByText(FOLLOWING_NOTE)).toBeNull();
     expect(mapProps('diorama-map').showsUserLocation).toBe(false);
 
-    fireEvent.press(screen.getByRole('button', { name: 'Enter Diorama' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Enter Mini City' }));
     expect(await screen.findByTestId('viewer-map')).toBeOnTheScreen();
     expect(router.getPathnameWithParams()).toBe(`/view/${HERE.id}`);
     expect(mapProps('viewer-map').showsUserLocation).toBe(false);

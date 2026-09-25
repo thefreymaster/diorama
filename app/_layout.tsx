@@ -25,7 +25,10 @@ export default function RootLayout() {
           headerLargeTitleShadowVisible: false,
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Diorama', headerLargeTitleEnabled: true }} />
+        <Stack.Screen
+          name="index"
+          options={{ title: 'Mini Cities', headerLargeTitleEnabled: true }}
+        />
         <Stack.Screen name="city/[cityId]" options={{ title: '' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         {/*

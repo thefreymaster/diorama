@@ -19,7 +19,7 @@ type SpotCardProps = {
 /**
  * The glass card floating over the bottom of the map, like the preview's:
  * the name of the spot under the pin, its town and country, whether it has
- * 3D buildings, and "Open diorama".
+ * 3D buildings, and "Open Mini City".
  */
 export function SpotCard({ spot, onCoverHeight }: SpotCardProps) {
   const { left, right, bottom, borderRadius, paddingBottom } = useCardFrame();
@@ -45,7 +45,7 @@ export function SpotCard({ spot, onCoverHeight }: SpotCardProps) {
           <CoverageNote coverage={flyoverCoverageAt(spot)} />
         </View>
         <PrimaryButton
-          title="Open diorama"
+          title="Open Mini City"
           onPress={() => open(spot)}
           loading={isOpening}
           accessibilityHint="Opens a preview of the spot under the pin."

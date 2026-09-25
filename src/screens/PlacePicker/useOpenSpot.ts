@@ -9,7 +9,7 @@ import { pickedPlace } from './pickedPlace';
 import { spotNameQuery } from './spotName';
 
 /**
- * "Open diorama": names the spot (with the name the card shows, or the one
+ * "Open Mini City": names the spot (with the name the card shows, or the one
  * on its way, within a few seconds; else its coordinates), closes the sheet
  * and opens the spot's preview. It joins Recent like any place you open.
  * Taps while it names are ignored.

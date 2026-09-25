@@ -75,7 +75,7 @@ function setReduceMotion(enabled: boolean) {
 
 describe('press feedback', () => {
   it('springs a button down while pressed and back up on release', async () => {
-    await renderSettled(<PrimaryButton title="Enter Diorama" onPress={() => {}} />);
+    await renderSettled(<PrimaryButton title="Enter Mini City" onPress={() => {}} />);
     const button = screen.getByRole('button');
 
     fireEvent(button, 'pressIn');
@@ -91,7 +91,7 @@ describe('press feedback', () => {
 
   it('dims instead of moving when Reduce Motion is on', async () => {
     systemReduceMotion = true;
-    await renderSettled(<PrimaryButton title="Enter Diorama" onPress={() => {}} />);
+    await renderSettled(<PrimaryButton title="Enter Mini City" onPress={() => {}} />);
     const button = screen.getByRole('button');
 
     // No spring: the change lands in full on the next frame.
@@ -105,7 +105,7 @@ describe('press feedback', () => {
   });
 
   it('follows Reduce Motion turned on and off while the app runs', async () => {
-    await renderSettled(<PrimaryButton title="Enter Diorama" onPress={() => {}} />);
+    await renderSettled(<PrimaryButton title="Enter Mini City" onPress={() => {}} />);
     const button = screen.getByRole('button');
 
     setReduceMotion(true);

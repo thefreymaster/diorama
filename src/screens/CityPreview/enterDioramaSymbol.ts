@@ -8,5 +8,5 @@ export function enterDioramaSymbol(iosMajor: number): SFSymbol {
   return iosMajor >= 17 ? 'visionpro' : 'eyeglasses';
 }
 
-/** The glyph on the "Enter Diorama" button for the iOS this is running on. */
+/** The glyph on the "Enter Mini City" button for the iOS this is running on. */
 export const ENTER_DIORAMA_SYMBOL = enterDioramaSymbol(iosMajorVersion(Platform.Version));

@@ -139,7 +139,7 @@ describe('choose on map', () => {
     expect(screen.getByText('Paris, France')).toBeOnTheScreen();
     expect(screen.getByText(BUILDINGS_NOTE)).toBeOnTheScreen();
     expect(screen.getByLabelText('Map').props.accessibilityHint).toBe('Drag to move the pin.');
-    expect(screen.getByRole('button', { name: 'Open diorama' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Open Mini City' })).toBeOnTheScreen();
   });
 
   it('names the spot under the pin after the map moves, with its coverage', async () => {
@@ -214,7 +214,7 @@ describe('choose on map', () => {
     // 24 km across → a camera 2 km out (a twelfth of the width).
     moveMapTo(BURJ);
     await screen.findByText('1 Sheikh Mohammed bin Rashid Blvd');
-    fireEvent.press(screen.getByRole('button', { name: 'Open diorama' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Open Mini City' }));
 
     const id = '1-sheikh-mohammed-bin-rashid-blvd_25.197_55.274';
     await waitFor(() => expect(router.getPathname()).toBe(`/city/${id}`));
@@ -241,7 +241,7 @@ describe('choose on map', () => {
     await screen.findByText('Eiffel Tower');
 
     // 2 km across would be 167 m out: too close to read as a model.
-    fireEvent.press(screen.getByRole('button', { name: 'Open diorama' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Open Mini City' }));
     await waitFor(() => expect(router.getPathname()).toMatch(/^\/city\/eiffel-tower_/));
     expect(getRecents()[0]).toMatchObject({ name: 'Eiffel Tower', altitude: 600 });
   });

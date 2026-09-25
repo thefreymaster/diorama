@@ -55,7 +55,7 @@ describe('routes', () => {
   it('goes from the preview into the viewer and back', async () => {
     const router = renderRouter(routes, { initialUrl: '/city/paris' });
 
-    fireEvent.press(await screen.findByText('Enter Diorama'));
+    fireEvent.press(await screen.findByText('Enter Mini City'));
     expect(await screen.findByTestId('viewer-screen')).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/view/paris');
 

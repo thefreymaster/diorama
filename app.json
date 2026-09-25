@@ -21,8 +21,9 @@
         "EXDevMenuIsOnboardingFinished": true,
         "EXDevMenuShowsAtLaunch": false,
         "EXDevMenuShowFloatingActionButton": false,
-        "NSCameraUsageDescription": "Diorama uses the camera to track how you lean, so you can move closer to the city. Nothing is recorded.",
-        "NSMotionUsageDescription": "Diorama uses motion to turn the city as you turn your head.",
+        "CFBundleDisplayName": "Mini Cities",
+        "NSCameraUsageDescription": "Mini Cities uses the camera to track how you lean, so you can move closer to the city. Nothing is recorded.",
+        "NSMotionUsageDescription": "Mini Cities uses motion to turn the city as you turn your head.",
         "UIViewControllerBasedStatusBarAppearance": true
       },
       "privacyManifests": {
@@ -74,7 +75,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Diorama uses your location to show the city around you.",
+          "locationWhenInUsePermission": "Mini Cities uses your location to show the city around you.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "isIosBackgroundLocationEnabled": false

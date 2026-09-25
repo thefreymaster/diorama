@@ -248,14 +248,16 @@ describe('Screen', () => {
 describe('PrimaryButton', () => {
   it('ignores taps while disabled or loading', () => {
     const onPress = jest.fn();
-    const { rerender } = render(<PrimaryButton title="Enter Diorama" onPress={onPress} disabled />);
+    const { rerender } = render(
+      <PrimaryButton title="Enter Mini City" onPress={onPress} disabled />,
+    );
     fireEvent.press(screen.getByRole('button'));
 
-    rerender(<PrimaryButton title="Enter Diorama" onPress={onPress} loading />);
+    rerender(<PrimaryButton title="Enter Mini City" onPress={onPress} loading />);
     fireEvent.press(screen.getByRole('button'));
     expect(onPress).not.toHaveBeenCalled();
 
-    rerender(<PrimaryButton title="Enter Diorama" onPress={onPress} />);
+    rerender(<PrimaryButton title="Enter Mini City" onPress={onPress} />);
     fireEvent.press(screen.getByRole('button'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });

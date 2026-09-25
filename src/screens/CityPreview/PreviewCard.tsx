@@ -47,7 +47,7 @@ export function PreviewCard({ city, showTerrainNote }: PreviewCardProps) {
       </View>
       <View style={styles.action}>
         <PrimaryButton
-          title="Enter Diorama"
+          title="Enter Mini City"
           symbol={ENTER_DIORAMA_SYMBOL}
           onPress={enterDiorama}
           accessibilityHint="Opens the city full screen."

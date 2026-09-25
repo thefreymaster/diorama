@@ -71,9 +71,9 @@ export function UIGalleryScreen() {
       </InsetGroupedSection>
 
       <DemoBlock title="Buttons">
-        <PrimaryButton title="Enter Diorama" symbol="visionpro" onPress={noop} />
-        <PrimaryButton title="Enter Diorama" onPress={noop} loading />
-        <PrimaryButton title="Enter Diorama" onPress={noop} disabled />
+        <PrimaryButton title="Enter Mini City" symbol="visionpro" onPress={noop} />
+        <PrimaryButton title="Enter Mini City" onPress={noop} loading />
+        <PrimaryButton title="Enter Mini City" onPress={noop} disabled />
       </DemoBlock>
 
       <DemoBlock title="Glass">

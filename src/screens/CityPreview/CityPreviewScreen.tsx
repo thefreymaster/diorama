@@ -11,7 +11,7 @@ import { usePreviewMapStatus } from './usePreviewMapStatus';
 
 /**
  * A city before you put the phone in the viewer: its 3D map slowly turning,
- * full-bleed, under a glass card with its name and "Enter Diorama".
+ * full-bleed, under a glass card with its name and "Enter Mini City".
  */
 export function CityPreviewScreen() {
   const city = usePreviewCity();

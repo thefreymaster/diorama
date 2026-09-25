@@ -113,7 +113,7 @@ describe('city preview', () => {
     expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Paris' })).toBeOnTheScreen();
     expect(screen.getByText('France')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Enter Diorama' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Enter Mini City' })).toBeOnTheScreen();
     expect(screen.getByText(HEADSET_GUIDANCE)).toBeOnTheScreen();
 
     expect(mapProps()).toMatchObject({
@@ -136,7 +136,7 @@ describe('city preview', () => {
     // No headset view, so no word about one.
     act(() => setTwoEyeLandscape(false));
     expect(screen.queryByText(HEADSET_GUIDANCE)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Enter Diorama' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Enter Mini City' })).toBeOnTheScreen();
 
     act(() => setTwoEyeLandscape(true));
     expect(screen.getByText(HEADSET_GUIDANCE)).toBeOnTheScreen();
@@ -211,7 +211,7 @@ describe('city preview', () => {
     const router = renderRouter(routes, { initialUrl: '/city/paris' });
     await screen.findByTestId('city-preview-screen');
 
-    fireEvent.press(screen.getByRole('button', { name: 'Enter Diorama' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Enter Mini City' }));
 
     expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
     expect(await screen.findByTestId('viewer-screen')).toBeOnTheScreen();
@@ -244,12 +244,12 @@ describe('city preview', () => {
 });
 
 describe('city preview, VoiceOver', () => {
-  it('names the map, and says where Enter Diorama goes', async () => {
+  it('names the map, and says where Enter Mini City goes', async () => {
     renderRouter(routes, { initialUrl: '/city/paris' });
     await screen.findByTestId('city-preview-screen');
 
     expect(screen.getByRole('image', { name: '3D map of Paris' })).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Enter Diorama' }).props.accessibilityHint).toBe(
+    expect(screen.getByRole('button', { name: 'Enter Mini City' }).props.accessibilityHint).toBe(
       'Opens the city full screen.',
     );
   });
@@ -262,7 +262,7 @@ describe('city preview, unknown city', () => {
     expect(await screen.findByTestId('city-not-found')).toBeOnTheScreen();
     expect(screen.getByText('City not found')).toBeOnTheScreen();
     expect(screen.queryByTestId('diorama-map')).toBeNull();
-    expect(screen.queryByText('Enter Diorama')).toBeNull();
+    expect(screen.queryByText('Enter Mini City')).toBeNull();
 
     fireEvent.press(screen.getByRole('button', { name: 'Choose a city' }));
 

@@ -643,7 +643,7 @@ describe('viewer', () => {
 
   it('goes back to the preview underneath on a one-second hold', async () => {
     const router = renderRouter(routes, { initialUrl: '/city/paris' });
-    fireEvent.press(await screen.findByRole('button', { name: 'Enter Diorama' }));
+    fireEvent.press(await screen.findByRole('button', { name: 'Enter Mini City' }));
     await screen.findByTestId('viewer-map');
     mockImpact.mockClear();
 

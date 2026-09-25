@@ -36,6 +36,18 @@ final class EyeView: UIView {
   // hides its logo when that box is under 100 points tall or about 110 to
   // 135 wide (measured, iOS 26).
   private static let minAttributionBox = CGSize(width: 70, height: 52)
+  // The middle of MapKit's logo and Legal link, in map points from the
+  // bottom-left corner of the map's layout margins: this far in (x) and up
+  // (y). iOS 26 sets them side by side there (measured). This is the point
+  // each stereo eye puts exactly where the middle eye sees it (see
+  // `stereoNudge`), so the logo and Legal, on either side of it, are off
+  // by as little as can be.
+  private static let attributionMiddle = simd_double2(57, 15)
+  // Margin changes smaller than this (map points) are skipped, so a moving
+  // head doesn't re-lay out MapKit's logo every frame for nothing. A
+  // stereo eye's picture is about half size, so that's under 0.15 points
+  // on screen.
+  private static let minMarginChange: CGFloat = 0.25
 
   // The map's size. Larger than the eye whenever the map is turned, so
   // turning it never shows a corner.
@@ -94,11 +106,12 @@ final class EyeView: UIView {
   }
 
   // The map's layout margins with the picture in place (see layoutMap), in
-  // map points: each side, and top and bottom. And how far MapKit's logo
-  // and Legal link are lifted from there while you look past MapKit's cap
-  // (see `attributionLift`): in from each side, and up.
+  // map points: each side, and top and bottom. And how far they're moved
+  // from there (see `marginShift`): while you look past MapKit's cap, to
+  // keep MapKit's logo and Legal link in view, and in stereo, to put them
+  // in the same spot in both eyes.
   private var restMargins = CGSize.zero
-  private var attributionLift = CGSize.zero
+  private var appliedShift = CGSize.zero
 
   // Set by StereoRig once MapKit has drawn this eye's first full picture,
   // and the pending "call it drawn anyway" timer if some tiles failed.
@@ -163,9 +176,9 @@ final class EyeView: UIView {
 
   // Shows this frame's `pose` (StereoGeometry.eyePose): the map warped into
   // place, and when looking higher than MapKit draws, the sky above it,
-  // the map's top edge faded into the haze, MapKit's logo kept in view, and
-  // the tilt-shift bands fading out as sky replaces city. Called every
-  // frame the camera moves.
+  // the map's top edge faded into the haze, MapKit's logo kept in view (and
+  // in stereo, in the same spot in both eyes), and the tilt-shift bands
+  // fading out as sky replaces city. Called every frame the camera moves.
   func show(_ pose: EyePose) {
     // Not even inside someone else's animation (a screen rotation).
     UIView.performWithoutAnimation {
@@ -175,11 +188,11 @@ final class EyeView: UIView {
       hazeEdge.alpha = CGFloat(min(max(pose.beyondCap / Self.hazeEdgeFadeIn, 0), 1))
       // The haze the map's top edge fades into: the sky's color just there.
       hazeEdge.elevation = pose.camera.pitch + StereoGeometry.verticalFieldOfView / 2 - 90
-      let lift = attributionLift(for: pose)
-      let moved = abs(lift.width - attributionLift.width) >= 0.5
-        || abs(lift.height - attributionLift.height) >= 0.5
-      if moved || (lift == .zero) != (attributionLift == .zero) {
-        attributionLift = lift
+      let shift = marginShift(for: pose)
+      let moved = abs(shift.width - appliedShift.width) >= Self.minMarginChange
+        || abs(shift.height - appliedShift.height) >= Self.minMarginChange
+      if moved || (shift == .zero) != (appliedShift == .zero) {
+        appliedShift = shift
         applyMargins()
       }
       // Below MapKit's cap the map covers the whole eye, so the sky costs
@@ -223,6 +236,55 @@ final class EyeView: UIView {
     return CGFloat(t * t * (3 - 2 * t))
   }
 
+  // How far to move the map's margins from where they rest for `pose` (map
+  // points: each side, and top and bottom), which moves MapKit's logo and
+  // Legal link: the lift past MapKit's cap, and in stereo a nudge so they
+  // sit in the same spot in both eyes. Zero at rest in mono.
+  private func marginShift(for pose: EyePose) -> CGSize {
+    let lift = attributionLift(for: pose)
+    guard pose.side != 0, pose.showsMap, let nudge = stereoNudge(for: pose, lift: lift) else {
+      return lift
+    }
+    // The margins' bottom-left corner moves with the text: right means
+    // wider side margins, down means narrower top and bottom ones. Kept
+    // within what MapKit shows its logo in (see `minAttributionBox`).
+    let size = mapSize == .zero ? bounds.size : mapSize
+    let widest = max(size.width / 2 - Self.minAttributionBox.width, 0)
+    let tallest = max(size.height / 2 - Self.minAttributionBox.height, 0)
+    let side = min(max(restMargins.width + lift.width + CGFloat(nudge.x), 0), widest)
+    let end = min(max(restMargins.height + lift.height - CGFloat(nudge.y), 0), tallest)
+    return CGSize(width: side - restMargins.width, height: end - restMargins.height)
+  }
+
+  // Stereo only: how far (map points, y down) to move MapKit's logo and
+  // Legal link on this eye's map so that this eye's own warp puts them
+  // exactly where the middle eye (see EyePose.middlePicture) sees them with
+  // the margins moved by `lift`. Both eyes do this, so the two copies land
+  // in the same spot in their windows and are seen as one, at the depth of
+  // the window's rim, like a label on the window. Without it each eye's
+  // toe-in and zero-parallax slide would move the flat text a little
+  // differently (measured about 1 point apart at rest, 5 looking well
+  // down), and it read double. What margins can't undo: MapKit's toed-in
+  // cameras never roll, so each eye's picture, text included, is turned a
+  // little differently, about 1° apart at rest and more as you look
+  // straight down. The logo and Legal, either side of the matched middle,
+  // are then about 0.2 points apart at rest, and over 1 point only within
+  // about 15° of straight down. Nil when there's no such spot (the text
+  // behind the eye).
+  private func stereoNudge(for pose: EyePose, lift: CGSize) -> simd_double2? {
+    let size = mapSize == .zero ? bounds.size : mapSize
+    // The text's middle on the middle eye's map (from the map's center),
+    // where the middle eye sees it, and the point of this eye's map that
+    // this eye's warp puts there.
+    let middle = simd_double2(
+      -Double(size.width) / 2 + Double(restMargins.width + lift.width) + Self.attributionMiddle.x,
+      Double(size.height) / 2 - Double(restMargins.height + lift.height) - Self.attributionMiddle.y)
+    let seen = pose.middlePicture * simd_double3(middle.x, middle.y, 1)
+    let source = pose.picture.inverse * seen
+    guard seen.z > 0, source.z > 0 else { return nil }
+    return simd_double2(source.x, source.y) / source.z - middle
+  }
+
   // Where MapKit's logo and Legal link go while you look past MapKit's cap:
   // how far to pull them in from each side and up (map points), zero
   // otherwise. The picture slides down the eye as you look up, and they sit
@@ -233,7 +295,7 @@ final class EyeView: UIView {
   // from the sides, just enough to keep both corners where they rest
   // (inside the circle, or on screen in mono). Once the city fills less
   // than about half the eye there's no room left, and they slide on out
-  // with it.
+  // with it. Worked out for the middle eye, so both eyes lift alike.
   private func attributionLift(for pose: EyePose) -> CGSize {
     guard pose.showsMap, pose.beyondCap > 0, bounds.width > 0 else { return .zero }
     let size = mapSize == .zero ? bounds.size : mapSize
@@ -246,7 +308,7 @@ final class EyeView: UIView {
       let y = halfHeight - Double(restMargins.height + lift.height)
       let x = halfWidth - Double(restMargins.width + lift.width)
       for corner in [simd_double3(-x, y, 1), simd_double3(x, y, 1)] {
-        let point = pose.picture * corner
+        let point = pose.middlePicture * corner
         guard point.z > 0 else { return false }
         let eye = simd_double2(point.x, point.y) / point.z * scale
         if isRound {
@@ -283,10 +345,10 @@ final class EyeView: UIView {
     return search({ CGSize(width: $0, height: up) }, upTo: inward)
   }
 
-  // The map's layout margins: at rest, plus the attribution's lift.
+  // The map's layout margins: at rest, moved by `marginShift`.
   private func applyMargins() {
-    let side = restMargins.width + attributionLift.width
-    let end = restMargins.height + attributionLift.height
+    let side = restMargins.width + appliedShift.width
+    let end = restMargins.height + appliedShift.height
     mapView.layoutMargins = UIEdgeInsets(top: end, left: side, bottom: end, right: side)
   }
 

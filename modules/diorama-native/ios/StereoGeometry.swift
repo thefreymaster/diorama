@@ -33,6 +33,12 @@ import simd
 //    the warp turns the picture the rest of the way. That's exact at every
 //    depth, because it's a turn in place. The picture then slides down the
 //    eye, and SkyBackdrop fills what MapKit never drew above it.
+// 5. MapKit's logo and Legal link (T44) are flat text drawn on each eye's
+//    map, so each eye's warp moves them too, a little differently in each
+//    eye, and they'd be seen double. EyeView moves them (through the map's
+//    layout margins) so that both land where an eye midway between the two
+//    would see them (`EyePose.middlePicture`): the same spot in both
+//    windows, which reads as a label on the window's rim.
 enum StereoGeometry {
   // MapKit's vertical field of view, in degrees. It spans the map view's
   // height whatever its width (measured 30.1° in the Simulator, iOS 26, for
@@ -130,6 +136,10 @@ enum StereoGeometry {
     return EyePose(
       camera: camera,
       picture: picture(from: drawn, to: ideal, focal: focal, slide: slide),
+      // The eye midway between the two: MapKit's camera between the eyes,
+      // no toe-in, no slide. The same as `picture` in mono.
+      middlePicture: picture(from: between, to: ideal, focal: focal, slide: 0),
+      side: side,
       look: ideal,
       roll: roll,
       focal: focal,
@@ -182,6 +192,16 @@ struct EyePose {
   // Maps a point of MapKit's picture (from its center, y down) to the eye's
   // picture (from the eye's center, y down), as a 3×3 homography.
   var picture: simd_double3x3
+  // The same for an eye midway between the two (a "middle eye" that sees
+  // with neither eye's toe-in nor slide). Each eye's warp differs from it on
+  // purpose: that difference is the city's depth. But MapKit's logo and
+  // Legal link are flat text drawn on each eye's map, so the same
+  // difference would put them in slightly different spots in the two eyes
+  // (T44), and they'd be seen double. EyeView uses this to place them
+  // where the middle eye would see them, in both eyes alike.
+  var middlePicture: simd_double3x3
+  // -1 for the left eye, +1 for the right, 0 in mono.
+  var side: Double
   // Where this eye really looks: its axes (east, north, up), roll included.
   var look: CameraAxes
   // The head roll the picture is turned against, in degrees.

@@ -22,11 +22,12 @@ import simd
 //   they move it; recentering doesn't (it only makes wherever you face now
 //   "straight ahead" again). A pinch does (T37, see `Dolly` below): it
 //   slides it along the gaze, toward or away from the aim point, and the
-//   slide is kept as `shift`. From far out MapKit won't draw a city's own
-//   pitch, so DioramaMapView hands in the starting camera at the steepest
-//   pitch MapKit draws there (see `firstPersonCamera(from:)`): a higher
-//   camera stands farther forward and looks more straight down, with the
-//   model center still in the middle.
+//   slide is kept as `shift`. So does leaning in (T46, see `lean` below):
+//   the head's real move, scaled to the city, kept as `lean`. From far out
+//   MapKit won't draw a city's own pitch, so DioramaMapView hands in the
+//   starting camera at the steepest pitch MapKit draws there (see
+//   `firstPersonCamera(from:)`): a higher camera stands farther forward and
+//   looks more straight down, with the model center still in the middle.
 // - Gaze: the direction you look, as a compass heading and a pitch.
 // - Aim point: where the gaze ray meets the ground. A MapKit camera always
 //   looks *at* a point on the map from some distance, so every frame the
@@ -105,14 +106,24 @@ struct FirstPersonCamera {
   // How far pinches have moved the vantage point from the starting
   // camera's position, in meters (east, north, up). Zero until you zoom.
   let shift: simd_double3
+  // How far leaning moves it on top of that (T46), in meters (east, north,
+  // up): the head's real move since recenter, scaled to the city (see
+  // `Lean`). Zero without head position.
+  let lean: simd_double3
   // The vantage point, in meters from the model center (east, north, up).
   let eye: simd_double3
 
-  init(base: CameraPose, shift: simd_double3 = .zero) {
+  init(base: CameraPose, shift: simd_double3 = .zero, lean: simd_double3 = .zero) {
     self.base = base
     self.shift = shift
+    self.lean = lean
     let axes = CameraAxes(heading: base.heading, pitch: base.pitch, roll: 0)
-    eye = -base.altitude * axes.forward + shift
+    eye = -base.altitude * axes.forward + shift + lean
+  }
+
+  // The same camera with the head moved by `lean` (meters east, north, up).
+  func leaning(by lean: simd_double3) -> FirstPersonCamera {
+    FirstPersonCamera(base: base, shift: shift, lean: lean)
   }
 
   // The vantage point's height above the model center's ground, in meters.
@@ -309,7 +320,8 @@ extension FirstPersonCamera {
     let direction: simd_double3
     // Meters from the vantage point to the aim point as the pinch began.
     let startDistance: Double
-    // Where the vantage point is with no zoom at all (a zero shift).
+    // Where the vantage point is with no zoom at all (a zero shift), leaning
+    // as it was when the pinch began.
     let origin: simd_double3
     // The meters to the aim point the pinch may come to rest at.
     let range: ClosedRange<Double>
@@ -381,6 +393,81 @@ extension FirstPersonCamera {
       startDistance: distance,
       origin: eye - shift,
       range: min(range.lowerBound, distance)...max(range.upperBound, distance))
+  }
+}
+
+// MARK: - Leaning in (T46)
+
+// Leaning moves where you stand, like a pinch, only by the head's real move
+// (HeadPosition, from ARKit): lean down and you sink toward the city, lean
+// forward or sideways and you move out over it, the way you would over a
+// real tabletop model; the city shifts against itself as you move (motion
+// parallax). The gaze doesn't change: that stays with the head's turn.
+//
+// Scale: the stereo eyes stand `baseline` meters apart in the city (see
+// StereoGeometry.baseline) and about 6.4 cm apart in your head, which is
+// what makes the city read as one small model. Moving the head by one eye
+// spacing moves you by one baseline, so the model stays that size: one real
+// meter is baseline ÷ 0.064 meters of city (375 m from 1.2 km out), times
+// the `leanGain` prop. The baseline comes from where you stand without the
+// lean, so it doesn't change while you lean (the model would shrink as you
+// sink toward it otherwise).
+//
+// Directions: right and forward are the base camera's (the view with the
+// head straight ahead at recenter), level with the ground; up is up.
+//
+// Limits, with the pinch's rubber band (`Dolly.rubberBand`), so you slow to
+// a stop rather than hit one, and never go more than a quarter past:
+// - Down and up: the distance to the ground straight ahead, along the
+//   resting gaze (no shallower than `Dolly.maxPitch`), stays within the
+//   pinch's range (300 m to 5 km), widened to take in where you stand.
+//   Leaning up also stops where MapKit stops drawing the middle of the view
+//   (DioramaMapView finds that as you go and hands in a lower range).
+// - Out over the city: no farther than the camera's distance from the model
+//   center.
+extension FirstPersonCamera {
+  // Meters between a viewer's own eyes (a typical adult's).
+  static let eyeSpacing = 0.064
+
+  // Meters of city per real meter the head moves, for eyes `baseline`
+  // meters apart, times `gain` (the `leanGain` prop).
+  static func leanScale(baseline: Double, gain: Double) -> Double {
+    max(baseline, 0) / eyeSpacing * max(gain, 0)
+  }
+
+  // Meters along the resting gaze per meter of height: how far the ground
+  // straight ahead is, per meter you stand above it.
+  var leanSlant: Double {
+    1 / cos(min(max(base.pitch, 0), Dolly.maxPitch) * .pi / 180)
+  }
+
+  // Where a head `move` (meters right, up and forward since recenter) puts
+  // you, `scale` meters of city per meter (`leanScale`), as meters (east,
+  // north, up) from where you stand now (call it on the camera without a
+  // lean). Up and down stay within `range` (meters to the ground ahead
+  // along the resting gaze), and out over the city within the camera's
+  // distance from the model center; see the limits above.
+  func lean(for move: simd_double3, scale: Double, range: ClosedRange<Double>) -> simd_double3 {
+    guard scale > 0, move != .zero else { return .zero }
+    // Out over the city.
+    let heading = base.heading * .pi / 180
+    let right = simd_double2(cos(heading), -sin(heading))
+    let forward = simd_double2(sin(heading), cos(heading))
+    var across = scale * (move.x * right + move.z * forward)
+    let spread = simd_length(across)
+    if spread > 0 {
+      let farthest = log(max(base.altitude, 1))
+      across *= exp(Dolly.rubberBand(log(spread), within: -Double.infinity...farthest)) / spread
+    }
+    // Down and up.
+    let height = max(eyeHeight, 1)
+    let slant = leanSlant
+    let start = height * slant
+    let lower = min(max(range.lowerBound, 1), start)
+    let upper = max(range.upperBound, start)
+    let wanted = max(height + scale * move.y, 1) * slant
+    let distance = exp(Dolly.rubberBand(log(wanted), within: log(lower)...log(upper)))
+    return simd_double3(across.x, across.y, distance / slant - height)
   }
 }
 

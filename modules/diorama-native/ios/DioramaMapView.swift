@@ -18,6 +18,9 @@ import simd
 // JS sends only the pinch; the moving happens here, frame by frame. In live
 // mode (T40, `followTo()`), JS sends a GPS fix now and then and the model
 // center glides there, taking you, your zoom and your gaze along with it.
+// With head position on (T46, `headPosition`), leaning moves where you
+// stand too: ARKit tracks the head's real move (HeadPosition), scaled to the
+// city (FirstPersonCamera's "Leaning in").
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady(...)` fires the JS `onReady` callback.
   // Payload: `{ mode }`, the eyes that just finished drawing ("mono" or
@@ -35,6 +38,13 @@ final class DioramaMapView: ExpoView {
   // a `{ x, y, width, height }` in this view's points: in stereo the square
   // around its circle, in mono (both) the whole view.
   let onEyeLayout = EventDispatcher()
+  // Event prop (T46): head position started, found its place, lost it, or
+  // stopped. Payload: `{ state }`, one of HeadPositionState's values. Sent
+  // on each change, and again when the map is ready.
+  let onHeadPositionState = EventDispatcher()
+  // Event prop, debug builds only: HeadPosition's numbers for the dev map's
+  // readout, twice a second while head position runs.
+  let onHeadPositionStats = EventDispatcher()
 
   // Camera props from JS, applied together in `propsDidUpdate()`.
   var pose = CameraPose()
@@ -43,6 +53,10 @@ final class DioramaMapView: ExpoView {
   var headTracking = false
   var debugLook = false
   var trackingSensitivity = 1.0
+  // Head position (T46): leaning moves where you stand (only with head
+  // tracking on). `leanGain` scales the move: 1 = true to the model's scale.
+  var headPosition = false
+  var leanGain = 1.0
   // Stereo props. Setting `mode` again also lifts a thermal fallback to mono.
   var mode = ViewMode.mono {
     didSet { isDegraded = false }
@@ -100,6 +114,10 @@ final class DioramaMapView: ExpoView {
   // While zoomed, MapKit's pitch cap is asked for once per 2% step of the
   // vantage point's height, not every frame (see `steepestPitch(from:)`).
   private static let zoomCapStep = log(1.02)
+  // Lean changes that move the ground under you by less than this (as a
+  // share of your height: the ground 0.01° across) are skipped, like
+  // `minFrameChange`, so ARKit's jitter doesn't keep MapKit from resting.
+  private static let minLeanChange = tan(minFrameChange * .pi / 180)
 
   // The eyes (one or two MKMapViews) and their per-eye cameras.
   private let rig = StereoRig()
@@ -109,6 +127,8 @@ final class DioramaMapView: ExpoView {
   // countdown starts exactly when the city appears.
   private let loadingCover = UIView()
   private let headTracker = HeadTracker()
+  // Where the head is (T46): ARKit, or drags' stand-in in the Simulator.
+  private let positionTracker = HeadPosition()
   private lazy var debugPan = UIPanGestureRecognizer(target: self, action: #selector(handleDebugPan(_:)))
   private lazy var thermal = ThermalMonitor { [weak self] budget in
     self?.thermalBudgetDidChange(budget)
@@ -140,6 +160,16 @@ final class DioramaMapView: ExpoView {
   private var pinch: Pinch?
   // The zoom shift the cameras were last set with.
   private var appliedShift = simd_double3.zero
+  // Head position (T46): the head's move since recenter, in real meters
+  // (right, up, forward), from HeadPosition; zero when not tracking. And the
+  // lean (meters east, north, up) the cameras were last set with.
+  private var headMove = simd_double3.zero
+  private var appliedLean = simd_double3.zero
+  // Leaning up, from the spot you'd stand on without leaning (`eye`): the
+  // farthest distance (meters along the resting gaze) MapKit was found to
+  // still draw the middle of the view from, and where it stops, if found
+  // (as far as leaning up then goes). See `lean(from:)`.
+  private var leanReach: (eye: simd_double3, drawn: Double, stop: Double?)?
   // Live mode (T40): how far the model center has glided from the `center`
   // prop toward the latest GPS fix (see FirstPersonCamera.Glide). Like a
   // useRef: recenter and zoom keep it; a new place (new `center`) drops it.
@@ -169,6 +199,12 @@ final class DioramaMapView: ExpoView {
     addSubview(loadingCover)  // Up from the start: nothing has loaded yet.
     debugPan.isEnabled = false
     addGestureRecognizer(debugPan)
+    positionTracker.onStateChange = { [weak self] state in
+      self?.onHeadPositionState(["state": state.rawValue])
+    }
+    #if DEBUG
+      positionTracker.onStats = { [weak self] stats in self?.reportHeadPositionStats(stats) }
+    #endif
   }
 
   override func layoutSubviews() {
@@ -228,12 +264,23 @@ final class DioramaMapView: ExpoView {
   func recenter() {
     orbitOffset = 0
     headTracker.recenter()
+    positionTracker.recenter()  // Where the head is now is zero again (T46).
     applyCamera(animated: !ticker.isRunning)
   }
 
   // Debug look: fake head yaw/pitch in degrees (+yaw = right, +pitch = up).
   func setDebugLook(yaw: Double, pitch: Double) {
     headTracker.setDebugLook(yaw: yaw, pitch: pitch)
+  }
+
+  // Head position's stand-in (the Simulator has no ARKit; only with debug
+  // look): the head moved this far since it started, in meters right, up
+  // and forward, or `tracking` false to act as if ARKit lost track. It
+  // goes through the same smoothing, hand-offs, scale and limits.
+  func setDebugLean(right: Double, up: Double, forward: Double, tracking: Bool) {
+    let move = simd_double3(right, up, forward)
+    positionTracker.setDebugLean(
+      move.x.isFinite && move.y.isFinite && move.z.isFinite ? move : .zero, tracking: tracking)
   }
 
   // Pinch to zoom, step 1 of 3: fingers down. Takes the line the pinch
@@ -375,21 +422,31 @@ final class DioramaMapView: ExpoView {
 
   // MARK: - Head tracking
 
-  // Starts or stops the tracker to match the props and whether we're on
+  // Starts or stops the trackers to match the props and whether we're on
   // screen, and switches the debug drag on or off.
   private func updateHeadTracking() {
     if headTracker.usesDebugLook != debugLook {
       headTracker.usesDebugLook = debugLook
       headTracker.recenter()  // The new source starts looking straight ahead.
     }
+    positionTracker.usesDebugLean = debugLook
     let shouldTrack = headTracking && window != nil
     debugPan.isEnabled = shouldTrack && debugLook
+    // Head position (T46) only adds to head tracking, and pauses while the
+    // phone is critically hot. Stopped, the lean eases back (see tick).
+    if shouldTrack && headPosition && thermal.budget.allowsStereo {
+      positionTracker.start()
+    } else {
+      positionTracker.stop()
+    }
     guard shouldTrack != headTracker.isRunning else { return }
     if shouldTrack {
       headTracker.start()
     } else {
       headTracker.stop()
       look = .zero
+      headMove = .zero
+      positionTracker.dropMove()
       applyCamera(animated: window != nil)  // Glide back to the props, level.
     }
     setNeedsLayout()  // Overscan is only needed while tracking.
@@ -427,7 +484,8 @@ final class DioramaMapView: ExpoView {
   }
 
   // You stand where the base camera is, until a pinch moves you from there
-  // (`liveZoomShift`). From far out (a high Camera height) MapKit won't tilt
+  // (`liveZoomShift`), and leaning on top of that (T46, `lean(from:)`).
+  // From far out (a high Camera height) MapKit won't tilt
   // as steeply as the props ask, so while tracking (or zoomed) you start
   // from the steepest pitch it draws there, still looking at the model
   // center: the city stays in the middle and you look more straight down.
@@ -438,7 +496,49 @@ final class DioramaMapView: ExpoView {
     if headTracker.isRunning || isZoomed, let steepest = rig.steepestPitch(lookingAt: base) {
       start.pitch = min(start.pitch, steepest)
     }
-    return FirstPersonCamera(base: start, shift: liveZoomShift)
+    let standing = FirstPersonCamera(base: start, shift: liveZoomShift)
+    return standing.leaning(by: lean(from: standing))
+  }
+
+  // Where leaning puts you (T46): the head's move since recenter, scaled to
+  // the city and kept within limits (FirstPersonCamera's "Leaning in"), from
+  // where you'd stand without it (`standing`). The distance limits are the
+  // pinch's; leaning up also stops where MapKit stops drawing the middle of
+  // the view, found on the way up as a pinch finds it (MapKit's cap only
+  // comes down as you rise, so it's asked only past the highest point
+  // checked so far, once per 2% of height).
+  private func lean(from standing: FirstPersonCamera) -> simd_double3 {
+    guard headMove != .zero else { return .zero }
+    let scale = FirstPersonCamera.leanScale(
+      baseline: baseline(for: standing.base), gain: leanGain)
+    let slant = standing.leanSlant
+    if leanReach?.eye != standing.eye {
+      leanReach = (standing.eye, standing.eyeHeight * slant, nil)
+    }
+    func limited(below stop: Double?) -> ClosedRange<Double> {
+      let range = zoomRange
+      guard let stop else { return range }
+      return range.lowerBound...max(min(range.upperBound, stop), range.lowerBound)
+    }
+    var lean = standing.lean(for: headMove, scale: scale, range: limited(below: leanReach?.stop))
+    let distance = (standing.eyeHeight + lean.z) * slant
+    if var reach = leanReach, reach.stop == nil, distance > reach.drawn {
+      if drawsRestingGaze(from: standing.leaning(by: lean)) {
+        reach.drawn = distance
+      } else {
+        reach.stop = reach.drawn
+        lean = standing.lean(for: headMove, scale: scale, range: limited(below: reach.stop))
+      }
+      leanReach = reach
+    }
+    return lean
+  }
+
+  // True when MapKit draws the resting gaze (the middle of the view with the
+  // head straight ahead) from `firstPerson`'s vantage point.
+  private func drawsRestingGaze(from firstPerson: FirstPersonCamera) -> Bool {
+    guard let steepest = steepestPitch(from: firstPerson) else { return true }
+    return steepest >= min(firstPerson.base.pitch, FirstPersonCamera.Dolly.maxPitch) - 0.01
   }
 
   // Where the head looks this frame, turned from the base camera's gaze, or
@@ -490,11 +590,14 @@ final class DioramaMapView: ExpoView {
   // changes only now and then. MapKit's cap only comes down as the camera
   // backs off, so what it draws from a little higher it draws from here.
   private func steepestPitch(from firstPerson: FirstPersonCamera) -> Double? {
-    guard firstPerson.shift != .zero else { return rig.steepestPitch(from: firstPerson) }
+    guard firstPerson.shift != .zero || firstPerson.lean != .zero else {
+      return rig.steepestPitch(from: firstPerson)
+    }
     let height = max(firstPerson.eyeHeight, 1)
     let top = exp((log(height) / Self.zoomCapStep).rounded(.up) * Self.zoomCapStep)
     let raised = FirstPersonCamera(
-      base: firstPerson.base, shift: firstPerson.shift + simd_double3(0, 0, max(top - height, 0)))
+      base: firstPerson.base, shift: firstPerson.shift + simd_double3(0, 0, max(top - height, 0)),
+      lean: firstPerson.lean)
     return rig.steepestPitch(from: raised)
   }
 
@@ -506,7 +609,8 @@ final class DioramaMapView: ExpoView {
   }
 
   // The eyes' spacing follows the base camera's distance from the model
-  // center (fixed while you stand still), not how far away you look.
+  // center (fixed while you stand still, and while you lean), not how far
+  // away you look.
   private func baseline(for base: CameraPose) -> Double {
     StereoGeometry.baseline(distance: base.altitude, eyeSeparation: eyeSeparation)
   }
@@ -527,11 +631,13 @@ final class DioramaMapView: ExpoView {
     appliedGaze = gaze
     appliedRoll = roll
     appliedShift = firstPerson.shift
+    appliedLean = firstPerson.lean
   }
 
   // One display-link frame: advance the orbit and the live glide, read the
-  // head, move the cameras if anything visibly changed (a gliding center
-  // always has). Both eyes move in the same frame.
+  // head (which way it faces, and where it is), move the cameras if anything
+  // visibly changed (a gliding center always has). Both eyes move in the
+  // same frame.
   private func tick(_ seconds: CFTimeInterval) {
     guard isReady else { return }
     if orbit {
@@ -541,6 +647,7 @@ final class DioramaMapView: ExpoView {
     // Read the head and move the cameras in this same frame: no added lag.
     if headTracker.isRunning {
       look = headTracker.update(screen: screenAxes, seconds: seconds)
+      headMove = positionTracker.update(screen: screenAxes, seconds: seconds)
     }
     settleZoom(seconds: seconds)
     if glide.isMoving {
@@ -548,12 +655,17 @@ final class DioramaMapView: ExpoView {
       if !glide.isMoving { updateTicker() }  // Arrived: tick only if something else needs it.
     }
     let base = baseCamera
-    let gaze = liveGaze(from: firstPersonCamera(from: base))
+    let firstPerson = firstPersonCamera(from: base)
+    let gaze = liveGaze(from: firstPerson)
     let baseMoved = appliedBase.map { !$0.isWithin(Self.minFrameChange, of: base) } ?? true
     let gazeMoved = !Self.isWithin(Self.minFrameChange, gaze, appliedGaze)
     let rollMoved = abs(liveRoll - appliedRoll) >= Self.minFrameChange
     let zoomMoved = appliedShift != liveZoomShift
-    guard baseMoved || gazeMoved || rollMoved || zoomMoved else { return }
+    let leanMoved =
+      simd_length(firstPerson.lean - appliedLean)
+        >= Self.minLeanChange * max(firstPerson.eyeHeight, 1)
+      || (firstPerson.lean == .zero) != (appliedLean == .zero)
+    guard baseMoved || gazeMoved || rollMoved || zoomMoved || leanMoved else { return }
     applyCamera(animated: false)
   }
 
@@ -629,8 +741,9 @@ final class DioramaMapView: ExpoView {
   // True when MapKit draws the pinch's line of sight itself from `distance`
   // meters along it (rather than leaving it to the warp and the haze).
   private func draws(_ dolly: FirstPersonCamera.Dolly, at distance: Double) -> Bool {
-    let base = firstPersonCamera(from: baseCamera).base
-    let there = FirstPersonCamera(base: base, shift: dolly.shift(atDistance: distance))
+    let here = firstPersonCamera(from: baseCamera)
+    let there = FirstPersonCamera(
+      base: here.base, shift: dolly.shift(atDistance: distance), lean: here.lean)
     guard let steepest = steepestPitch(from: there) else { return true }
     return steepest >= dolly.pitch - 0.01
   }
@@ -673,6 +786,9 @@ final class DioramaMapView: ExpoView {
     // then): whatever JS draws once per eye goes up now.
     reportEyeLayout(force: true)
     onReady(["mode": rig.isStereo ? ViewMode.stereo.rawValue : ViewMode.mono.rawValue])
+    // The same for head position's state (it may have changed before JS
+    // was listening).
+    if headPosition { onHeadPositionState(["state": positionTracker.state.rawValue]) }
     updateTicker()
   }
 
@@ -699,7 +815,11 @@ final class DioramaMapView: ExpoView {
 
   private func thermalBudgetDidChange(_ budget: ThermalBudget) {
     ticker.maxFramesPerSecond = budget.maxFramesPerSecond
+    // ARKit's camera runs no faster than the screen may (T46), and stops
+    // when it's critically hot (updateHeadTracking).
+    positionTracker.maxFramesPerSecond = budget.maxFramesPerSecond
     fallBackToMonoIfTooHot()
+    updateHeadTracking()
   }
 
   // Too hot for two maps: tell JS, then drop the right eye. Stays mono
@@ -716,6 +836,37 @@ final class DioramaMapView: ExpoView {
     }
   }
 }
+
+#if DEBUG
+  // Dev map readout (debug builds): HeadPosition's numbers, plus where the
+  // lean has put you, measured like the camera props (Camera height's
+  // meters, without the overscan backing-off; see `baseCamera`).
+  extension DioramaMapView {
+    fileprivate func reportHeadPositionStats(_ stats: HeadPosition.Stats) {
+      let firstPerson = firstPersonCamera(from: baseCamera)
+      let meters = 1 / max(rig.distanceScale, 0.01)
+      let heading = firstPerson.base.heading * .pi / 180
+      let lean = firstPerson.lean * meters
+      let scale = FirstPersonCamera.leanScale(
+        baseline: baseline(for: firstPerson.base), gain: leanGain)
+      onHeadPositionStats([
+        "framesPerSecond": stats.framesPerSecond,
+        "poseAgeMs": stats.poseAgeMs,
+        "predictionErrorMm": stats.predictionErrorMm,
+        "jitterMm": stats.jitterMm,
+        "move": ["right": stats.move.x, "up": stats.move.y, "forward": stats.move.z],
+        "lean": [
+          "right": lean.x * cos(heading) - lean.y * sin(heading),
+          "up": lean.z,
+          "forward": lean.x * sin(heading) + lean.y * cos(heading),
+        ],
+        "metersPerMeter": scale * meters,
+        "height": firstPerson.eyeHeight * meters,
+        "distance": firstPerson.eyeHeight * firstPerson.leanSlant * meters,
+      ])
+    }
+  }
+#endif
 
 // One pinch (T37): the line it slides the vantage point along, how far along
 // it you are (meters from the aim point), whether it still has to find

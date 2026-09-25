@@ -22,9 +22,21 @@ public class DioramaNativeModule: Module {
       self.search.resolve(completionId, promise: promise)
     }.runOnQueue(.main)
 
+    // `getCameraAccess()` in src/cameraAccess.ts (T46): may head position use
+    // the camera? "granted", "denied", "undetermined" or "unsupported".
+    AsyncFunction("getCameraAccess") { () -> String in
+      HeadPosition.cameraAccess.rawValue
+    }
+
+    // `requestCameraAccess()`: shows iOS's camera prompt if it hasn't been
+    // answered yet, then says the access. Head position never asks itself.
+    AsyncFunction("requestCameraAccess") { (promise: Promise) in
+      HeadPosition.requestCameraAccess { access in promise.resolve(access.rawValue) }
+    }.runOnQueue(.main)
+
     // requireNativeView('DioramaNative') in JS renders this view.
     View(DioramaMapView.self) {
-      Events("onReady", "onDegraded", "onEyeLayout")
+      Events("onReady", "onDegraded", "onEyeLayout", "onHeadPositionState", "onHeadPositionStats")
 
       // Each Prop is a setter, called only when that prop changes.
       Prop("center") { (view: DioramaMapView, center: Coordinate) in
@@ -51,6 +63,14 @@ public class DioramaNativeModule: Module {
       Prop("trackingSensitivity", 1.0) { (view: DioramaMapView, sensitivity: Double) in
         // Guard against nonsense; the settings screen keeps it in 0.5...2.
         view.trackingSensitivity = sensitivity.isFinite ? min(max(sensitivity, 0), 5) : 1
+      }
+      // Head position (T46): lean to move closer, with ARKit.
+      Prop("headPosition", false) { (view: DioramaMapView, headPosition: Bool) in
+        view.headPosition = headPosition
+      }
+      Prop("leanGain", 1.0) { (view: DioramaMapView, gain: Double) in
+        // Guard against nonsense; Settings will keep it in about 1...5.
+        view.leanGain = gain.isFinite ? min(max(gain, 0), 10) : 1
       }
 
       Prop("mode", ViewMode.mono) { (view: DioramaMapView, mode: ViewMode) in
@@ -95,6 +115,13 @@ public class DioramaNativeModule: Module {
       // `ref.setDebugLook(dx, dy)` in JS: fake head yaw/pitch in degrees.
       AsyncFunction("setDebugLook") { (view: DioramaMapView, dx: Double, dy: Double) in
         view.setDebugLook(yaw: dx, pitch: dy)
+      }
+
+      // `ref.setDebugLean(right, up, forward, tracking)` in JS: head
+      // position's stand-in in the Simulator (with debug look), in meters.
+      AsyncFunction("setDebugLean") {
+        (view: DioramaMapView, right: Double, up: Double, forward: Double, tracking: Bool) in
+        view.setDebugLean(right: right, up: up, forward: forward, tracking: tracking)
       }
 
       // Pinch to zoom, one call per step of the gesture: `ref.beginZoom()`

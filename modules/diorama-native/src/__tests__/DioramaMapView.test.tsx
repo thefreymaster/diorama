@@ -52,6 +52,87 @@ describe('DioramaMapView', () => {
     expect(typeof ref.current?.followTo).toBe('function');
   });
 
+  it('exposes setDebugLean() on its ref and passes tracking on (true unless said)', async () => {
+    const ref = createRef<DioramaMapViewRef>();
+    const view = render(<DioramaMapView ref={ref} {...CAMERA} headTracking headPosition />);
+    const native = { setDebugLean: jest.fn(() => Promise.resolve()) };
+    // The native ref's methods live on the native view; stand one in.
+    const nativeRef = view.UNSAFE_getByType(NativeDioramaMapView).props.ref as {
+      current: unknown;
+    };
+    nativeRef.current = native;
+    await ref.current?.setDebugLean(0, -0.2, 0);
+    await ref.current?.setDebugLean(0.1, 0, 0, false);
+    expect(native.setDebugLean.mock.calls).toEqual([
+      [0, -0.2, 0, true],
+      [0.1, 0, 0, false],
+    ]);
+  });
+
+  it('leaves head position off by default, at the true-to-scale gain', () => {
+    const view = render(<DioramaMapView {...CAMERA} headTracking />);
+    expect(view.toJSON()).toMatchObject({ props: { headPosition: false, leanGain: 1 } });
+  });
+
+  it('passes head position props to the native view', () => {
+    const view = render(<DioramaMapView {...CAMERA} headTracking headPosition leanGain={2.5} />);
+    expect(view.toJSON()).toMatchObject({
+      props: { headTracking: true, headPosition: true, leanGain: 2.5 },
+    });
+  });
+
+  it('unwraps the native onHeadPositionState event', () => {
+    const onHeadPositionState = jest.fn();
+    const view = render(
+      <DioramaMapView
+        {...CAMERA}
+        headTracking
+        headPosition
+        onHeadPositionState={onHeadPositionState}
+      />,
+    );
+    const native = view.UNSAFE_getByType(NativeDioramaMapView);
+    for (const state of ['starting', 'tracking', 'limited', 'off'] as const) {
+      fireEvent(native, 'headPositionState', { nativeEvent: { state, target: 42 } });
+    }
+    expect(onHeadPositionState.mock.calls).toEqual([
+      [{ state: 'starting' }],
+      [{ state: 'tracking' }],
+      [{ state: 'limited' }],
+      [{ state: 'off' }],
+    ]);
+  });
+
+  it('asks for head position stats only when someone listens', () => {
+    const quiet = render(<DioramaMapView {...CAMERA} headTracking headPosition />);
+    expect(quiet.UNSAFE_getByType(NativeDioramaMapView).props.onHeadPositionStats).toBeUndefined();
+
+    const onHeadPositionStats = jest.fn();
+    const view = render(
+      <DioramaMapView
+        {...CAMERA}
+        headTracking
+        headPosition
+        onHeadPositionStats={onHeadPositionStats}
+      />,
+    );
+    const stats = {
+      framesPerSecond: 60,
+      poseAgeMs: 31,
+      predictionErrorMm: 0.4,
+      jitterMm: 0.1,
+      move: { right: 0, up: -0.2, forward: 0 },
+      lean: { right: 0, up: -75, forward: 0 },
+      metersPerMeter: 375,
+      height: 525,
+      distance: 1050,
+    };
+    fireEvent(view.UNSAFE_getByType(NativeDioramaMapView), 'headPositionStats', {
+      nativeEvent: stats,
+    });
+    expect(onHeadPositionStats).toHaveBeenCalledWith(stats);
+  });
+
   it("hides Apple's location dot unless asked, and passes it on when asked", () => {
     expect(render(<DioramaMapView {...CAMERA} />).toJSON()).toMatchObject({
       props: { showsUserLocation: false },

@@ -17,6 +17,7 @@ function mockMap(): { current: DioramaMapViewRef } {
       endZoom: jest.fn(() => Promise.resolve()),
       resetZoom: jest.fn(() => Promise.resolve()),
       followTo: jest.fn((_latitude: number, _longitude: number) => Promise.resolve()),
+      setDebugLean: jest.fn(() => Promise.resolve()),
     },
   };
 }

@@ -59,8 +59,11 @@ final class StereoRig: NSObject, MKMapViewDelegate {
   // what it actually drew; see `eyePoses`.
   private var pitchCap: (altitude: Double, pitch: Double)?
   // The steepest gaze MapKit draws from a vantage point, found by asking it
-  // (see `steepestPitch(from:)`), for the vantage point and map size asked.
-  private var steepestGaze: (key: SteepestPitchKey, pitch: Double)?
+  // (see `steepestPitch(from:)`), for the last two vantage points and map
+  // sizes asked, newest first. Two, so a head hovering at the edge of a
+  // height step (DioramaMapView asks once per 2% of height while zoomed or
+  // leaning, T46) doesn't ask again every time it crosses back.
+  private var steepestGazes: [(key: SteepestPitchKey, pitch: Double)] = []
   // The steepest pitch MapKit draws looking at a camera's center from its
   // distance (see `steepestPitch(lookingAt:)`), for the camera and map size asked.
   private var steepestStart: (key: SteepestPitchKey, pitch: Double)?
@@ -322,14 +325,14 @@ final class StereoRig: NSObject, MKMapViewDelegate {
     let key = SteepestPitchKey(
       center: firstPerson.base.center, meters: firstPerson.eyeHeight,
       mapSize: eyes.first?.mapSize ?? .zero)
-    if let steepestGaze, steepestGaze.key.covers(key) { return steepestGaze.pitch }
+    if let known = steepestGazes.first(where: { $0.key.covers(key) }) { return known.pitch }
     let pitch = askSteepestPitch(startingAt: firstPerson.base.pitch) { pitch in
       var trial = firstPerson.base
       trial.pitch = pitch
       trial.altitude = firstPerson.reach(for: .init(heading: trial.heading, pitch: pitch))
       return trial
     }
-    if let pitch { steepestGaze = (key, pitch) }
+    if let pitch { steepestGazes = [(key, pitch)] + steepestGazes.prefix(1) }
     return pitch
   }
 

@@ -1,10 +1,15 @@
+export { getCameraAccess, requestCameraAccess, type CameraAccess } from './cameraAccess';
 export { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_DIAMETER, DioramaMapView } from './DioramaMapView';
 export type {
   Coordinate,
   DioramaCameraProps,
   DioramaDegradedEvent,
   DioramaEyeLayout,
+  DioramaHeadPositionState,
+  DioramaHeadPositionStateEvent,
+  DioramaHeadPositionStats,
   DioramaHeadTrackingProps,
+  DioramaLean,
   DioramaMapViewProps,
   DioramaMapViewRef,
   DioramaMiniatureProps,

@@ -7,6 +7,8 @@ import {
   NativeDioramaMapView,
   type NativeDegradedEvent,
   type NativeEyeLayoutEvent,
+  type NativeHeadPositionStateEvent,
+  type NativeHeadPositionStatsEvent,
   type NativeReadyEvent,
 } from './NativeDioramaMapView';
 
@@ -17,17 +19,22 @@ export const DEFAULT_WINDOW_DIAMETER = 35;
 
 /**
  * A photoreal 3D Apple Maps view with a camera driven by props. All
- * per-frame work (orbit, head tracking, stereo eyes, tilt-shift) runs natively.
+ * per-frame work (orbit, head tracking and position, stereo eyes, tilt-shift)
+ * runs natively.
  */
 export function DioramaMapView({
   ref,
   onReady,
   onDegraded,
   onEyeLayout,
+  onHeadPositionState,
+  onHeadPositionStats,
   orbit = false,
   headTracking = false,
   debugLook = false,
   trackingSensitivity = 1,
+  headPosition = false,
+  leanGain = 1,
   mode = 'mono',
   eyeSeparation = 1,
   lensSpacing = DEFAULT_LENS_SPACING,
@@ -64,6 +71,9 @@ export function DioramaMapView({
     followTo: async (latitude, longitude) => {
       await nativeRef.current?.followTo(latitude, longitude);
     },
+    setDebugLean: async (right, up, forward, tracking = true) => {
+      await nativeRef.current?.setDebugLean(right, up, forward, tracking);
+    },
   }));
 
   // Native reports what it drew; 3D coverage comes from the hand-checked lists.
@@ -81,6 +91,15 @@ export function DioramaMapView({
     onEyeLayout?.(layout);
   };
 
+  const handleHeadPositionState = ({ nativeEvent }: NativeHeadPositionStateEvent) => {
+    onHeadPositionState?.({ state: nativeEvent.state });
+  };
+
+  // Dev readout only, so the payload passes through as is.
+  const handleHeadPositionStats = ({ nativeEvent }: NativeHeadPositionStatsEvent) => {
+    onHeadPositionStats?.(nativeEvent);
+  };
+
   return (
     <NativeDioramaMapView
       {...props}
@@ -89,6 +108,8 @@ export function DioramaMapView({
       headTracking={headTracking}
       debugLook={debugLook}
       trackingSensitivity={trackingSensitivity}
+      headPosition={headPosition}
+      leanGain={leanGain}
       mode={mode}
       eyeSeparation={eyeSeparation}
       lensSpacing={lensSpacing}
@@ -98,6 +119,8 @@ export function DioramaMapView({
       onReady={handleReady}
       onDegraded={handleDegraded}
       onEyeLayout={handleEyeLayout}
+      onHeadPositionState={handleHeadPositionState}
+      onHeadPositionStats={onHeadPositionStats ? handleHeadPositionStats : undefined}
     />
   );
 }

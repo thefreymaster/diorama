@@ -21,6 +21,7 @@
         "EXDevMenuIsOnboardingFinished": true,
         "EXDevMenuShowsAtLaunch": false,
         "EXDevMenuShowFloatingActionButton": false,
+        "NSCameraUsageDescription": "Diorama uses the camera to track how you lean, so you can move closer to the city. Nothing is recorded.",
         "NSMotionUsageDescription": "Diorama uses motion to turn the city as you turn your head.",
         "UIViewControllerBasedStatusBarAppearance": true
       },

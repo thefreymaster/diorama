@@ -5,6 +5,8 @@ import type { NativeSyntheticEvent } from 'react-native';
 import type {
   DioramaDegradedEvent,
   DioramaEyeLayout,
+  DioramaHeadPositionStateEvent,
+  DioramaHeadPositionStats,
   DioramaMapViewProps,
   DioramaMapViewRef,
   DioramaViewMode,
@@ -19,17 +21,25 @@ export type NativeDegradedEvent = NativeSyntheticEvent<DioramaDegradedEvent>;
 /** Native `onEyeLayout` payload: the public layout, wrapped by React Native. */
 export type NativeEyeLayoutEvent = NativeSyntheticEvent<DioramaEyeLayout>;
 
+/** Native `onHeadPositionState` payload, wrapped by React Native. */
+export type NativeHeadPositionStateEvent = NativeSyntheticEvent<DioramaHeadPositionStateEvent>;
+
+/** Native `onHeadPositionStats` payload (debug builds), wrapped by React Native. */
+export type NativeHeadPositionStatsEvent = NativeSyntheticEvent<DioramaHeadPositionStats>;
+
 /**
  * Props exactly as the Swift view receives them. The public wrapper in
  * DioramaMapView.tsx turns native events into the friendlier public ones.
  */
 export type NativeDioramaMapViewProps = Omit<
   DioramaMapViewProps,
-  'onReady' | 'onDegraded' | 'onEyeLayout' | 'ref'
+  'onReady' | 'onDegraded' | 'onEyeLayout' | 'onHeadPositionState' | 'onHeadPositionStats' | 'ref'
 > & {
   onReady?: (event: NativeReadyEvent) => void;
   onDegraded?: (event: NativeDegradedEvent) => void;
   onEyeLayout?: (event: NativeEyeLayoutEvent) => void;
+  onHeadPositionState?: (event: NativeHeadPositionStateEvent) => void;
+  onHeadPositionStats?: (event: NativeHeadPositionStatsEvent) => void;
   ref?: Ref<DioramaMapViewRef>;
 };
 

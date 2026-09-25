@@ -38,6 +38,13 @@ final class HeadTracker {
   private static let motionManager = CMMotionManager()
   private static var motionUsers = 0
 
+  // The newest motion sample (a few ms old), or nil while no tracker runs.
+  // HeadPosition (T46) reads the accelerometer from it to fill the gaps
+  // between ARKit's camera frames.
+  static var latestMotion: CMDeviceMotion? {
+    motionUsers > 0 ? motionManager.deviceMotion : nil
+  }
+
   // Where the look comes from: false = the phone's motion sensors, true =
   // drags and setDebugLook (for the Simulator).
   var usesDebugLook = false

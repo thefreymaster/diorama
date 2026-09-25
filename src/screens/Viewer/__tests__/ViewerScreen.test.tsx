@@ -91,6 +91,7 @@ jest.mock('@diorama/native', () => {
       endZoom: mockEndZoom,
       resetZoom: mockResetZoom,
       followTo: () => Promise.resolve(),
+      setDebugLean: () => Promise.resolve(),
     }));
     return React.createElement(View, { testID: 'diorama-map', ...props });
   }

@@ -61,6 +61,53 @@ export type DioramaDegradedEvent = {
   reason: 'thermal';
 };
 
+/**
+ * Head position (lean to get closer), as `onHeadPositionState` reports it:
+ * - `off`: not tracked. The `headPosition` prop is off, or there's no camera
+ *   access, no ARKit (the Simulator), the phone is critically hot, or the view
+ *   is off screen. Turning your head still works.
+ * - `starting`: ARKit is getting its bearings (a second or so; looking around
+ *   the room helps). Turning only, meanwhile.
+ * - `tracking`: leaning moves you.
+ * - `limited`: ARKit lost track (camera covered, a dark room, a blank wall, a
+ *   jolt). You stay put for a moment, then ease back to turning only, until
+ *   it finds its place again.
+ */
+export type DioramaHeadPositionState = 'off' | 'starting' | 'tracking' | 'limited';
+
+export type DioramaHeadPositionStateEvent = {
+  state: DioramaHeadPositionState;
+};
+
+/** A move along the view's own axes, in meters. */
+export type DioramaLean = {
+  right: number;
+  up: number;
+  forward: number;
+};
+
+/** Dev builds only: head position's numbers, for a readout (the dev map's `stats=1`). */
+export type DioramaHeadPositionStats = {
+  /** ARKit poses a second (0 with the Simulator's stand-in). */
+  framesPerSecond: number;
+  /** How old ARKit's newest pose is when a frame is drawn: the lag prediction covers. */
+  poseAgeMs: number;
+  /** How far each new ARKit pose landed from the prediction (RMS). */
+  predictionErrorMm: number;
+  /** How much the head's move wobbles (RMS). Read it holding still. */
+  jitterMm: number;
+  /** The head's move since recenter, smoothed: real meters. */
+  move: DioramaLean;
+  /** Where that puts you in the city: meters, as the camera props measure them. */
+  lean: DioramaLean;
+  /** Meters of city per real meter (the stereo's scale × `leanGain`). */
+  metersPerMeter: number;
+  /** Your height above the model center's ground, in meters. */
+  height: number;
+  /** Meters to the ground straight ahead (along the resting gaze): the distance leaning is kept within (300 m to 5 km). */
+  distance: number;
+};
+
 /** iOS thermal states, coolest to hottest. */
 export type DioramaThermalState = 'nominal' | 'fair' | 'serious' | 'critical';
 
@@ -100,6 +147,14 @@ export type DioramaMapViewRef = {
   endZoom: () => Promise<void>;
   /** Back to the place's normal distance (where the camera props put you). */
   resetZoom: () => Promise<void>;
+  /**
+   * Head position's stand-in for the Simulator, which has no ARKit: the head
+   * moved this far since it started, in meters (`right`, `up`, `forward`;
+   * down is a negative `up`). `tracking` false acts as if ARKit lost track.
+   * Only with `headTracking`, `headPosition` and `debugLook` on. It goes
+   * through the same smoothing, scale and limits as the real thing.
+   */
+  setDebugLean: (right: number, up: number, forward: number, tracking?: boolean) => Promise<void>;
   /**
    * Live mode: you're now at this spot. The model center (and you with it)
    * glides there natively, both eyes in step: at your own pace while fixes
@@ -152,6 +207,30 @@ export type DioramaHeadTrackingProps = {
   debugLook?: boolean;
   /** How strongly head motion turns the camera. 1 = one to one. */
   trackingSensitivity?: number;
+  /**
+   * Lean in to get closer: ARKit tracks where the head is (rear camera, no
+   * picture shown or kept), and leaning moves where you stand, like leaning
+   * over a real tabletop model. Down sinks you toward the city, forward and
+   * sideways move you out over it. Needs `headTracking`, and camera access:
+   * it never asks for it itself (see `requestCameraAccess()`); without it,
+   * it stays `off`. `recenter()` makes wherever the head is now the zero.
+   * Works held upright too (move the phone toward the table). Defaults to
+   * false.
+   */
+  headPosition?: boolean;
+  /**
+   * How far leaning moves you. 1 = true to the model's scale: moving your
+   * head by one eye spacing moves you by the stereo's eye baseline (about
+   * 375 m per real meter from 1.2 km out). Defaults to 1.
+   */
+  leanGain?: number;
+  /**
+   * Head position started, found its place, lost it, or stopped. Fires on
+   * each change, and again (with the same state) when the map is ready.
+   */
+  onHeadPositionState?: (event: DioramaHeadPositionStateEvent) => void;
+  /** Dev builds only: head position's numbers, twice a second while it runs. */
+  onHeadPositionStats?: (stats: DioramaHeadPositionStats) => void;
 };
 
 /**

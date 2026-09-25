@@ -41,6 +41,7 @@ jest.mock('@diorama/native', () => {
       endZoom: () => Promise.resolve(),
       resetZoom: () => Promise.resolve(),
       followTo: (latitude: number, longitude: number) => mockFollowTo(testID, latitude, longitude),
+      setDebugLean: () => Promise.resolve(),
     }));
     return React.createElement(View, { ...props, testID });
   }

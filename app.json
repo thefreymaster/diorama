@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "canvas23studios.diorama",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "appleTeamId": "3U62R986E5",
       "supportsTablet": false,
       "icon": "./assets/expo.icon",

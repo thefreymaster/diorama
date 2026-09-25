@@ -16,13 +16,19 @@ export type FlyoverArea = CheckedArea;
 export type FlatArea = CheckedArea;
 
 /**
- * MapKit has no "is 3D here?" API, and it accepts a pitched camera over
- * flat imagery too, so coverage comes from this curated list. Apple covers
- * ~350 cities and publishes no list, so this one is incomplete: a missing
- * city only means its coverage is `unknown`, and the app says nothing. Every
- * entry below was checked in the Simulator (Sept 2026); check a new city with
- * diorama://dev/map?lat=…&lon=… before adding it here (3D) or to
- * `FLAT_AREAS` (no 3D).
+ * MapKit has no "is 3D here?" API (still none in the iOS 27 SDK), and it
+ * accepts a pitched camera over flat imagery too, so coverage comes from this
+ * curated list. Apple covers ~350 cities and publishes no list, so this one is
+ * incomplete: a missing city only means its coverage is `unknown`, and the app
+ * says nothing. Every entry below was checked in the Simulator (Sept 2026);
+ * check a new city with diorama://dev/map?lat=…&lon=… before adding it here
+ * (3D) or to `FLAT_AREAS` (no 3D).
+ *
+ * This is the classic Flyover, which is what MapKit draws in apps. iOS 27's
+ * new Flyover in Apple Maps (the Gaussian-splat cities, rolling out city by
+ * city) isn't drawn by MapKit in apps: checked in the iOS 27.0 Simulator in
+ * New York, Cupertino and London, which MapKit still draws with the classic
+ * mesh (T34). So a city with only the new kind of 3D doesn't belong here.
  */
 export const FLYOVER_AREAS: readonly FlyoverArea[] = [
   { name: 'New York', latitude: 40.7549, longitude: -73.984, radiusKm: 30 },

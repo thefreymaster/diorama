@@ -8,9 +8,9 @@ export type Coordinate = {
 
 /**
  * Whether Apple shows photoreal 3D (Flyover) buildings at a place. MapKit has
- * no API for it, so this comes from places checked by hand: `yes` inside a
- * checked 3D area, `no` inside a checked flat one, and `unknown` everywhere
- * else (Apple may well have 3D there; nobody has looked).
+ * no API for it (none in iOS 27 either), so this comes from places checked by
+ * hand: `yes` inside a checked 3D area, `no` inside a checked flat one, and
+ * `unknown` everywhere else (Apple may well have 3D there; nobody has looked).
  */
 export type FlyoverCoverage = 'yes' | 'no' | 'unknown';
 

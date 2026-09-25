@@ -144,6 +144,12 @@ final class EyeView: UIView {
   // Photoreal 3D imagery with nothing on top: no labels, POIs, compass or
   // scale, and no gestures (touches fall through to React Native).
   private func configureMap() {
+    // The best MapKit offers on every iOS from 16.4 through 27 (T34): the
+    // iOS 27 SDK adds no map configuration, elevation style or quality
+    // setting, and apps can't ask for Apple's new iOS 27 Flyover (the
+    // Gaussian-splat cities); MapKit still draws the classic 3D mesh in
+    // apps. If a later SDK adds a way, it goes here behind `if #available`.
+    // See OVERVIEW.md's research table.
     mapView.preferredConfiguration = MKImageryMapConfiguration(elevationStyle: .realistic)
     mapView.pointOfInterestFilter = .excludingAll
     mapView.showsCompass = false

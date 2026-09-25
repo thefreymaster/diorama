@@ -86,6 +86,27 @@ const PARIS: RecentCity = {
   altitude: 1000,
 };
 
+// A national park: 3D terrain, no buildings.
+const GRAND_CANYON: RecentCity = {
+  id: 'grand-canyon',
+  name: 'Grand Canyon',
+  country: 'Arizona, United States',
+  lat: 36.061,
+  lon: -112.1078,
+  altitude: 3500,
+};
+
+/**
+ * The Settings preview's camera: downtown Boston by the Old State House,
+ * its own framing rather than Featured Boston's (Downtown Crossing, heading 70).
+ */
+const DOWNTOWN_BOSTON = {
+  center: { latitude: 42.358, longitude: -71.0575 },
+  altitude: 1200,
+  pitch: 60,
+  heading: 225,
+};
+
 /** The native stack's header settings for one screen (react-native-screens). */
 const HEADER_CONFIG: string = 'RNSScreenStackHeaderConfig';
 
@@ -522,11 +543,13 @@ describe('restore suggested places', () => {
     expect(screen.getByRole('button', RESTORE)).toBeOnTheScreen();
   });
 
-  it('leaves the preview on the first featured city even when it is hidden', async () => {
-    hideFeatured('new-york');
+  it('leaves the preview on downtown Boston when Boston is deleted from the picker', async () => {
+    hideFeatured('boston');
+    addRecent(GRAND_CANYON);
     await openSettings();
 
-    expect(screen.getByLabelText('Preview of New York')).toBeOnTheScreen();
+    expect(previewMap()).toMatchObject(DOWNTOWN_BOSTON);
+    expect(screen.getByLabelText('Preview of Boston')).toBeOnTheScreen();
   });
 });
 
@@ -545,34 +568,34 @@ describe('settings preview', () => {
     expect(previewMap().headTracking).toBeFalsy();
   });
 
-  it('shows the first featured city until you open one', async () => {
-    addRecent(REYKJAVIK);
+  it.each<[string, () => void]>([
+    ['Recent is empty', () => {}],
+    [
+      'you last opened a national park',
+      () => {
+        addRecent(PARIS);
+        addRecent(GRAND_CANYON);
+      },
+    ],
+    [
+      'you last opened a searched place',
+      () => {
+        addRecent(PARIS);
+        addRecent(REYKJAVIK);
+      },
+    ],
+    ['you last opened another featured city', () => addRecent(PARIS)],
+  ])('shows downtown Boston when %s', async (_, openPlaces) => {
+    openPlaces();
     await openSettings();
 
-    expect(previewMap()).toMatchObject({
-      center: { latitude: 40.7549, longitude: -73.984 },
-      altitude: 1200,
-      pitch: 60,
-      heading: 29,
-    });
-    expect(screen.getByLabelText('Preview of New York')).toBeOnTheScreen();
-  });
-
-  it('shows the featured city you opened last', async () => {
-    addRecent(PARIS);
-    addRecent(REYKJAVIK);
-    await openSettings();
-
-    expect(previewMap()).toMatchObject({
-      center: { latitude: 48.8575, longitude: 2.2957 },
-      heading: 137,
-    });
-    expect(screen.getByLabelText('Preview of Paris')).toBeOnTheScreen();
+    expect(previewMap()).toMatchObject(DOWNTOWN_BOSTON);
+    expect(screen.getByLabelText('Preview of Boston')).toBeOnTheScreen();
   });
 
   it('moves closer or higher up live with Camera height', async () => {
     await openSettings();
-    // New York's own framing: 1,200 m out.
+    // Downtown Boston's framing: 1,200 m out.
     expect(previewMap().altitude).toBe(1200);
 
     slideTo('cameraHeight', SLIDER_SETTINGS.cameraHeight.scale.toPosition(0.5));
@@ -582,11 +605,8 @@ describe('settings preview', () => {
     expect(previewMap().altitude).toBeCloseTo(2400);
 
     // Only the distance changes: same place, same framing.
-    expect(previewMap()).toMatchObject({
-      center: { latitude: 40.7549, longitude: -73.984 },
-      pitch: 60,
-      heading: 29,
-    });
+    const { center, pitch, heading } = DOWNTOWN_BOSTON;
+    expect(previewMap()).toMatchObject({ center, pitch, heading });
   });
 
   it('turns slowly, and keeps still under Reduce Motion', async () => {

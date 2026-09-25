@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 
 import { AppProviders } from '@/providers/AppProviders';
+import { useHideSplashScreen } from '@/providers/useHideSplashScreen';
 
 // Deep links such as diorama://settings open on top of the picker,
 // so there is always a screen to swipe back to.
@@ -9,6 +10,9 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  // The launch screen lifts as soon as the first screen has drawn.
+  useHideSplashScreen();
+
   return (
     <AppProviders>
       {/* Portrait everywhere; only the Viewer route below also turns sideways. */}

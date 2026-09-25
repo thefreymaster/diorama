@@ -100,7 +100,7 @@ When you add a native dependency, look for its `PrivacyInfo.xcprivacy` (in `node
 
 ## Xcode 27 and iOS 27
 
-The Mac has one Xcode, 27.0 (27A266a), so every build links against the iOS 27 SDK. Its Simulator runtimes are iOS 26.5 and 17.5. There is no iOS 27 Simulator, so check iOS 27 behavior on a real iPhone.
+The Mac has one Xcode, 27.0 (27A266a), so every build links against the iOS 27 SDK. Its Simulator runtimes are iOS 27.0 ("iPhone 18 Pro"), 26.5 and 17.5. The iOS 27 Simulator has no motion sensors, so check head tracking on a real iPhone. Xcode 27 ships no Simulator.app, so the "Open in Diorama?" prompt of `xcrun simctl openurl` can't be clicked; approve the scheme once per Simulator with `xcrun simctl spawn booted defaults write com.apple.launchservices.schemeapproval "com.apple.CoreSimulator.CoreSimulatorBridge-->diorama" -string canvas23studios.diorama`.
 
 iOS 27 won't launch an app built with its SDK unless the app uses the UIScene life cycle, where a window scene owns the window instead of the app delegate. Without it the app dies before any JavaScript loads, with `EXC_BREAKPOINT` in `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`. iOS 26 and older launch either kind.
 
@@ -140,4 +140,5 @@ Xcode 27's `devicectl` covers the rest of the iPhone work. The iPhone has to be 
 - **"The bundle version must be higher than the previously uploaded version"**: run `npm run bump` and build again.
 - **An "ITMS-91053: Missing API declaration" email:** add the API it names, with a reason, under `ios.privacyManifests` in `app.json` (see Privacy manifest). Then bump, build and upload again.
 - **The app closes as soon as it opens on iOS 27** (its crash log names `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`): the build has no scene manifest. Check that `app.json` still sets `enableSceneSupport` (see Xcode 27 and iOS 27), then run `npm run ios:prepare` and build again.
+- **The app stays on its launch screen, with no crash:** the root layout hides it itself with a synchronous call (`src/providers/useHideSplashScreen.ts`), so it never waits on anything. expo-router's own hide is an async native call, and Expo runs the async native calls of every module one at a time on one shared queue, so anything slow ahead of it holds the launch screen up. That's what happened on the iOS 26.5 Simulator: for about 10 to 15 minutes after it boots, its location service doesn't answer. The picker's location-access read (expo-location) sat on that queue waiting for it, and expo-router's hide waited behind the read. Keep the hook in the root layout.
 - **The dev launcher or dev menu shows up:** that's a Debug build (`npx expo run:ios`). Archives are always Release. `ios:archive` fails if either one ends up inside the app.

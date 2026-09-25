@@ -129,6 +129,20 @@ describe('hidden featured cities: malformed data on disk', () => {
     expect(store.getHiddenFeatured()).toEqual(['tokyo', 'paris', 'rome']);
   });
 
+  // T58 trimmed these from the suggestions; a list saved before then still holds them.
+  it('forgets places that are no longer suggested, so nothing is left to restore', () => {
+    const { store, disk } = launch(
+      saved({ ids: ['venice', 'glacier', 'mount-rainier', 'barcelona', 'rocky-mountain'] }),
+    );
+
+    expect(store.getHiddenFeatured()).toEqual([]);
+
+    store.hideFeatured('venice');
+    store.hideFeatured('mount-everest');
+
+    expect(savedIds(disk)).toEqual(['mount-everest']);
+  });
+
   it('keeps the good ids from data saved under another version', () => {
     const error = jest.spyOn(console, 'error').mockImplementation(() => {});
 

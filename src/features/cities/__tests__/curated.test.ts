@@ -13,6 +13,19 @@ import {
 
 const URL_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** Suggestions the owner trimmed (T58). They still reopen from Recent, which keeps its own copy. */
+const REMOVED_CITIES = [
+  'barcelona',
+  'venice',
+  'amsterdam',
+  'los-angeles',
+  'florence',
+  'seattle',
+  'prague',
+  'miami',
+];
+const REMOVED_PARKS = ['glacier', 'mount-rainier', 'rocky-mountain'];
+
 function center(city: CuratedCity) {
   return { latitude: city.lat, longitude: city.lon };
 }
@@ -23,9 +36,14 @@ function flyoverAreaFor(city: CuratedCity): string | undefined {
 }
 
 describe('curated cities', () => {
-  it('has about 20 cities', () => {
-    expect(CURATED_CITIES.length).toBeGreaterThanOrEqual(15);
-    expect(CURATED_CITIES.length).toBeLessThanOrEqual(25);
+  it('has about a dozen cities', () => {
+    expect(CURATED_CITIES.length).toBeGreaterThanOrEqual(10);
+    expect(CURATED_CITIES.length).toBeLessThanOrEqual(15);
+  });
+
+  it.each(REMOVED_CITIES)('no longer suggests %s', (id) => {
+    expect(CURATED_CITIES.map((city) => city.id)).not.toContain(id);
+    expect(getCuratedCity(id)).toBeUndefined();
   });
 
   it('are all cities', () => {
@@ -80,9 +98,9 @@ describe('curated cities', () => {
 });
 
 describe('curated national parks', () => {
-  it('has about 10 parks, Grand Canyon and Yellowstone first', () => {
-    expect(CURATED_PARKS.length).toBeGreaterThanOrEqual(8);
-    expect(CURATED_PARKS.length).toBeLessThanOrEqual(12);
+  it('has about 8 parks, Grand Canyon and Yellowstone first', () => {
+    expect(CURATED_PARKS.length).toBeGreaterThanOrEqual(6);
+    expect(CURATED_PARKS.length).toBeLessThanOrEqual(10);
     expect(CURATED_PARKS.slice(0, 2).map((park) => park.id)).toEqual([
       'grand-canyon',
       'yellowstone',
@@ -94,8 +112,13 @@ describe('curated national parks', () => {
     expect(CURATED_PLACES).toEqual([...CURATED_CITIES, ...CURATED_PARKS]);
   });
 
+  it.each(REMOVED_PARKS)('no longer suggests %s', (id) => {
+    expect(CURATED_PARKS.map((park) => park.id)).not.toContain(id);
+    expect(getCuratedCity(id)).toBeUndefined();
+  });
+
   it.each(CURATED_PARKS.map((park) => [park.id, park] as const))(
-    '%s has in-range coordinates, a sensible camera and a "State, United States" subtitle',
+    '%s has in-range coordinates, a sensible camera and a "Region, Country" subtitle',
     (_id, park) => {
       expect(park.lat).toBeGreaterThanOrEqual(-90);
       expect(park.lat).toBeLessThanOrEqual(90);
@@ -109,7 +132,8 @@ describe('curated national parks', () => {
       expect(park.heading).toBeGreaterThanOrEqual(0);
       expect(park.heading).toBeLessThan(360);
       expect(park.name.trim()).not.toBe('');
-      expect(park.country).toMatch(/^[A-Z][A-Za-z ]+, United States$/);
+      // "State, United States", or the park and country abroad.
+      expect(park.country).toMatch(/^[A-Z][A-Za-z ]+, [A-Z][A-Za-z ]+$/);
     },
   );
 
@@ -125,5 +149,20 @@ describe('curated national parks', () => {
   it('finds a park by id, like a city', () => {
     expect(getCuratedCity('grand-canyon')?.name).toBe('Grand Canyon');
     expect(getCuratedCity('yellowstone')?.country).toBe('Wyoming, United States');
+  });
+
+  it('includes Mount Everest, with 3D terrain and no claim about buildings', () => {
+    const everest = getCuratedCity('mount-everest');
+
+    expect(everest).toMatchObject({
+      category: 'park',
+      name: 'Mount Everest',
+      country: 'Sagarmatha National Park, Nepal',
+    });
+    expect(CURATED_PARKS).toContain(everest);
+    if (!everest) return;
+    // Within a few kilometers of the summit (27.9881, 86.9250).
+    expect(distanceKm(center(everest), { latitude: 27.9881, longitude: 86.925 })).toBeLessThan(5);
+    expect(flyoverCoverageAt(center(everest))).toBe('unknown');
   });
 });

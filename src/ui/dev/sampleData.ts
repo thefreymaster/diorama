@@ -26,13 +26,19 @@ export const sampleFeatured: SampleCity[] = [
     symbol: 'building.columns.fill',
     tile: 'systemIndigo',
   },
-  { id: 'venice', name: 'Venice', country: 'Italy', symbol: 'ferry.fill', tile: 'systemTeal' },
+  {
+    id: 'sydney',
+    name: 'Sydney',
+    country: 'Australia',
+    symbol: 'sailboat.fill',
+    tile: 'systemTeal',
+  },
   { id: 'tokyo', name: 'Tokyo', country: 'Japan', symbol: 'tram.fill', tile: 'systemRed' },
 ];
 
 export const sampleRecents = [
-  { id: 'barcelona', name: 'Barcelona', region: 'Catalonia, Spain' },
-  { id: 'sydney', name: 'Sydney', region: 'New South Wales, Australia' },
+  { id: 'rome', name: 'Rome', region: 'Lazio, Italy' },
+  { id: 'mount-everest', name: 'Mount Everest', region: 'Sagarmatha National Park, Nepal' },
 ];
 
 /** Does nothing: gallery rows and buttons only need to look tappable. */

@@ -157,20 +157,6 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
     tileColor: 'systemCyan',
   },
   {
-    // The Sagrada Família, looking down Carrer de Marina across the Eixample to the sea.
-    id: 'barcelona',
-    category: 'city',
-    name: 'Barcelona',
-    country: 'Spain',
-    lat: 41.4036,
-    lon: 2.1744,
-    altitude: 1100,
-    pitch: 58,
-    heading: 135,
-    symbol: 'soccerball',
-    tileColor: 'systemIndigo',
-  },
-  {
     // From Grant Park: Millennium Park and the Bean up front, the Michigan Avenue wall, then the Loop.
     id: 'chicago',
     category: 'city',
@@ -185,20 +171,6 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
     tileColor: 'systemTeal',
   },
   {
-    // From the lagoon: the Doge's Palace, the Campanile and St Mark's Basilica.
-    id: 'venice',
-    category: 'city',
-    name: 'Venice',
-    country: 'Italy',
-    lat: 45.4338,
-    lon: 12.3395,
-    altitude: 900,
-    pitch: 55,
-    heading: 20,
-    symbol: 'theatermasks.fill',
-    tileColor: 'systemPurple',
-  },
-  {
     // Up the Strip: Bellagio's lake on the left, Paris and Caesars, the north Strip behind.
     id: 'las-vegas',
     category: 'city',
@@ -211,76 +183,6 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
     heading: 5,
     symbol: 'dice.fill',
     tileColor: 'systemPink',
-  },
-  {
-    // From Dam Square: the Royal Palace, then the canal rings and the Westerkerk.
-    id: 'amsterdam',
-    category: 'city',
-    name: 'Amsterdam',
-    country: 'Netherlands',
-    lat: 52.374,
-    lon: 4.8875,
-    altitude: 900,
-    pitch: 55,
-    heading: 285,
-    symbol: 'bicycle',
-    tileColor: 'systemOrange',
-  },
-  {
-    // Downtown, up Grand Avenue: Wilshire Grand and US Bank Tower, then Disney Hall and City Hall.
-    id: 'los-angeles',
-    category: 'city',
-    name: 'Los Angeles',
-    country: 'United States',
-    lat: 34.0525,
-    lon: -118.253,
-    altitude: 1500,
-    pitch: 62,
-    heading: 40,
-    symbol: 'film.fill',
-    tileColor: 'systemIndigo',
-  },
-  {
-    // From the Oltrarno: the Arno and Ponte Vecchio, the Uffizi, Palazzo Vecchio and the Duomo.
-    id: 'florence',
-    category: 'city',
-    name: 'Florence',
-    country: 'Italy',
-    lat: 43.7705,
-    lon: 11.2555,
-    altitude: 900,
-    pitch: 55,
-    heading: 10,
-    symbol: 'paintpalette.fill',
-    tileColor: 'systemRed',
-  },
-  {
-    // From Queen Anne: the Space Needle, then Belltown and the downtown towers.
-    id: 'seattle',
-    category: 'city',
-    name: 'Seattle',
-    country: 'United States',
-    lat: 47.6185,
-    lon: -122.3465,
-    altitude: 1400,
-    pitch: 60,
-    heading: 145,
-    symbol: 'cup.and.saucer.fill',
-    tileColor: 'systemBrown',
-  },
-  {
-    // From the Old Town: the Charles Bridge, the Vltava, Malá Strana and Prague Castle.
-    id: 'prague',
-    category: 'city',
-    name: 'Prague',
-    country: 'Czechia',
-    lat: 50.0878,
-    lon: 14.408,
-    altitude: 1300,
-    pitch: 58,
-    heading: 295,
-    symbol: 'clock.fill',
-    tileColor: 'systemBlue',
   },
   {
     // From Back Bay: the Public Garden and the Common, the State House, downtown and the harbor.
@@ -324,29 +226,17 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
     symbol: 'mountain.2.fill',
     tileColor: 'systemGreen',
   },
-  {
-    // From Biscayne Bay: Brickell Key, then the Brickell and downtown skyline.
-    id: 'miami',
-    category: 'city',
-    name: 'Miami',
-    country: 'United States',
-    lat: 25.771,
-    lon: -80.1905,
-    altitude: 1400,
-    pitch: 62,
-    heading: 280,
-    symbol: 'beach.umbrella.fill',
-    tileColor: 'systemTeal',
-  },
 ];
 
 /**
- * US national parks, in "National parks" order. There are no 3D buildings
- * here: the draw is MapKit's realistic-elevation terrain, so every center
- * must stay out of the checked areas in flyoverCoverage.ts (coverage
- * `unknown`, so the preview makes no claim about buildings).
+ * National parks, in "National parks" order: US parks, then Mount Everest.
+ * There are no 3D buildings here: the draw is MapKit's realistic-elevation
+ * terrain, so every center must stay out of the checked areas in
+ * flyoverCoverage.ts (coverage `unknown`, so the preview makes no claim
+ * about buildings).
  *
- * - `country` is "State, United States", the line under the name.
+ * - `country` is the line under the name: "State, United States", or the
+ *   park and country abroad.
  * - MapKit stands every camera on the ground under the point it looks at,
  *   so a center in a deep canyon puts the camera below the rim at a low
  *   Camera height, and in first person the vantage point rides up and down
@@ -356,10 +246,12 @@ export const CURATED_CITIES: readonly CuratedCity[] = [
  *   that bob to ~2% of the camera's height over the plateau and under ~20%
  *   out over the canyon in stereo (from the canyon floor it would be 30–100%).
  *   Zion (from the floor) rises up to ~28%, and the summit views (Yosemite,
- *   Grand Teton, Rocky Mountain) sink ~30–40% as you look off the summit.
+ *   Grand Teton) sink ~30–40% as you look off the summit. Everest's center
+ *   sits just below the summit, so a head turn sinks ~16% (see its entry).
  * - Altitudes are larger than a city's (2.5–4.5 km) to take in a
  *   landscape, but MapKit tilts up less and less from farther out, and
- *   past ~55° it stops drawing the far distance (a gray grid).
+ *   past ~55° it stops drawing the far distance (a gray grid). The higher
+ *   the ground, the less it tilts: over Everest it draws no more than ~35°.
  */
 export const CURATED_PARKS: readonly CuratedCity[] = [
   {
@@ -401,7 +293,7 @@ export const CURATED_PARKS: readonly CuratedCity[] = [
     altitude: 4500,
     pitch: 55,
     heading: 120,
-    symbol: 'mountain.2.fill',
+    symbol: 'tree.fill',
     tileColor: 'systemBlue',
   },
   {
@@ -461,46 +353,24 @@ export const CURATED_PARKS: readonly CuratedCity[] = [
     tileColor: 'systemPurple',
   },
   {
-    // Many Glacier: Grinnell Glacier and its lake under the Garden Wall.
-    id: 'glacier',
+    // Over the summit from the north: the top of the world up front, then the
+    // rock bands and ice of the Lhotse face. The camera is ~11.8 km up, where
+    // MapKit tilts no further than ~35°, so the pitch asks for no more. The
+    // center is on the upper Southwest Face, ~700 m below the summit: a
+    // ±60° head turn in the headset moves the vantage point -16% to +4% of
+    // its height, and nodding down onto the summit +15% (centered on the
+    // summit itself, it would sink ~35%).
+    id: 'mount-everest',
     category: 'park',
-    name: 'Glacier',
-    country: 'Montana, United States',
-    lat: 48.7512,
-    lon: -113.7282,
-    altitude: 4000,
-    pitch: 55,
-    heading: 240,
-    symbol: 'snowflake',
-    tileColor: 'systemCyan',
-  },
-  {
-    // Up the glaciers to the summit dome from above Camp Muir, crevasse fields and all.
-    id: 'mount-rainier',
-    category: 'park',
-    name: 'Mount Rainier',
-    country: 'Washington, United States',
-    lat: 46.835,
-    lon: -121.745,
+    name: 'Mount Everest',
+    country: 'Sagarmatha National Park, Nepal',
+    lat: 27.9825,
+    lon: 86.9225,
     altitude: 4500,
-    pitch: 55,
-    heading: 350,
-    symbol: 'tree.fill',
-    tileColor: 'systemGreen',
-  },
-  {
-    // Longs Peak from the east: the Diamond, its snowfields and Chasm Lake.
-    id: 'rocky-mountain',
-    category: 'park',
-    name: 'Rocky Mountain',
-    country: 'Colorado, United States',
-    lat: 40.2549,
-    lon: -105.616,
-    altitude: 4000,
-    pitch: 55,
-    heading: 260,
-    symbol: 'pawprint.fill',
-    tileColor: 'systemTeal',
+    pitch: 35,
+    heading: 200,
+    symbol: 'mountain.2.fill',
+    tileColor: 'systemCyan',
   },
 ];
 

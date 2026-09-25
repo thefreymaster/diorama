@@ -35,7 +35,7 @@ export function GlassDemo() {
       </View>
       <View style={styles.bottomBar}>
         <GlassSurface style={styles.card}>
-          <Text variant="headline">Venice</Text>
+          <Text variant="headline">Rome</Text>
           <Text variant="subheadline" color="secondaryLabel">
             Italy
           </Text>

@@ -24,6 +24,17 @@ const GRAND_CANYON_PARK: SearchedPlace = {
   kind: 'place',
 };
 
+/** Apple Maps' "Mount Everest", as `resolve()` returned it (Sept 2026): the summit, no subtitle. */
+const MOUNT_EVEREST: SearchedPlace = {
+  id: 'mount-everest_27.988_86.925',
+  name: 'Mount Everest',
+  country: '',
+  lat: 27.98816,
+  lon: 86.9251,
+  altitude: 3000,
+  kind: 'city',
+};
+
 describe('curatedMatch, featured cities', () => {
   it('finds the featured city a search result stands for', () => {
     expect(curatedMatch(PARIS_FRANCE)).toBe(getCuratedCity('paris'));
@@ -72,16 +83,33 @@ describe('curatedMatch, national parks', () => {
     ['Yosemite National Park', 37.848859, -119.557088, 'yosemite'],
     ['Grand Teton National Park', 43.811082, -110.649503, 'grand-teton'],
     ['Bryce Canyon National Park', 37.576147, -112.182083, 'bryce-canyon'],
-    ['Glacier National Park', 48.527512, -113.994007, 'glacier'],
-    ['Mount Rainier', 46.85288, -121.76034, 'mount-rainier'],
+    ['Mount Everest', 27.98816, 86.9251, 'mount-everest'],
   ])('finds %s', (name, lat, lon, id) => {
     expect(curatedMatch({ ...GRAND_CANYON_PARK, name, lat, lon })?.id).toBe(id);
   });
 
-  it('needs the same place: a Glacier National Park elsewhere is not ours', () => {
-    // Glacier National Park in British Columbia.
+  it('finds Mount Everest from the summit Apple returns, of any kind', () => {
+    expect(curatedMatch(MOUNT_EVEREST)).toBe(getCuratedCity('mount-everest'));
+    expect(curatedMatch({ ...MOUNT_EVEREST, kind: 'address' })?.id).toBe('mount-everest');
+    expect(curatedMatch({ ...MOUNT_EVEREST, name: 'mount everest' })?.id).toBe('mount-everest');
+  });
+
+  it('needs the same place: a Mount Everest far from Nepal is not ours', () => {
+    expect(curatedMatch({ ...MOUNT_EVEREST, lat: 32.8328, lon: -117.1713 })).toBe(undefined);
+  });
+
+  it('leaves parks that are no longer suggested to open as searched', () => {
+    // Glacier National Park and Mount Rainier, as Apple resolved them (Sept 2026).
     expect(
-      curatedMatch({ ...GRAND_CANYON_PARK, name: 'Glacier National Park', lat: 51.3, lon: -117.5 }),
+      curatedMatch({
+        ...GRAND_CANYON_PARK,
+        name: 'Glacier National Park',
+        lat: 48.527512,
+        lon: -113.994007,
+      }),
+    ).toBe(undefined);
+    expect(
+      curatedMatch({ ...GRAND_CANYON_PARK, name: 'Mount Rainier', lat: 46.85288, lon: -121.76034 }),
     ).toBe(undefined);
   });
 

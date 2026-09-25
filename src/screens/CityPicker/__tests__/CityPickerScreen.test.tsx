@@ -73,6 +73,31 @@ const HOBOKEN: RecentCity = {
 /** Hoboken as `resolve()` returns it: the recents fields plus its kind. */
 const HOBOKEN_RESOLVED: ResolvedCity = { ...HOBOKEN, kind: 'city' };
 
+/** Venice as Recent kept it while it was a featured city (trimmed from the suggestions in T58). */
+const VENICE: RecentCity = {
+  id: 'venice',
+  name: 'Venice',
+  country: 'Italy',
+  lat: 45.4338,
+  lon: 12.3395,
+  altitude: 900,
+};
+
+/** Suggested places trimmed in T58, by name. */
+const REMOVED_PLACES = [
+  'Barcelona',
+  'Venice',
+  'Amsterdam',
+  'Los Angeles',
+  'Florence',
+  'Seattle',
+  'Prague',
+  'Miami',
+  'Glacier',
+  'Mount Rainier',
+  'Rocky Mountain',
+];
+
 /** A street address as it's kept in Recent. */
 const INFINITE_LOOP: RecentCity = {
   id: '1-infinite-loop_37.332_-122.030',
@@ -214,6 +239,29 @@ describe('city picker, nothing typed', () => {
       .getAllByTestId('swipe-row')
       .map((row) => within(row).getAllByText(/./)[0]?.props.children as string);
     expect(titles).toEqual(CURATED_PLACES.map((place) => place.name));
+  });
+
+  it('lists Mount Everest under National parks, and none of the trimmed places', async () => {
+    renderRouter(routes, { initialUrl: '/' });
+
+    await screen.findByText('National parks');
+    expect(screen.getByText('Mount Everest')).toBeOnTheScreen();
+    expect(screen.getByText('Sagarmatha National Park, Nepal')).toBeOnTheScreen();
+    for (const name of REMOVED_PLACES) expect(screen.queryByText(name)).toBeNull();
+  });
+
+  it('reopens a city from Recent that is no longer suggested', async () => {
+    addRecent(VENICE);
+    const router = renderRouter(routes, { initialUrl: '/' });
+
+    // Only in Recent: Featured no longer lists it.
+    expect(await screen.findAllByText('Venice')).toHaveLength(1);
+    fireEvent.press(screen.getByText('Venice'));
+
+    expect(router.getPathname()).toBe('/city/venice');
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(screen.queryByText('City not found')).toBeNull();
+    expect(getRecents()).toEqual([VENICE]);
   });
 
   it('opens a park with a tick, and it becomes the newest recent', async () => {
@@ -400,6 +448,28 @@ describe('city picker, opening a search result', () => {
 
     expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/city/grand-canyon');
+  });
+
+  it('opens Mount Everest when the result is the mountain', async () => {
+    // As Apple Maps suggests and resolves it (Sept 2026): no subtitle, the summit.
+    mockAutocomplete.mockResolvedValue([completion('Mount Everest', '', 13, 'address')]);
+    mockResolve.mockResolvedValue({
+      id: 'mount-everest_27.988_86.925',
+      name: 'Mount Everest',
+      country: '',
+      lat: 27.98816,
+      lon: 86.9251,
+      altitude: 3000,
+      kind: 'city',
+    });
+    const router = renderRouter(routes, { initialUrl: '/?q=mount%20everest' });
+
+    fireEvent.press(await screen.findByText('Mount Everest'));
+
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(mockResolve).toHaveBeenCalledWith('Mount Everest\u001f');
+    expect(router.getPathname()).toBe('/city/mount-everest');
+    expect(getRecents().map((city) => city.id)).toEqual(['mount-everest']);
   });
 
   it('ignores more taps while one is resolving', async () => {

@@ -146,12 +146,13 @@ Acceptance: `npm test` is green.
 Notes: Coverage of target code 93%→98% statements (features, providers, theme 100%; ui 100% lines). `jest.setup.ts` points expo-router testing-library's reanimated mock at the real Reanimated, so `useReducedMotion` works under `renderRouter`. Dev routes tested to redirect when `__DEV__` is false. Found a bug: malformed persisted recents crashed `getRecent()`, fixed as a T03 follow-up.
 
 ### T17 App icon, launch screen, TestFlight
-Status: blocked
+Status: done
 Depends: T14, T35
 Files: app.json, assets/
 Details: Icon (tiny isometric city block, Apple-style), a plain launch screen, Info.plist strings, and an EAS or Xcode archive configuration for TestFlight.
 Acceptance: The build uploads to TestFlight.
 Notes: Prep done and verified: isometric city-block icon (Icon Composer layers + flat fallback), light/dark splash marks, `appleTeamId` 3U62R986E5, buildNumber 1, iPhone only, `ITSAppUsesNonExemptEncryption` false. An unsigned Release archive builds (JS bundle embedded, icon compiled into Assets.car). BLOCKED ON OWNER — create the App Store Connect record for `canvas23studios.diorama`, then archive and upload in Xcode, or hand the orchestrator an App Store Connect API key (see `docs/testflight.md`). Bump `ios.buildNumber` for every upload.
+Update 2026-09-25: DONE — build 1.0.0 (1) uploaded to App Store Connect app "Mini Cities" (app ID 6816119568) and processing for TestFlight. No API key needed: `xcodebuild -exportArchive` with `destination: upload` and `-allowProvisioningUpdates` uses the Apple ID signed into Xcode (archive from `npm run ios:archive`). Home-screen and store name is now Mini Cities (commit bb0b9da). Warnings only: no dSYMs for the prebuilt React/ReactNativeDependencies/hermesvm frameworks. Next upload needs `npm run bump` first (build numbers can't repeat). OWNER: add yourself as an internal tester in TestFlight; T57 should use the same Xcode-account path (API key optional).
 
 ### T20 Viewer loading cover lifts before both eyes are ready
 Status: done

@@ -51,6 +51,7 @@ export function ViewerScreen() {
           onReady={viewer.onReady}
           onDegraded={viewer.onDegraded}
           onHeadPositionState={viewer.onHeadPositionState}
+          onCompassState={viewer.onCompassState}
         />
         <ViewerHud hud={viewer.hud} perEye={viewer.hudPerEye} />
       </ViewerGestures>

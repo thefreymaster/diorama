@@ -7,6 +7,9 @@ import simd
 //   +Z points up (away from gravity). +X is a fixed horizontal direction
 //   picked when motion updates start (not north). +Y = Z × X, a quarter turn
 //   counterclockwise from +X seen from above.
+//   In live mode (T59) it's `.xTrueNorthZVertical` instead: the same, except
+//   +X is true north (so +Y is west), and yaw becomes a real compass
+//   reading (see `compassHeading(yaw:)`).
 //
 // Device frame: fixed to the phone, described in portrait.
 //   +X toward the right edge, +Y toward the top edge (the Dynamic Island),
@@ -92,6 +95,36 @@ struct HeadPose: Equatable {
     return HeadPose(yaw: degrees(yaw), pitch: degrees(pitch), roll: degrees(roll))
   }
 
+  // How fast `measure`'s yaw is turning, in degrees a second, from the gyro
+  // alone: `rotationRate` is CoreMotion's (radians a second about the
+  // device's axes), turned into the world frame by `attitude`. The
+  // attitude's own yaw also moves when CoreMotion corrects its heading from
+  // the compass; this doesn't, so adding it up gives the head's real turn
+  // (T59). It's the rate of yaw = -atan2(right.y, right.x): the spin about
+  // the vertical, plus a little from the other axes while the ear is tilted.
+  static func yawRate(attitude: simd_quatd, rotationRate: simd_double3, screen: ScreenAxes)
+    -> Double
+  {
+    let spin = attitude.act(rotationRate)
+    let right = attitude.act(screen.right)
+    let level = right.x * right.x + right.y * right.y
+    var rate = -spin.z
+    // The ear points straight up or down (never in a head mount): the spin
+    // about the vertical alone.
+    if level > 1e-6 {
+      rate += right.z * (spin.x * right.x + spin.y * right.y) / level
+    }
+    return degrees(rate)
+  }
+
+  // The compass heading (0 = north, 90 = east) the face points toward, for
+  // a yaw measured in the true-north frame (T59). Yaw is read from the
+  // right ear, so facing north the ear points east and yaw reads 90: the
+  // face is a quarter turn left of the ear.
+  static func compassHeading(yaw: Double) -> Double {
+    wrapDegrees(yaw - 90)
+  }
+
   // Wraps an angle into -180...180, so 350° becomes -10°. Use it on the
   // difference of two yaws to get the short way around.
   static func wrapDegrees(_ angle: Double) -> Double {
@@ -101,5 +134,78 @@ struct HeadPose: Equatable {
 
   private static func degrees(_ radians: Double) -> Double {
     radians * 180 / .pi
+  }
+}
+
+// MARK: - Compass (T59)
+
+// How the compass is doing for live mode's true north, as JS hears it
+// (`onCompassState`). Like a string union type in TS.
+enum CompassState: String {
+  // Trusted: the view faces the real compass heading.
+  case good
+  // Not trusted yet, or not any more (it needs a figure 8, or something
+  // magnetic is near). The city holds where it is meanwhile, and the Viewer
+  // shows its calibration hint.
+  case calibrating
+  // Not in use: true north is off, the phone can't do it, or the compass
+  // stayed poor too long (a headset's magnet, say). The view keeps the
+  // usual "straight ahead is where you faced" behaviour.
+  case unavailable
+}
+
+// Decides from the compass's accuracy readings whether to trust it, like a
+// tiny reducer: feed it one reading per motion sample, then read `state`
+// and `isTrusted`. Pure logic, no sensors.
+struct CompassJudge {
+  // Trusted once the heading may be off by this many degrees or less...
+  static let goodDegrees = 20.0
+  // ...and until it may be off by more than this (the gap keeps a reading
+  // hovering around one number from flickering).
+  static let poorDegrees = 30.0
+  // Seconds a trusted compass may read poorly before the state says
+  // "calibrating" again (a headset's magnet button pressed for a moment
+  // shouldn't bring up the hint). It's no longer trusted at once, though.
+  static let calibratingAfterSeconds = 2.0
+  // Seconds of poor readings in a row after which it gives up for good:
+  // `unavailable` until true north starts afresh.
+  static let giveUpAfterSeconds = 10.0
+
+  private(set) var state: CompassState
+  // True while the heading can be used. Only ever true in `good`.
+  private(set) var isTrusted = false
+  // When the readings turned poor (or started, poor), in seconds.
+  private var poorSince: Double?
+
+  // `available` false: the phone can't do true north at all.
+  init(available: Bool) {
+    state = available ? .calibrating : .unavailable
+  }
+
+  // One reading at `now` (seconds): `accuracy` is the most the heading may
+  // be off, in degrees. Negative or nil means there's no valid heading.
+  mutating func read(accuracy: Double?, now: Double) {
+    guard state != .unavailable else { return }
+    let limit = isTrusted ? Self.poorDegrees : Self.goodDegrees
+    if let accuracy, accuracy >= 0, accuracy <= limit {
+      isTrusted = true
+      poorSince = nil
+      state = .good
+      return
+    }
+    isTrusted = false
+    let since = poorSince ?? now
+    poorSince = since
+    if now - since > Self.giveUpAfterSeconds {
+      state = .unavailable
+    } else if now - since >= Self.calibratingAfterSeconds {
+      state = .calibrating
+    }
+  }
+
+  // Stops trusting it for good (e.g. the sensors never delivered).
+  mutating func giveUp() {
+    isTrusted = false
+    state = .unavailable
   }
 }

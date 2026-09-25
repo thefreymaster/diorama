@@ -4,6 +4,7 @@ import type { DioramaMapViewRef, DioramaReadyEvent } from '@diorama/native';
 import { useSetting } from '@/features/settings/store';
 import { actionHaptic, exitHaptic } from '@/ui';
 
+import { useCompassHint } from './useCompassHint';
 import { useExitViewer } from './useExitViewer';
 import { useHeadsetCountdown } from './useHeadsetCountdown';
 import { useLeanHints } from './useLeanHints';
@@ -38,7 +39,9 @@ import { useViewerTracking } from './useViewerTracking';
  * Lean to move closer (`headPosition`, see `useViewerLean`) asks for the
  * camera on the first visit, while the phone is still in the hand; the
  * countdown waits for the answer. Its HUD hints come from
- * `onHeadPositionState` (see `useLeanHints`).
+ * `onHeadPositionState` (see `useLeanHints`). In live mode the map faces
+ * true north, and its compass hint comes from `onCompassState` (see
+ * `useCompassHint`).
  *
  * `mapRef` is the screen's ref to the map. The screen hands `mode`,
  * `headTracking`, `headPosition` and the callbacks to the map, `hud` to the
@@ -58,6 +61,7 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   // Never in the headset: upright, or before its countdown.
   const lean = useViewerLean(!inHeadset || phase === 'loading');
   const onHeadPositionState = useLeanHints({ showNotice, endNotice });
+  const onCompassState = useCompassHint({ showNotice, endNotice });
   const pinchZoom = usePinchZoom(mapRef);
   const lookDrag = useLookDrag(mapRef, pinchZoom.isPinching);
   const exitViewer = useExitViewer();
@@ -110,6 +114,7 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
     headTracking,
     headPosition: lean.headPosition,
     onHeadPositionState,
+    onCompassState,
     /**
      * Held in the hand and following the phone, a drag looks around. Off
      * with debug look, whose own drag stands in for the phone's motion.

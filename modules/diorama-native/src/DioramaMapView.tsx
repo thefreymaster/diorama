@@ -5,6 +5,7 @@ import { forgetEyeLayout, reportEyeLayout } from './eyeLayoutStore';
 import { flyoverCoverageAt } from './flyoverCoverage';
 import {
   NativeDioramaMapView,
+  type NativeCompassStateEvent,
   type NativeDegradedEvent,
   type NativeEyeLayoutEvent,
   type NativeHeadPositionStateEvent,
@@ -19,8 +20,8 @@ export const DEFAULT_WINDOW_DIAMETER = 35;
 
 /**
  * A photoreal 3D Apple Maps view with a camera driven by props. All
- * per-frame work (orbit, head tracking and position, stereo eyes, tilt-shift)
- * runs natively.
+ * per-frame work (orbit, head tracking and position, true north, stereo
+ * eyes, tilt-shift) runs natively.
  */
 export function DioramaMapView({
   ref,
@@ -29,12 +30,14 @@ export function DioramaMapView({
   onEyeLayout,
   onHeadPositionState,
   onHeadPositionStats,
+  onCompassState,
   orbit = false,
   headTracking = false,
   debugLook = false,
   trackingSensitivity = 1,
   headPosition = false,
   leanGain = 1,
+  trueNorth = false,
   mode = 'mono',
   eyeSeparation = 1,
   lensSpacing = DEFAULT_LENS_SPACING,
@@ -95,6 +98,10 @@ export function DioramaMapView({
     onHeadPositionState?.({ state: nativeEvent.state });
   };
 
+  const handleCompassState = ({ nativeEvent }: NativeCompassStateEvent) => {
+    onCompassState?.({ state: nativeEvent.state });
+  };
+
   // Dev readout only, so the payload passes through as is.
   const handleHeadPositionStats = ({ nativeEvent }: NativeHeadPositionStatsEvent) => {
     onHeadPositionStats?.(nativeEvent);
@@ -110,6 +117,7 @@ export function DioramaMapView({
       trackingSensitivity={trackingSensitivity}
       headPosition={headPosition}
       leanGain={leanGain}
+      trueNorth={trueNorth}
       mode={mode}
       eyeSeparation={eyeSeparation}
       lensSpacing={lensSpacing}
@@ -121,6 +129,7 @@ export function DioramaMapView({
       onEyeLayout={handleEyeLayout}
       onHeadPositionState={handleHeadPositionState}
       onHeadPositionStats={onHeadPositionStats ? handleHeadPositionStats : undefined}
+      onCompassState={handleCompassState}
     />
   );
 }

@@ -204,6 +204,8 @@ describe('live mode', () => {
     expect(router.getPathnameWithParams()).toBe(`/city/${HERE.id}?live=1`);
     expect(screen.getByText(FOLLOWING_NOTE)).toBeOnTheScreen();
     expect(mapProps('diorama-map').showsUserLocation).toBe(true);
+    // The orbiting preview doesn't follow a head, so it has no use for north.
+    expect(mapProps('diorama-map').trueNorth).toBeFalsy();
     // GPS-grade fixes every few steps, and one watch at a time.
     await waitFor(() => expect(activeWatches()).toHaveLength(1));
     expect(activeWatches()[0].options).toEqual({
@@ -226,6 +228,8 @@ describe('live mode', () => {
     expect(await screen.findByTestId('viewer-map')).toBeOnTheScreen();
     expect(router.getPathnameWithParams()).toBe(`/view/${HERE.id}?live=1`);
     expect(mapProps('viewer-map').showsUserLocation).toBe(true);
+    // The Viewer faces true north here, lined up with the real world.
+    expect(mapProps('viewer-map').trueNorth).toBe(true);
     await waitFor(() => expect(watches).toHaveLength(2));
     expect(watches[0].removed).toBe(true);
     expect(activeWatches()).toHaveLength(1);
@@ -267,6 +271,8 @@ describe('live mode', () => {
     expect(await screen.findByTestId('viewer-map')).toBeOnTheScreen();
     expect(router.getPathnameWithParams()).toBe(`/view/${HERE.id}`);
     expect(mapProps('viewer-map').showsUserLocation).toBe(false);
+    // A fixed place faces its own heading.
+    expect(mapProps('viewer-map').trueNorth).toBe(false);
     expect(Location.watchPositionAsync).not.toHaveBeenCalled();
     // Nor does it read location access: a fixed place has no use for it.
     expect(readAccess).toHaveBeenCalledTimes(reads);
@@ -304,6 +310,17 @@ describe('live mode', () => {
     expect(activeWatches()).toHaveLength(0);
     setAppState('active');
     await waitFor(() => expect(activeWatches()).toHaveLength(1));
+  });
+
+  it('faces true north in the Viewer only while it can follow you', async () => {
+    access = DENIED;
+    addRecent(HERE);
+    renderRouter(routes, { initialUrl: `/view/${HERE.id}?live=1` });
+    expect(await screen.findByTestId('viewer-map')).toBeOnTheScreen();
+    await waitFor(() => expect(Location.getForegroundPermissionsAsync).toHaveBeenCalled());
+
+    // Location access off: the fixed place, facing its own heading.
+    expect(mapProps('viewer-map')).toMatchObject({ showsUserLocation: false, trueNorth: false });
   });
 
   it('stays on the fixed place, quietly, with location access turned off', async () => {

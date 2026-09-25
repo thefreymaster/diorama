@@ -20,7 +20,10 @@ import simd
 // center glides there, taking you, your zoom and your gaze along with it.
 // With head position on (T46, `headPosition`), leaning moves where you
 // stand too: ARKit tracks the head's real move (HeadPosition), scaled to the
-// city (FirstPersonCamera's "Leaning in").
+// city (FirstPersonCamera's "Leaning in"). With true north on (T59,
+// `trueNorth`, live mode), the base camera turns to face the real compass
+// heading you face, so the city lines up with the world (HeadTracker's
+// "True north").
 final class DioramaMapView: ExpoView {
   // Event prop. Calling `onReady(...)` fires the JS `onReady` callback.
   // Payload: `{ mode }`, the eyes that just finished drawing ("mono" or
@@ -45,6 +48,10 @@ final class DioramaMapView: ExpoView {
   // Event prop, debug builds only: HeadPosition's numbers for the dev map's
   // readout, twice a second while head position runs.
   let onHeadPositionStats = EventDispatcher()
+  // Event prop (T59): how the compass is doing for true north. Payload:
+  // `{ state }`, one of CompassState's values (good, calibrating,
+  // unavailable). Sent on each change, and again when the map is ready.
+  let onCompassState = EventDispatcher()
 
   // Camera props from JS, applied together in `propsDidUpdate()`.
   var pose = CameraPose()
@@ -57,6 +64,9 @@ final class DioramaMapView: ExpoView {
   // tracking on). `leanGain` scales the move: 1 = true to the model's scale.
   var headPosition = false
   var leanGain = 1.0
+  // True north (T59, live mode): face the real compass heading instead of
+  // the `heading` prop (only with head tracking and a trusted compass).
+  var trueNorth = false
   // Stereo props. Setting `mode` again also lifts a thermal fallback to mono.
   var mode = ViewMode.mono {
     didSet { isDegraded = false }
@@ -156,6 +166,10 @@ final class DioramaMapView: ExpoView {
   // recenter keeps it; resetZoom() (the phone turned) and new camera props
   // drop it. Only the one picture held upright uses it (`zoomApplies`).
   private var zoomShift = simd_double3.zero
+  // The true-north heading turn (T59) the zoom shift was made at. If the
+  // base camera turns since, the shift turns with it (`liveZoomShift`), so
+  // the zoom stays the same in the view.
+  private var zoomHeadingTurn = 0.0
   // The pinch moving it, if any (including one springing back).
   private var pinch: Pinch?
   // The zoom shift the cameras were last set with.
@@ -202,6 +216,9 @@ final class DioramaMapView: ExpoView {
     positionTracker.onStateChange = { [weak self] state in
       self?.onHeadPositionState(["state": state.rawValue])
     }
+    headTracker.onCompassStateChange = { [weak self] state in
+      self?.onCompassState(["state": state.rawValue])
+    }
     #if DEBUG
       positionTracker.onStats = { [weak self] stats in self?.reportHeadPositionStats(stats) }
     #endif
@@ -246,9 +263,11 @@ final class DioramaMapView: ExpoView {
     let isNewPlace = appliedPose.map { !$0.hasSameCenter(as: pose) } ?? true
     if isNewPlace {
       // New place: jump there, and wait for its tiles before orbiting and
-      // firing onReady again. Any live glide belonged to the old one.
+      // firing onReady again. Any live glide (and true-north turn) belonged
+      // to the old one.
       orbitOffset = 0
       glide = FirstPersonCamera.Glide()
+      headTracker.dropHeadingTurn()
       rig.restartRenderTracking()
     }
     if isNewPlace || newEyes { startLoading() }
@@ -261,6 +280,9 @@ final class DioramaMapView: ExpoView {
   // Back to the pose given by props: drops the orbit angle, and wherever the
   // head faces now becomes straight ahead. You stay where you stand (the
   // props' vantage point, moved by any zoom), so only the gaze swings back.
+  // With true north trusted (T59, live mode), the city keeps north instead:
+  // pitch and roll level off, and the base camera turns (easing) to face
+  // the real way you face, bringing the model center in front of you.
   func recenter() {
     orbitOffset = 0
     headTracker.recenter()
@@ -289,6 +311,9 @@ final class DioramaMapView: ExpoView {
   // while following the head, in the one picture held upright.
   func beginZoom() {
     guard isReady, zoomApplies, headTracker.isRunning else { return }
+    // The pinch's line is measured with the base camera as it is now.
+    zoomShift = liveZoomShift
+    zoomHeadingTurn = headTracker.headingTurn
     let firstPerson = firstPersonCamera(from: baseCamera)
     guard let gaze = liveGaze(from: firstPerson) else { return }
     let dolly = firstPerson.dolly(along: gaze, range: zoomRange)
@@ -429,6 +454,7 @@ final class DioramaMapView: ExpoView {
       headTracker.usesDebugLook = debugLook
       headTracker.recenter()  // The new source starts looking straight ahead.
     }
+    headTracker.trueNorth = trueNorth
     positionTracker.usesDebugLean = debugLook
     let shouldTrack = headTracking && window != nil
     debugPan.isEnabled = shouldTrack && debugLook
@@ -467,20 +493,27 @@ final class DioramaMapView: ExpoView {
   // MARK: - Camera
 
   // This frame's base camera: the props turned by the orbit, and in live
-  // mode moved along to where the glide has got to. With head tracking it's
-  // where you stand (FirstPersonCamera's vantage point), so it's the view
-  // with the head straight ahead.
+  // mode moved along to where the glide has got to and turned to face true
+  // north (T59). With head tracking it's where you stand
+  // (FirstPersonCamera's vantage point), so it's the view with the head
+  // straight ahead.
   private var baseCamera: CameraPose {
     var camera = pose
     if glide.offset != .zero {
       camera.center = FirstPersonCamera.coordinate(at: glide.offset, from: pose.center)
     }
-    camera.heading = CameraPose.normalizedHeading(camera.heading + orbitOffset)
+    camera.heading = CameraPose.normalizedHeading(restingHeading + headTracker.headingTurn)
     // MapKit's field of view spans the map's height, so a taller
     // (overscanned) map shows the city bigger. Backing the camera off by the
     // same ratio keeps the city exactly the size it is without overscan.
     camera.altitude *= rig.distanceScale
     return camera
+  }
+
+  // The base camera's heading before any true-north turn: the props'
+  // heading, turned by the orbit.
+  private var restingHeading: Double {
+    CameraPose.normalizedHeading(pose.heading + orbitOffset)
   }
 
   // You stand where the base camera is, until a pinch moves you from there
@@ -646,7 +679,8 @@ final class DioramaMapView: ExpoView {
     }
     // Read the head and move the cameras in this same frame: no added lag.
     if headTracker.isRunning {
-      look = headTracker.update(screen: screenAxes, seconds: seconds)
+      look = headTracker.update(
+        screen: screenAxes, seconds: seconds, restingHeading: restingHeading)
       headMove = positionTracker.update(screen: screenAxes, seconds: seconds)
     }
     settleZoom(seconds: seconds)
@@ -700,8 +734,23 @@ final class DioramaMapView: ExpoView {
     mode == .mono && bounds.height > bounds.width
   }
 
-  // The zoom the cameras use now.
-  private var liveZoomShift: simd_double3 { zoomApplies ? zoomShift : .zero }
+  // The zoom the cameras use now, turned with the base camera if true north
+  // has turned it since the zoom was made.
+  private var liveZoomShift: simd_double3 {
+    guard zoomApplies, zoomShift != .zero else { return .zero }
+    return Self.turned(zoomShift, by: headTracker.headingTurn - zoomHeadingTurn)
+  }
+
+  // `shift` (meters east, north, up) turned about the vertical by
+  // `degrees`, clockwise seen from above, the way a compass heading turns.
+  private static func turned(_ shift: simd_double3, by degrees: Double) -> simd_double3 {
+    guard degrees != 0 else { return shift }
+    let angle = degrees * .pi / 180
+    return simd_double3(
+      shift.x * cos(angle) + shift.y * sin(angle),
+      -shift.x * sin(angle) + shift.y * cos(angle),
+      shift.z)
+  }
 
   private var isZoomed: Bool { liveZoomShift != .zero }
 
@@ -786,9 +835,10 @@ final class DioramaMapView: ExpoView {
     // then): whatever JS draws once per eye goes up now.
     reportEyeLayout(force: true)
     onReady(["mode": rig.isStereo ? ViewMode.stereo.rawValue : ViewMode.mono.rawValue])
-    // The same for head position's state (it may have changed before JS
-    // was listening).
+    // The same for head position's state and the compass's (either may have
+    // changed before JS was listening).
     if headPosition { onHeadPositionState(["state": positionTracker.state.rawValue]) }
+    if trueNorth { onCompassState(["state": headTracker.compassState.rawValue]) }
     updateTicker()
   }
 

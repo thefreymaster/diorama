@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 
 import {
   DioramaMapView,
+  type DioramaCompassStateEvent,
   type DioramaHeadPositionStateEvent,
   type DioramaMapViewRef,
   type DioramaReadyEvent,
@@ -25,6 +26,8 @@ type ViewerMapProps = {
   onDegraded: () => void;
   /** Where lean's camera tracking is (for the HUD's hints). */
   onHeadPositionState: (event: DioramaHeadPositionStateEvent) => void;
+  /** How live mode's compass is doing (for the HUD's calibration hint). */
+  onCompassState: (event: DioramaCompassStateEvent) => void;
   ref: RefObject<DioramaMapViewRef | null>;
 };
 
@@ -38,8 +41,10 @@ type ViewerMapProps = {
  * load (again after each switch to stereo) all run natively. In live mode
  * (from Current location) the city glides along with you as you walk or
  * ride, with Apple's blue dot in every eye; your look and zoom stay put.
- * With lean to move closer on, leaning in brings you nearer, as far per
- * lean as Lean distance says.
+ * It also faces true north there (`trueNorth`): the city lines up with the
+ * real world, so the tower you face is ahead of you in the model too; a
+ * fixed place faces its own heading. With lean to move closer on, leaning
+ * in brings you nearer, as far per lean as Lean distance says.
  */
 export function ViewerMap({
   city,
@@ -49,6 +54,7 @@ export function ViewerMap({
   onReady,
   onDegraded,
   onHeadPositionState,
+  onCompassState,
   ref,
 }: ViewerMapProps) {
   const settings = useSettings();
@@ -74,11 +80,13 @@ export function ViewerMap({
       leanGain={settings.leanGain}
       miniatureIntensity={settings.miniatureIntensity}
       showsUserLocation={following}
+      trueNorth={following}
       // Drag to look stands in for the gyro in the Simulator; never in release.
       debugLook={__DEV__ && settings.debugLook}
       onReady={onReady}
       onDegraded={onDegraded}
       onHeadPositionState={onHeadPositionState}
+      onCompassState={onCompassState}
     />
   );
 }

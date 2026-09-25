@@ -37,7 +37,9 @@ public class DioramaNativeModule: Module {
 
     // requireNativeView('DioramaNative') in JS renders this view.
     View(DioramaMapView.self) {
-      Events("onReady", "onDegraded", "onEyeLayout", "onHeadPositionState", "onHeadPositionStats")
+      Events(
+        "onReady", "onDegraded", "onEyeLayout", "onHeadPositionState", "onHeadPositionStats",
+        "onCompassState")
 
       // Each Prop is a setter, called only when that prop changes.
       Prop("center") { (view: DioramaMapView, center: Coordinate) in
@@ -72,6 +74,10 @@ public class DioramaNativeModule: Module {
       Prop("leanGain", 1.0) { (view: DioramaMapView, gain: Double) in
         // Guard against nonsense; Settings will keep it in about 1...5.
         view.leanGain = gain.isFinite ? min(max(gain, 0), 10) : 1
+      }
+      // True north (T59, live mode): face the real compass heading.
+      Prop("trueNorth", false) { (view: DioramaMapView, trueNorth: Bool) in
+        view.trueNorth = trueNorth
       }
 
       Prop("mode", ViewMode.mono) { (view: DioramaMapView, mode: ViewMode) in

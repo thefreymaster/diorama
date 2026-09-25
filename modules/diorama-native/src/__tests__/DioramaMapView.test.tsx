@@ -103,6 +103,31 @@ describe('DioramaMapView', () => {
     ]);
   });
 
+  it('leaves true north off by default, and passes it on when asked (live mode)', () => {
+    expect(render(<DioramaMapView {...CAMERA} headTracking />).toJSON()).toMatchObject({
+      props: { trueNorth: false },
+    });
+    expect(render(<DioramaMapView {...CAMERA} headTracking trueNorth />).toJSON()).toMatchObject({
+      props: { headTracking: true, trueNorth: true, heading: CAMERA.heading },
+    });
+  });
+
+  it('unwraps the native onCompassState event', () => {
+    const onCompassState = jest.fn();
+    const view = render(
+      <DioramaMapView {...CAMERA} headTracking trueNorth onCompassState={onCompassState} />,
+    );
+    const native = view.UNSAFE_getByType(NativeDioramaMapView);
+    for (const state of ['calibrating', 'good', 'unavailable'] as const) {
+      fireEvent(native, 'compassState', { nativeEvent: { state, target: 42 } });
+    }
+    expect(onCompassState.mock.calls).toEqual([
+      [{ state: 'calibrating' }],
+      [{ state: 'good' }],
+      [{ state: 'unavailable' }],
+    ]);
+  });
+
   it('asks for head position stats only when someone listens', () => {
     const quiet = render(<DioramaMapView {...CAMERA} headTracking headPosition />);
     expect(quiet.UNSAFE_getByType(NativeDioramaMapView).props.onHeadPositionStats).toBeUndefined();

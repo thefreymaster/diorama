@@ -12,9 +12,11 @@ export const COUNTDOWN_HINT = 'Hold anywhere to exit';
  * A short message that fades in over the view, then fades out on its own.
  * The lean hints follow the camera tracking (see `useLeanHints`):
  * `leanStarting` while it gets its bearings, `leanLimited` when it has lost
- * its place for a while.
+ * its place for a while. `compassCalibrating` asks for a figure 8 while live
+ * mode's compass can't be trusted yet (see `useCompassHint`).
  */
-export type HudNotice = 'recentered' | 'cooling' | 'leanStarting' | 'leanLimited';
+export type HudNotice =
+  'recentered' | 'cooling' | 'leanStarting' | 'leanLimited' | 'compassCalibrating';
 
 type NoticeCopy = {
   text: string;
@@ -31,6 +33,11 @@ export const HUD_NOTICES: Readonly<Record<HudNotice, NoticeCopy>> = {
     text: 'Hold still, finding your place',
     symbol: 'location.viewfinder',
     holdMs: 4000,
+  },
+  compassCalibrating: {
+    text: 'Move your iPhone in a figure 8 to calibrate',
+    symbol: 'infinity',
+    holdMs: 5000,
   },
 };
 

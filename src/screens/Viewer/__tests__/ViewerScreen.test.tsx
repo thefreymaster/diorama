@@ -25,6 +25,7 @@ import { getAnimatedStyle } from 'react-native-reanimated';
 
 import type {
   CameraAccess,
+  DioramaCompassState,
   DioramaHeadPositionState,
   DioramaMapViewProps,
   DioramaRect,
@@ -42,6 +43,7 @@ import {
   setTwoEyeLandscape,
 } from '@/features/settings/store';
 import { COUNTDOWN_HINT, COUNTDOWN_TITLE, HUD_NOTICES, NOTICE_MIN_MS } from '@/features/viewer/hud';
+import { CALIBRATING_HINT_DELAY_MS } from '@/features/viewer/useCompassHint';
 import { EXIT_BUTTON_SHOWN_MS } from '@/features/viewer/useExitButton';
 import { LIMITED_HINT_DELAY_MS } from '@/features/viewer/useLeanHints';
 import { LOOK_DEGREES_PER_POINT } from '@/features/viewer/useLookDrag';
@@ -1639,5 +1641,109 @@ describe('viewer lean to move closer', () => {
     expect(screen.getAllByText(LOOK_AROUND, HIDDEN)).toHaveLength(2);
     expect(screen.getByTestId('hud-eye-left', HIDDEN)).toHaveTextContent(LOOK_AROUND);
     expect(screen.getByTestId('hud-eye-right', HIDDEN)).toHaveTextContent(LOOK_AROUND);
+  });
+});
+
+describe('viewer compass (live mode)', () => {
+  const FIGURE_8 = HUD_NOTICES.compassCalibrating.text;
+
+  /** What the map says about the compass it lines the city up with. */
+  function reportCompass(state: DioramaCompassState) {
+    act(() => viewerMap().onCompassState?.({ state }));
+  }
+
+  function hudIsUp(): boolean {
+    return hudGlass().style !== 'none';
+  }
+
+  /** Held in the hand, in the diorama, following the phone. */
+  async function enterUpright() {
+    holdPhone('upright');
+    await openViewer();
+    await settle();
+    enterDiorama();
+  }
+
+  it('asks for a figure 8 while the compass calibrates, and fades once it is good', async () => {
+    await enterUpright();
+    reportCompass('calibrating');
+
+    // A compass that settles at once never shows it.
+    wait(CALIBRATING_HINT_DELAY_MS - 100);
+    expect(screen.queryAllByText(FIGURE_8, HIDDEN)).toHaveLength(0);
+    expect(hudIsUp()).toBe(false);
+    wait(100);
+    expect(screen.getAllByText(FIGURE_8, HIDDEN)).toHaveLength(1);
+    expect(hudIsUp()).toBe(true);
+    wait(NOTICE_MIN_MS);
+    expect(hudIsUp()).toBe(true);
+
+    // Calibrated: it fades.
+    reportCompass('good');
+    wait(0);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('says nothing when the compass is good at once', async () => {
+    await enterUpright();
+
+    reportCompass('calibrating');
+    wait(CALIBRATING_HINT_DELAY_MS - 500);
+    reportCompass('good');
+    wait(5000);
+
+    expect(screen.queryAllByText(FIGURE_8, HIDDEN)).toHaveLength(0);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('keeps the hint up long enough to read, then lets it go', async () => {
+    await enterUpright();
+
+    reportCompass('calibrating');
+    wait(CALIBRATING_HINT_DELAY_MS);
+    reportCompass('good');
+    wait(NOTICE_MIN_MS - 100);
+    expect(hudIsUp()).toBe(true);
+    wait(100);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('fades on its own if the compass never settles, and quietly when true north gives up', async () => {
+    await enterUpright();
+
+    reportCompass('calibrating');
+    wait(CALIBRATING_HINT_DELAY_MS + HUD_NOTICES.compassCalibrating.holdMs - 100);
+    expect(hudIsUp()).toBe(true);
+    wait(100);
+    expect(hudIsUp()).toBe(false);
+
+    // A headset magnet: after a while the map gives up, and nothing more is said.
+    reportCompass('unavailable');
+    wait(10000);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('lets the hint go at once when true north gives up while it is up', async () => {
+    await enterUpright();
+
+    reportCompass('calibrating');
+    wait(CALIBRATING_HINT_DELAY_MS + NOTICE_MIN_MS);
+    expect(hudIsUp()).toBe(true);
+    reportCompass('unavailable');
+    wait(0);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('shows the hint once per eye in the headset', async () => {
+    await openViewer();
+    await settle();
+    enterDiorama();
+
+    reportCompass('calibrating');
+    wait(CALIBRATING_HINT_DELAY_MS);
+
+    expect(screen.getAllByText(FIGURE_8, HIDDEN)).toHaveLength(2);
+    expect(screen.getByTestId('hud-eye-left', HIDDEN)).toHaveTextContent(FIGURE_8);
+    expect(screen.getByTestId('hud-eye-right', HIDDEN)).toHaveTextContent(FIGURE_8);
   });
 });

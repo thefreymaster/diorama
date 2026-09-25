@@ -79,6 +79,22 @@ export type DioramaHeadPositionStateEvent = {
   state: DioramaHeadPositionState;
 };
 
+/**
+ * The compass, for `trueNorth` (live mode), as `onCompassState` reports it:
+ * - `good`: trusted. The city faces the real compass heading you face.
+ * - `calibrating`: not trusted yet, or not any more (it wants a figure 8, or
+ *   something magnetic is near). The city holds where it is meanwhile.
+ * - `unavailable`: not in use. `trueNorth` or head tracking is off, the
+ *   phone has no compass (the Simulator), or the compass stayed poor for
+ *   about 10 seconds (a headset's magnet, say). The view keeps the usual
+ *   "straight ahead is where you faced" behaviour, without a jump.
+ */
+export type DioramaCompassState = 'good' | 'calibrating' | 'unavailable';
+
+export type DioramaCompassStateEvent = {
+  state: DioramaCompassState;
+};
+
 /** A move along the view's own axes, in meters. */
 export type DioramaLean = {
   right: number;
@@ -115,7 +131,9 @@ export type DioramaThermalState = 'nominal' | 'fair' | 'serious' | 'critical';
 export type DioramaMapViewRef = {
   /**
    * Back to the camera given by props: drops the orbit angle, and wherever
-   * the head faces now becomes straight ahead.
+   * the head faces now becomes straight ahead. With `trueNorth` and a
+   * trusted compass it keeps north: pitch and roll level off, and the city
+   * turns (easing) so that what you face now is ahead of you in it too.
    */
   recenter: () => Promise<void>;
   /**
@@ -231,6 +249,22 @@ export type DioramaHeadTrackingProps = {
   onHeadPositionState?: (event: DioramaHeadPositionStateEvent) => void;
   /** Dev builds only: head position's numbers, twice a second while it runs. */
   onHeadPositionStats?: (stats: DioramaHeadPositionStats) => void;
+  /**
+   * Live mode: line the city up with the real world. With head tracking,
+   * the view faces the real compass heading you face (the `heading` prop is
+   * ignored once the compass is trusted), so turning toward a real river or
+   * tower shows it ahead of you in the model. It eases into line, never
+   * jumps. Straight ahead matches exactly, and a little less the farther you
+   * turn from there (the city holds still through the headset's lens as you
+   * turn); `recenter()` lines up whatever you face now. Needs location
+   * access for true north. Defaults to false.
+   */
+  trueNorth?: boolean;
+  /**
+   * How the compass is doing for `trueNorth`. Fires on each change, and
+   * again (with the same state) when the map is ready.
+   */
+  onCompassState?: (event: DioramaCompassStateEvent) => void;
 };
 
 /**

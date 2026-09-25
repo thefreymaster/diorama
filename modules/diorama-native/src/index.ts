@@ -3,6 +3,8 @@ export { DEFAULT_LENS_SPACING, DEFAULT_WINDOW_DIAMETER, DioramaMapView } from '.
 export type {
   Coordinate,
   DioramaCameraProps,
+  DioramaCompassState,
+  DioramaCompassStateEvent,
   DioramaDegradedEvent,
   DioramaEyeLayout,
   DioramaHeadPositionState,

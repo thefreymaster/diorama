@@ -10,9 +10,13 @@
 #      manifest, no dev client, and (for the .ipa) the distribution
 #      signature and App Store profile.
 #
-#   Uploading: set ASC_KEY_ID and ASC_ISSUER_ID and put the key at
-#   ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8. Step 3 then
-#   uploads to App Store Connect instead of writing the .ipa.
+#   Uploading (`--upload`, or `npm run testflight`, which bumps the build
+#   number first): step 3 uploads to App Store Connect for TestFlight
+#   instead of writing the .ipa. It signs in with the Apple ID in Xcode →
+#   Settings → Accounts, or with an App Store Connect API key when
+#   ASC_KEY_ID and ASC_ISSUER_ID are set (key at
+#   ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8). Setting the
+#   key variables uploads even without `--upload`.
 #
 # Run from anywhere; never asks questions. See docs/app-store.md.
 set -euo pipefail
@@ -32,7 +36,13 @@ fail() {
   exit 1
 }
 
-[ "$#" -eq 0 ] || fail "ios:archive takes no options." "Upload settings come from ASC_KEY_ID and ASC_ISSUER_ID."
+UPLOAD=0
+case "${1:-}" in
+  '') ;;
+  --upload) UPLOAD=1 ;;
+  *) fail "unknown option '$1'." "The only option is --upload (sign in with Xcode's Apple ID, or an API key)." ;;
+esac
+[ "$#" -le 1 ] || fail "ios:archive takes at most one option, --upload."
 
 app_json() { node -p "const e = require('./app.json').expo; String(($1) ?? '')"; }
 TEAM=$(app_json 'e.ios?.appleTeamId')
@@ -43,7 +53,6 @@ BUILD=$(app_json 'e.ios?.buildNumber')
 # ── Upload or export only? Decide before the long build. ────────────────
 KEY_DIR="$HOME/.appstoreconnect/private_keys"
 AUTH=()
-UPLOAD=0
 if [ -n "${ASC_KEY_ID:-}" ] || [ -n "${ASC_ISSUER_ID:-}" ]; then
   [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] ||
     fail "set both ASC_KEY_ID and ASC_ISSUER_ID to upload, or neither to only export."
@@ -196,6 +205,7 @@ printf '  %-10s %s\n' \
   "Signed by" "$SIGNER" \
   "Profile" "$PROFILE_NAME" \
   "Archive" "$ARCHIVE"
-printf '\nNot uploaded. Uploading from here needs an App Store Connect app record and API key\n'
-printf '(T17; docs/app-store.md → One-time setup). Or upload this .ipa with Apple'"'"'s Transporter app,\n'
+printf '\nNot uploaded. To send a build to TestFlight: npm run testflight\n'
+printf '(bumps the build number, then archives and uploads with the Apple ID in Xcode).\n'
+printf 'Or upload this .ipa with Apple'"'"'s Transporter app,\n'
 printf 'or the archive from Xcode → Window → Organizer → Distribute App.\n'

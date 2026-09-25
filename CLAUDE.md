@@ -26,5 +26,6 @@ Run two terminals on the Mac:
 
 - `npm run typecheck`, `npm run lint`, `npm test`
 - `npx expo prebuild -p ios` (after native or config changes)
-- `npx expo run:ios` (Simulator: no gyro, use debugLook) / `npx expo run:ios --device` (real motion)
+- `npx expo run:ios` (Simulator: no gyro, use debugLook). The Simulator may use the dev client and Metro for checks.
+- **Builds for the owner's iPhone go through TestFlight, never the Expo dev client** (owner rule, 2026-09-25): `npm run testflight` bumps the build number, archives and uploads (Xcode's Apple ID; needs the Mac's unlocked keychain, not SSH). Commit the bumped `app.json`. Details in `docs/app-store.md` → Uploading.
 - Look at the app without touching it: `xcrun simctl openurl booted "diorama://dev/map"` opens a route, `xcrun simctl io booted screenshot <file>.png` captures the screen (then Read the PNG), `xcrun simctl ui booted appearance dark|light` flips the theme.

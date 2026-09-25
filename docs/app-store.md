@@ -65,7 +65,11 @@ The App Store signature needs no certificate on the Mac. Xcode uses the team's c
 
 ## Uploading
 
-Any one of these:
+**The usual way: `npm run testflight`.** It bumps the build number (build numbers can't repeat), archives, and uploads to App Store Connect using the Apple ID signed into Xcode → Settings → Accounts. No API key needed. It needs the Mac's login keychain unlocked, so run it from a terminal on the Mac, not over SSH. Commit the bumped `app.json` afterwards. `npm run ios:archive -- --upload` does the same without bumping.
+
+Owner rule (2026-09-25): every test build for the iPhone goes through TestFlight, not an Expo dev-client install. The App Store Connect record is "Mini Cities" (app ID 6816119568), with an internal testing group set to automatic distribution, so each upload reaches the phone once Apple finishes processing.
+
+Other ways:
 
 - **Terminal, with the API key.** Set the two IDs and run the archive. It uploads instead of writing the `.ipa`:
   ```sh

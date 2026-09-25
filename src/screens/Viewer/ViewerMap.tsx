@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 
 import {
   DioramaMapView,
+  type DioramaHeadPositionStateEvent,
   type DioramaMapViewRef,
   type DioramaReadyEvent,
   type DioramaViewMode,
@@ -17,9 +18,13 @@ type ViewerMapProps = {
   /** One full-screen picture, or one per eye for the headset (from how the phone is held). */
   mode: DioramaViewMode;
   headTracking: boolean;
+  /** Lean to move closer: on in Settings, with camera access. */
+  headPosition: boolean;
   /** Every eye has drawn; `event.mode` says which view drew. */
   onReady: (event: DioramaReadyEvent) => void;
   onDegraded: () => void;
+  /** Where lean's camera tracking is (for the HUD's hints). */
+  onHeadPositionState: (event: DioramaHeadPositionStateEvent) => void;
   ref: RefObject<DioramaMapViewRef | null>;
 };
 
@@ -33,8 +38,19 @@ type ViewerMapProps = {
  * load (again after each switch to stereo) all run natively. In live mode
  * (from Current location) the city glides along with you as you walk or
  * ride, with Apple's blue dot in every eye; your look and zoom stay put.
+ * With lean to move closer on, leaning in brings you nearer, as far per
+ * lean as Lean distance says.
  */
-export function ViewerMap({ city, mode, headTracking, onReady, onDegraded, ref }: ViewerMapProps) {
+export function ViewerMap({
+  city,
+  mode,
+  headTracking,
+  headPosition,
+  onReady,
+  onDegraded,
+  onHeadPositionState,
+  ref,
+}: ViewerMapProps) {
   const settings = useSettings();
   const altitude = useCameraAltitude(city.altitude);
   const following = useFollowMyLocation(ref);
@@ -54,12 +70,15 @@ export function ViewerMap({ city, mode, headTracking, onReady, onDegraded, ref }
       windowDiameter={settings.windowDiameter}
       headTracking={headTracking}
       trackingSensitivity={settings.trackingSensitivity}
+      headPosition={headPosition}
+      leanGain={settings.leanGain}
       miniatureIntensity={settings.miniatureIntensity}
       showsUserLocation={following}
       // Drag to look stands in for the gyro in the Simulator; never in release.
       debugLook={__DEV__ && settings.debugLook}
       onReady={onReady}
       onDegraded={onDegraded}
+      onHeadPositionState={onHeadPositionState}
     />
   );
 }

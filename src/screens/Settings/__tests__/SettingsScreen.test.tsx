@@ -1,8 +1,10 @@
+import { focusManager } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { router as appRouter } from 'expo-router';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
-import { AccessibilityInfo, Dimensions } from 'react-native';
+import { AccessibilityInfo, Dimensions, Linking } from 'react-native';
 
-import type { DioramaMapViewProps } from '@diorama/native';
+import type { CameraAccess, DioramaMapViewProps } from '@diorama/native';
 import {
   getHiddenFeatured,
   hideFeatured,
@@ -16,12 +18,15 @@ import {
   setCameraHeight,
   setDebugLook,
   setEyeSeparation,
+  setHeadPosition,
+  setLeanGain,
   setLensSpacing,
   setMiniatureIntensity,
   setTrackingSensitivity,
   setTwoEyeLandscape,
   setWindowDiameter,
 } from '@/features/settings/store';
+import { cameraKeys } from '@/features/viewer/useCameraAccess';
 import { queryClient } from '@/providers/queryClient';
 import { storage } from '@/providers/storage';
 
@@ -30,7 +35,12 @@ import * as IndexRoute from '../../../../app/index';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
+import { CAMERA_OFF, LEAN_FOOTER, LEAN_TITLE } from '../LeanSection';
 import { SLIDER_SETTINGS, type FitSetting, type SliderSetting } from '../sliderSettings';
+
+// Camera access for lean to move closer: read without asking, and the prompt.
+const mockGetCameraAccess = jest.fn<Promise<CameraAccess>, []>();
+const mockRequestCameraAccess = jest.fn<Promise<CameraAccess>, []>();
 
 // The native map becomes a plain view that keeps its props (so tests can read
 // them and play MapKit's part by calling `onReady`) and a ref for the Viewer.
@@ -50,7 +60,12 @@ jest.mock('@diorama/native', () => {
     }));
     return React.createElement(View, { testID: 'diorama-map', ...props });
   }
-  return { ...jest.requireActual<object>('@diorama/native'), DioramaMapView: MockDioramaMapView };
+  return {
+    ...jest.requireActual<object>('@diorama/native'),
+    DioramaMapView: MockDioramaMapView,
+    getCameraAccess: () => mockGetCameraAccess(),
+    requestCameraAccess: () => mockRequestCameraAccess(),
+  };
 });
 
 jest.mock('expo-haptics', () => ({
@@ -112,6 +127,7 @@ const DOWNTOWN_BOSTON = {
 const HEADER_CONFIG: string = 'RNSScreenStackHeaderConfig';
 
 const TWO_EYE = { name: 'Two-eye view in landscape' };
+const LEAN = { name: LEAN_TITLE };
 const TWO_EYE_FOOTER =
   'Shows a picture for each eye when your iPhone is sideways, for a headset viewer. Upright, the city always fills the screen.';
 
@@ -140,6 +156,9 @@ beforeEach(() => {
   restoreFeatured();
   resetSettings();
   mockImpact.mockClear();
+  // Asked before and allowed, unless a test says otherwise.
+  mockGetCameraAccess.mockReset().mockResolvedValue('granted');
+  mockRequestCameraAccess.mockReset().mockResolvedValue('granted');
   reduceMotionListener = undefined;
   jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
   // Keep the Reduce Motion listener, so a test can flip the setting live.
@@ -193,6 +212,16 @@ function adjust(title: string, actionName: 'increment' | 'decrement') {
   fireEvent(screen.getByLabelText(title), 'accessibilityAction', { nativeEvent: { actionName } });
 }
 
+/**
+ * Lets queries hand their results to the screen: they do on a timer
+ * (`renderRouter` makes Jest's timers fake).
+ */
+async function settle() {
+  await act(async () => {
+    jest.advanceTimersByTime(10);
+  });
+}
+
 function savedSettings() {
   return JSON.parse(storage.getString('settings') ?? 'null').state;
 }
@@ -212,6 +241,7 @@ describe('settings', () => {
       'Model size',
       'Camera height',
       'Tracking sensitivity',
+      'Lean distance',
       'Lens spacing',
       'Diameter',
     ]) {
@@ -228,6 +258,9 @@ describe('settings', () => {
     expect(screen.queryByText('Window height')).toBeNull();
     expect(screen.getByRole('switch', TWO_EYE)).toBeOnTheScreen();
     expect(screen.getByText(TWO_EYE_FOOTER)).toBeOnTheScreen();
+    expect(screen.getByRole('switch', LEAN)).toBeOnTheScreen();
+    expect(screen.getByText(LEAN_FOOTER)).toBeOnTheScreen();
+    expect(screen.getByText(SLIDER_SETTINGS.leanGain.footer)).toBeOnTheScreen();
     // The Stereo switch is gone: how the phone is held picks the view.
     expect(screen.queryByRole('switch', { name: 'Stereo' })).toBeNull();
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).toBeOnTheScreen();
@@ -245,7 +278,13 @@ describe('settings', () => {
     setDebugLook(true);
     setLensSpacing(72);
     setWindowDiameter(25);
+    setHeadPosition(false);
+    setLeanGain(5);
     await openSettings();
+
+    expect(screen.getByRole('switch', LEAN)).not.toBeChecked();
+    expect(screen.getByTestId('lean-switch').props.value).toBe(false);
+    expect(sliderPosition('leanGain')).toBeCloseTo(1);
 
     expect(sliderPosition('lensSpacing')).toBeCloseTo(1);
     expect(sliderPosition('windowDiameter')).toBeCloseTo(0);
@@ -471,7 +510,9 @@ describe('settings', () => {
     slideTo('cameraHeight', 0.9);
     slideTo('lensSpacing', 0);
     slideTo('windowDiameter', 1);
+    slideTo('leanGain', 0.7);
     fireEvent(screen.getByTestId('two-eye-switch'), 'valueChange', false);
+    fireEvent(screen.getByTestId('lean-switch'), 'valueChange', false);
     fireEvent(screen.getByTestId('debug-look-switch'), 'valueChange', true);
     expect(previewMap().altitude).not.toBe(1200);
 
@@ -483,6 +524,8 @@ describe('settings', () => {
     expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.6);
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
     expect(screen.getByRole('switch', TWO_EYE)).toBeChecked();
+    expect(screen.getByRole('switch', LEAN)).toBeChecked();
+    expect(sliderPosition('leanGain')).toBeCloseTo(0);
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
     expect(previewMap().miniatureIntensity).toBe(0.6);
     expect(getSettings().cameraHeight).toBe(1);
@@ -491,6 +534,121 @@ describe('settings', () => {
     expect(previewMap().altitude).toBe(1200);
     expect(fitValue('lensSpacing')).toBe('64 mm');
     expect(fitValue('windowDiameter')).toBe('35 mm');
+  });
+});
+
+describe('lean to move closer', () => {
+  it('is on to start, true to scale', async () => {
+    await openSettings();
+
+    expect(screen.getByRole('switch', LEAN)).toBeChecked();
+    expect(screen.getByTestId('lean-switch').props.value).toBe(true);
+    expect(getSettings()).toMatchObject({ headPosition: true, leanGain: 1 });
+    // True to scale is all the way left.
+    expect(sliderPosition('leanGain')).toBeCloseTo(0);
+    expect(slider('leanGain').props.disabled).toBe(false);
+    expect(screen.getByLabelText('Lean distance')).toBeOnTheScreen();
+  });
+
+  it('turns off and on, saves it, and dims lean distance while off', async () => {
+    await openSettings();
+    const row = screen.getByRole('switch', LEAN);
+
+    fireEvent(screen.getByTestId('lean-switch'), 'valueChange', false);
+    expect(getSettings().headPosition).toBe(false);
+    expect(savedSettings().headPosition).toBe(false);
+    expect(row).not.toBeChecked();
+    expect(slider('leanGain').props.disabled).toBe(true);
+    // The rest of head tracking still works.
+    expect(slider('trackingSensitivity').props.disabled).toBe(false);
+
+    // VoiceOver: a double-tap anywhere on the row flips it back.
+    fireEvent(row, 'accessibilityTap');
+    expect(getSettings().headPosition).toBe(true);
+    expect(savedSettings().headPosition).toBe(true);
+    expect(slider('leanGain').props.disabled).toBe(false);
+  });
+
+  it('saves lean distance as it moves, from 1× to 5× by ratio', async () => {
+    await openSettings();
+
+    slideTo('leanGain', 1);
+    expect(getSettings().leanGain).toBeCloseTo(5);
+    expect(savedSettings().leanGain).toBeCloseTo(5);
+
+    // Halfway is √5×: as many times more from 1× to there as from there to 5×.
+    slideTo('leanGain', 0.5);
+    expect(getSettings().leanGain).toBeCloseTo(Math.sqrt(5));
+
+    slideTo('leanGain', 0);
+    expect(getSettings().leanGain).toBeCloseTo(1);
+
+    // Never past either end, whatever the slider reports.
+    slideTo('leanGain', 1.4);
+    expect(getSettings().leanGain).toBe(5);
+    slideTo('leanGain', -0.3);
+    expect(getSettings().leanGain).toBe(1);
+  });
+
+  it('says camera access is off under the switch, and a tap opens Settings', async () => {
+    mockGetCameraAccess.mockResolvedValue('denied');
+    const openSettingsApp = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+    await openSettings();
+
+    const cameraOff = await screen.findByRole('button', { name: CAMERA_OFF });
+    expect(cameraOff.props.accessibilityHint).toBe('Opens Settings.');
+    fireEvent.press(cameraOff);
+    expect(openSettingsApp).toHaveBeenCalledTimes(1);
+    // Only ever read, never asked.
+    expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+
+    // Lean off, the camera doesn't matter.
+    fireEvent(screen.getByTestId('lean-switch'), 'valueChange', false);
+    expect(screen.queryByText(CAMERA_OFF)).toBeNull();
+    fireEvent(screen.getByTestId('lean-switch'), 'valueChange', true);
+    expect(await screen.findByText(CAMERA_OFF)).toBeOnTheScreen();
+  });
+
+  it('clears "Camera access is off" once it is turned on in Settings', async () => {
+    mockGetCameraAccess.mockResolvedValue('denied');
+    await openSettings();
+    expect(await screen.findByText(CAMERA_OFF)).toBeOnTheScreen();
+
+    // Off to Settings, and back with the camera turned on.
+    act(() => focusManager.setFocused(false));
+    mockGetCameraAccess.mockResolvedValue('granted');
+    act(() => focusManager.setFocused(true));
+
+    await waitFor(() => expect(screen.queryByText(CAMERA_OFF)).toBeNull());
+    act(() => focusManager.setFocused(undefined));
+  });
+
+  it.each<CameraAccess>(['granted', 'undetermined', 'unsupported'])(
+    'says nothing about the camera when access is %s',
+    async (access) => {
+      mockGetCameraAccess.mockResolvedValue(access);
+      await openSettings();
+      await waitFor(() => expect(queryClient.getQueryData(cameraKeys.access)).toBe(access));
+      await settle();
+
+      expect(screen.queryByText(CAMERA_OFF)).toBeNull();
+      expect(screen.getByRole('switch', LEAN)).toBeChecked();
+    },
+  );
+
+  it('never asks for the camera at launch, or in Settings', async () => {
+    mockGetCameraAccess.mockResolvedValue('undetermined');
+    renderRouter(routes, { initialUrl: '/' });
+    await screen.findByText('Featured');
+    await settle();
+
+    act(() => appRouter.push('/settings'));
+    await screen.findByTestId('settings-screen');
+    await waitFor(() => expect(queryClient.getQueryData(cameraKeys.access)).toBe('undetermined'));
+    await settle();
+
+    expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+    expect(screen.queryByText(CAMERA_OFF)).toBeNull();
   });
 });
 
@@ -642,6 +800,24 @@ describe('settings in the Viewer', () => {
     expect(viewerMap.miniatureIntensity).toBeCloseTo(0.2);
     expect(viewerMap.trackingSensitivity).toBeCloseTo(2);
     expect(viewerMap.mode).toBe('mono');
+  });
+
+  it('leans as set here, when the camera may be used', async () => {
+    await openSettings();
+    slideTo('leanGain', 1);
+    screen.unmount();
+
+    renderRouter(routes, { initialUrl: '/view/paris' });
+    const viewerMap = () => screen.getByTestId('viewer-map').props as DioramaMapViewProps;
+    await screen.findByTestId('viewer-map');
+    await waitFor(() => expect(viewerMap().headPosition).toBe(true));
+    expect(viewerMap().leanGain).toBeCloseTo(5);
+
+    // Live, like every setting.
+    act(() => setLeanGain(2));
+    expect(viewerMap().leanGain).toBe(2);
+    act(() => setHeadPosition(false));
+    expect(viewerMap().headPosition).toBe(false);
   });
 
   it('fits the eye circles to the viewer as set here', async () => {

@@ -6,12 +6,14 @@ import { actionHaptic, exitHaptic } from '@/ui';
 
 import { useExitViewer } from './useExitViewer';
 import { useHeadsetCountdown } from './useHeadsetCountdown';
+import { useLeanHints } from './useLeanHints';
 import { useLookDrag } from './useLookDrag';
 import { useOnChange } from './useOnChange';
 import { usePinchZoom } from './usePinchZoom';
 import { phaseWhenReady, useViewerPhase } from './useViewerPhase';
 import { useViewerHud } from './useViewerHud';
 import { useViewerMode, useViewerOrientation } from './useViewerMode';
+import { useViewerLean } from './useViewerLean';
 import { useViewerTracking } from './useViewerTracking';
 
 /**
@@ -33,9 +35,14 @@ import { useViewerTracking } from './useViewerTracking';
  * recenters when it comes back. Double-tap (`recenter`) re-centers with a
  * tap and a brief HUD; a long press (`exit`) goes back to the preview.
  *
+ * Lean to move closer (`headPosition`, see `useViewerLean`) asks for the
+ * camera on the first visit, while the phone is still in the hand; the
+ * countdown waits for the answer. Its HUD hints come from
+ * `onHeadPositionState` (see `useLeanHints`).
+ *
  * `mapRef` is the screen's ref to the map. The screen hands `mode`,
- * `headTracking` and the callbacks to the map, `hud` to the HUD, and
- * `lookDrag`, `pinchZoom`, `recenter` and `exit` to the gestures.
+ * `headTracking`, `headPosition` and the callbacks to the map, `hud` to the
+ * HUD, and `lookDrag`, `pinchZoom`, `recenter` and `exit` to the gestures.
  */
 export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   const mode = useViewerMode();
@@ -47,7 +54,10 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
   // The same, but set at once: the map can report `onReady` right behind
   // `onDegraded`, before React renders again.
   const degraded = useRef(false);
-  const { hud, showCountdown, showNotice, hide } = useViewerHud();
+  const { hud, showCountdown, showNotice, endNotice, hide } = useViewerHud();
+  // Never in the headset: upright, or before its countdown.
+  const lean = useViewerLean(!inHeadset || phase === 'loading');
+  const onHeadPositionState = useLeanHints({ showNotice, endNotice });
   const pinchZoom = usePinchZoom(mapRef);
   const lookDrag = useLookDrag(mapRef, pinchZoom.isPinching);
   const exitViewer = useExitViewer();
@@ -57,7 +67,8 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
     void mapRef.current?.recenter();
   };
 
-  useHeadsetCountdown(phase === 'counting', {
+  // With the camera prompt up, the count starts once it's answered.
+  useHeadsetCountdown(phase === 'counting' && !lean.isAsking, {
     onTick: showCountdown,
     onDone: () => {
       hide();
@@ -97,6 +108,8 @@ export function useViewerSession(mapRef: RefObject<DioramaMapViewRef | null>) {
     /** In the headset each eye gets its own copy of the HUD. */
     hudPerEye: inHeadset && !isDegraded,
     headTracking,
+    headPosition: lean.headPosition,
+    onHeadPositionState,
     /**
      * Held in the hand and following the phone, a drag looks around. Off
      * with debug look, whose own drag stands in for the phone's motion.

@@ -40,6 +40,8 @@ describe('settings store', () => {
       trackingSensitivity: 1.0,
       miniatureIntensity: 0.6,
       twoEyeLandscape: true,
+      headPosition: true,
+      leanGain: 1,
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -77,6 +79,8 @@ describe('settings store', () => {
     first.store.setTrackingSensitivity(1.5);
     first.store.setMiniatureIntensity(0.2);
     first.store.setTwoEyeLandscape(false);
+    first.store.setHeadPosition(false);
+    first.store.setLeanGain(3.5);
     first.store.setDebugLook(true);
     first.store.setLensSpacing(62);
     first.store.setWindowDiameter(38);
@@ -90,6 +94,8 @@ describe('settings store', () => {
       trackingSensitivity: 1.5,
       miniatureIntensity: 0.2,
       twoEyeLandscape: false,
+      headPosition: false,
+      leanGain: 3.5,
       debugLook: true,
       lensSpacing: 62,
       windowDiameter: 38,
@@ -117,6 +123,8 @@ describe('settings store', () => {
       trackingSensitivity: 0.8,
       miniatureIntensity: 0.3,
       twoEyeLandscape: false,
+      headPosition: true,
+      leanGain: 1,
       debugLook: false,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -156,6 +164,8 @@ describe('settings store', () => {
       trackingSensitivity: 1.2,
       miniatureIntensity: 0.4,
       twoEyeLandscape: true,
+      headPosition: true,
+      leanGain: 1,
       debugLook: false,
       lensSpacing: 62,
       windowDiameter: 35,
@@ -173,6 +183,8 @@ describe('settings store', () => {
         trackingSensitivity: 1.2,
         miniatureIntensity: 0.4,
         twoEyeLandscape: false,
+        headPosition: true,
+        leanGain: 1,
         debugLook: false,
         lensSpacing: 62,
         windowDiameter: 35,
@@ -204,6 +216,8 @@ describe('settings store', () => {
         twoEyeLandscape: 'sideways',
         mode: 'hologram',
         miniatureIntensity: 7,
+        headPosition: 'yes',
+        leanGain: '2x',
         debugLook: true,
         lensSpacing: '64 mm',
         windowDiameter: null,
@@ -219,6 +233,8 @@ describe('settings store', () => {
       trackingSensitivity: 1.0,
       miniatureIntensity: 1,
       twoEyeLandscape: true,
+      headPosition: true,
+      leanGain: 1,
       debugLook: true,
       lensSpacing: 64,
       windowDiameter: 35,
@@ -304,6 +320,7 @@ describe('settings store', () => {
         cameraHeight: 12,
         trackingSensitivity: 100,
         miniatureIntensity: 0.4,
+        leanGain: 40,
         lensSpacing: 90,
         windowDiameter: 10,
       },
@@ -317,6 +334,7 @@ describe('settings store', () => {
       cameraHeight: 3,
       trackingSensitivity: store.SETTING_RANGES.trackingSensitivity.max,
       miniatureIntensity: 0.4,
+      leanGain: 5,
       lensSpacing: 72,
       windowDiameter: 25,
     });
@@ -399,6 +417,8 @@ describe('settings store', () => {
       trackingSensitivity: 1.3,
       miniatureIntensity: 0.5,
       twoEyeLandscape: true,
+      headPosition: true,
+      leanGain: 1,
       debugLook: false,
       lensSpacing: 63,
       windowDiameter: 36,
@@ -415,6 +435,68 @@ describe('settings store', () => {
       eyeSeparation: 0.8,
       cameraHeight: 2.5,
     });
+  });
+
+  it('gives saves from before lean to move closer the lean on, true to scale', () => {
+    // What a T45 build saved: version 1, no lean.
+    const saved = JSON.stringify({
+      state: {
+        eyeSeparation: 1.2,
+        cameraHeight: 0.8,
+        trackingSensitivity: 1,
+        miniatureIntensity: 0.6,
+        twoEyeLandscape: true,
+        debugLook: false,
+        lensSpacing: 64,
+        windowDiameter: 35,
+      },
+      version: 1,
+    });
+
+    const { store, disk } = launch(saved);
+
+    expect(store.getSettings()).toMatchObject({
+      eyeSeparation: 1.2,
+      cameraHeight: 0.8,
+      headPosition: true,
+      leanGain: 1,
+    });
+
+    // The next change saves the lean too, and the launch after that keeps it.
+    store.setLeanGain(2);
+    const rewritten = disk.getString('settings');
+    expect(JSON.parse(rewritten ?? 'null').state).toMatchObject({
+      headPosition: true,
+      leanGain: 2,
+    });
+    expect(launch(rewritten).store.getSettings()).toMatchObject({ cameraHeight: 0.8, leanGain: 2 });
+  });
+
+  it('turns lean to move closer off and on, and saves it', () => {
+    const { store, disk } = launch();
+
+    store.setHeadPosition(false);
+    expect(store.getSettings().headPosition).toBe(false);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state.headPosition).toBe(false);
+
+    store.setHeadPosition(true);
+    expect(store.getSettings().headPosition).toBe(true);
+    expect(JSON.parse(disk.getString('settings') ?? 'null').state.headPosition).toBe(true);
+  });
+
+  it('keeps lean distance between true to scale (1×) and 5×', () => {
+    const { store } = launch();
+
+    store.setLeanGain(2.5);
+    expect(store.getSettings().leanGain).toBe(2.5);
+    store.setLeanGain(0.5);
+    expect(store.getSettings().leanGain).toBe(1);
+    store.setLeanGain(12);
+    expect(store.getSettings().leanGain).toBe(5);
+    store.setLeanGain(Number.NaN);
+    expect(store.getSettings().leanGain).toBe(1);
+    store.setLeanGain(Number.POSITIVE_INFINITY);
+    expect(store.getSettings().leanGain).toBe(1);
   });
 
   it('keeps camera height between 0.4× and 3×', () => {
@@ -460,6 +542,8 @@ describe('settings store', () => {
     store.setTwoEyeLandscape(false);
     store.setLensSpacing(60);
     store.setWindowDiameter(30);
+    store.setHeadPosition(false);
+    store.setLeanGain(4);
 
     store.resetSettings();
 

@@ -21,6 +21,17 @@ export type Settings = {
    * (which always is).
    */
   twoEyeLandscape: boolean;
+  /**
+   * Lean to move closer: leaning in brings you nearer the city, like
+   * leaning over a model on a table. It uses the camera (ARKit), so the
+   * Viewer asks for camera access the first time it opens with this on.
+   */
+  headPosition: boolean;
+  /**
+   * How far a lean moves you: 1 is true to scale (the model stays one
+   * size), higher moves you farther for the same lean.
+   */
+  leanGain: number;
   /** Simulator only: drag to look around instead of using the gyro. */
   debugLook: boolean;
   /** Viewer fit: millimeters between the centers of the headset's two lenses. */
@@ -34,6 +45,7 @@ type NumericSetting =
   | 'cameraHeight'
   | 'trackingSensitivity'
   | 'miniatureIntensity'
+  | 'leanGain'
   | 'lensSpacing'
   | 'windowDiameter';
 
@@ -48,6 +60,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   trackingSensitivity: 1.0,
   miniatureIntensity: 0.6,
   twoEyeLandscape: true,
+  headPosition: true,
+  leanGain: 1,
   debugLook: false,
   lensSpacing: 64,
   windowDiameter: 35,
@@ -59,6 +73,7 @@ export const SETTING_RANGES: Readonly<Record<NumericSetting, { min: number; max:
   cameraHeight: { min: 0.4, max: 3 },
   trackingSensitivity: { min: 0.5, max: 2 },
   miniatureIntensity: { min: 0, max: 1 },
+  leanGain: { min: 1, max: 5 },
   lensSpacing: { min: 55, max: 72 },
   windowDiameter: { min: 25, max: 45 },
 };
@@ -98,6 +113,7 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
   } else if (saved.mode === 'mono' || saved.mode === 'stereo') {
     clean.twoEyeLandscape = saved.mode === 'stereo';
   }
+  if (typeof saved.headPosition === 'boolean') clean.headPosition = saved.headPosition;
   if (typeof saved.debugLook === 'boolean') clean.debugLook = saved.debugLook;
   return clean;
 }
@@ -105,9 +121,9 @@ function sanitizePersisted(persisted: unknown): Partial<Settings> {
 const useSettingsStore = create<Settings>()(
   persist(() => ({ ...DEFAULT_SETTINGS }), {
     name: 'settings',
-    // Still 1: new settings (like the viewer fit and camera height) are
-    // simply missing from older saves, and `merge` fills them in from the
-    // defaults, while settings that are gone (the old window width and
+    // Still 1: new settings (like the viewer fit, camera height and lean)
+    // are simply missing from older saves, and `merge` fills them in from
+    // the defaults, while settings that are gone (the old window width and
     // height) are left out, and the old Stereo switch (`mode`) is carried
     // over into `twoEyeLandscape` (see `sanitizePersisted`).
     // Bump it only when a saved value changes meaning, with a `migrate` to
@@ -154,6 +170,14 @@ export function setMiniatureIntensity(value: number): void {
 
 export function setTwoEyeLandscape(twoEyeLandscape: boolean): void {
   useSettingsStore.setState({ twoEyeLandscape });
+}
+
+export function setHeadPosition(headPosition: boolean): void {
+  useSettingsStore.setState({ headPosition });
+}
+
+export function setLeanGain(value: number): void {
+  useSettingsStore.setState({ leanGain: clampSetting('leanGain', value) });
 }
 
 export function setDebugLook(debugLook: boolean): void {

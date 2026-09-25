@@ -4,6 +4,7 @@ import {
   SETTING_RANGES,
   setCameraHeight,
   setEyeSeparation,
+  setLeanGain,
   setLensSpacing,
   setMiniatureIntensity,
   setTrackingSensitivity,
@@ -20,6 +21,9 @@ import {
 
 /** The settings that have a slider. */
 export type SliderSetting = keyof typeof SETTING_RANGES;
+
+/** The switches a slider can depend on: while its switch is off, it does nothing. */
+export type SliderSwitch = 'twoEyeLandscape' | 'headPosition';
 
 /** The "Viewer fit" sliders: sizes in millimeters, shown with their value. */
 export type FitSetting = 'lensSpacing' | 'windowDiameter';
@@ -40,8 +44,11 @@ type SliderConfig = {
   scale: SliderScale;
   /** Stores a new value (clamped by the store). */
   set: (value: number) => void;
-  /** Only matters in the two-eye view, so it dims while that's off. */
-  stereoOnly?: boolean;
+  /**
+   * Only matters while this switch is on (the two-eye view, or lean to
+   * move closer), so it dims while that's off.
+   */
+  requires?: SliderSwitch;
 };
 
 type GlyphSliderConfig = SliderConfig & {
@@ -57,7 +64,8 @@ type FitSliderConfig = SliderConfig & {
   scale: SteppedScale;
 };
 
-const { eyeSeparation, cameraHeight, trackingSensitivity, miniatureIntensity } = SETTING_RANGES;
+const { eyeSeparation, cameraHeight, trackingSensitivity, miniatureIntensity, leanGain } =
+  SETTING_RANGES;
 const { lensSpacing, windowDiameter } = SETTING_RANGES;
 
 /** Every glyph slider: what it shows and does. */
@@ -72,7 +80,7 @@ export const SLIDER_SETTINGS: Readonly<Record<GlyphSliderSetting, GlyphSliderCon
     set: setEyeSeparation,
     minSymbol: { name: 'building.2.fill', size: 13 },
     maxSymbol: { name: 'building.2.fill', size: 22 },
-    stereoOnly: true,
+    requires: 'twoEyeLandscape',
   },
   cameraHeight: {
     title: 'Camera height',
@@ -93,6 +101,16 @@ export const SLIDER_SETTINGS: Readonly<Record<GlyphSliderSetting, GlyphSliderCon
     minSymbol: { name: 'tortoise.fill', size: 17 },
     maxSymbol: { name: 'hare.fill', size: 17 },
   },
+  leanGain: {
+    title: 'Lean distance',
+    footer: 'How far you move when you lean. All the way left is true to scale.',
+    // By ratio: true to scale (1×) at the left end, each step a like share more.
+    scale: logScale(leanGain.min, leanGain.max),
+    set: setLeanGain,
+    minSymbol: { name: 'ruler', size: 13 },
+    maxSymbol: { name: 'ruler', size: 22 },
+    requires: 'headPosition',
+  },
   miniatureIntensity: {
     title: 'Miniature effect',
     footer: 'Blurs the top and bottom of the view, like a tilt-shift photo.',
@@ -109,13 +127,13 @@ export const FIT_SETTINGS: Readonly<Record<FitSetting, FitSliderConfig>> = {
     title: 'Lens spacing',
     scale: steppedScale(lensSpacing.min, lensSpacing.max, 1),
     set: setLensSpacing,
-    stereoOnly: true,
+    requires: 'twoEyeLandscape',
   },
   windowDiameter: {
     title: 'Diameter',
     scale: steppedScale(windowDiameter.min, windowDiameter.max, 1),
     set: setWindowDiameter,
-    stereoOnly: true,
+    requires: 'twoEyeLandscape',
   },
 };
 

@@ -1,6 +1,7 @@
 import { GlassView } from 'expo-glass-effect';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
+import { router as appRouter } from 'expo-router';
 import {
   act,
   fireEvent,
@@ -23,6 +24,8 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { getAnimatedStyle } from 'react-native-reanimated';
 
 import type {
+  CameraAccess,
+  DioramaHeadPositionState,
   DioramaMapViewProps,
   DioramaRect,
   DioramaStereoEyes,
@@ -32,12 +35,15 @@ import {
   resetSettings,
   setDebugLook,
   setEyeSeparation,
+  setHeadPosition,
+  setLeanGain,
   setMiniatureIntensity,
   setTrackingSensitivity,
   setTwoEyeLandscape,
 } from '@/features/settings/store';
-import { COUNTDOWN_HINT, COUNTDOWN_TITLE, HUD_NOTICES } from '@/features/viewer/hud';
+import { COUNTDOWN_HINT, COUNTDOWN_TITLE, HUD_NOTICES, NOTICE_MIN_MS } from '@/features/viewer/hud';
 import { EXIT_BUTTON_SHOWN_MS } from '@/features/viewer/useExitButton';
+import { LIMITED_HINT_DELAY_MS } from '@/features/viewer/useLeanHints';
 import { LOOK_DEGREES_PER_POINT } from '@/features/viewer/useLookDrag';
 import { ZOOM_STEP } from '@/features/viewer/usePinchZoom';
 import { queryClient } from '@/providers/queryClient';
@@ -48,6 +54,7 @@ import * as IndexRoute from '../../../../app/index';
 import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
+import { CAMERA_OFF } from '../../Settings/LeanSection';
 import { CIRCLE_MARGIN } from '../useCircleFit';
 import { EXIT_HOLD_DRIFT, EXIT_HOLD_MS, VIEWER_ACCESSIBILITY_HINT } from '../ViewerGestures';
 
@@ -73,12 +80,15 @@ const mockResetZoom = jest.fn(() => {
 });
 // Where the native view says each eye's window is; `null` until it has.
 let mockStereoEyes: DioramaStereoEyes | null = null;
+// Camera access for lean to move closer: read without asking, and the prompt.
+const mockGetCameraAccess = jest.fn<Promise<CameraAccess>, []>();
+const mockRequestCameraAccess = jest.fn<Promise<CameraAccess>, []>();
 // Taken before each test swaps in fake timers.
 const realSetImmediate = setImmediate;
 
 // The native map becomes a plain view that keeps its props (so tests can read
 // them and play MapKit's part by calling `onReady`) and a ref with `recenter`,
-// `setDebugLook` and the zoom methods.
+// `setDebugLook` and the zoom methods. Camera access answers as a test says.
 jest.mock('@diorama/native', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   const { View } = jest.requireActual<typeof import('react-native')>('react-native');
@@ -99,6 +109,8 @@ jest.mock('@diorama/native', () => {
     ...jest.requireActual<object>('@diorama/native'),
     DioramaMapView: MockDioramaMapView,
     useStereoEyes: () => mockStereoEyes,
+    getCameraAccess: () => mockGetCameraAccess(),
+    requestCameraAccess: () => mockRequestCameraAccess(),
   };
 });
 
@@ -176,6 +188,9 @@ beforeEach(() => {
   mockImpact.mockClear();
   mockLiquidGlass.mockReturnValue(true);
   mockStereoEyes = null;
+  // Asked before and allowed, unless a test says otherwise.
+  mockGetCameraAccess.mockReset().mockResolvedValue('granted');
+  mockRequestCameraAccess.mockReset().mockResolvedValue('granted');
   appStateListeners = [];
   const addEventListener = (event: string, listener: (state: AppStateStatus) => void) => {
     if (event === 'change') appStateListeners.push(listener);
@@ -222,6 +237,27 @@ function wait(ms: number) {
 function enterDiorama() {
   finishLoading();
   wait(3000);
+}
+
+/**
+ * Lets native answers (camera access) reach the screen: promises settle,
+ * then queries hand their results over on a timer.
+ */
+async function settle() {
+  for (let pass = 0; pass < 3; pass += 1) {
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+  }
+}
+
+/** A promise a test settles when it likes, like an answer to the camera prompt. */
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((settleWith) => {
+    resolve = settleWith;
+  });
+  return { promise, resolve };
 }
 
 function setAppState(state: AppStateStatus) {
@@ -1348,3 +1384,260 @@ describe('viewer pinch to zoom', () => {
 function glyphOpacity(): number {
   return getAnimatedStyle(screen.getByTestId('viewer-exit-glyph', HIDDEN)).opacity as number;
 }
+
+describe('viewer lean to move closer', () => {
+  const LOOK_AROUND = HUD_NOTICES.leanStarting.text;
+  const HOLD_STILL = HUD_NOTICES.leanLimited.text;
+
+  /** What the map says about lean's camera tracking. */
+  function reportLean(state: DioramaHeadPositionState) {
+    act(() => viewerMap().onHeadPositionState?.({ state }));
+  }
+
+  /** Whether the HUD (one copy: held in the hand) is up. */
+  function hudIsUp(): boolean {
+    return hudGlass().style !== 'none';
+  }
+
+  /** Held in the hand, in the diorama, following the phone. */
+  async function enterUpright() {
+    holdPhone('upright');
+    await openViewer();
+    await settle();
+    enterDiorama();
+  }
+
+  it('leans as set in Settings, once the camera may be used', async () => {
+    await openViewer();
+    await settle();
+
+    expect(viewerMap()).toMatchObject({ headPosition: true, leanGain: 1 });
+    // Live, like every setting.
+    act(() => setLeanGain(3));
+    expect(viewerMap().leanGain).toBe(3);
+    act(() => setHeadPosition(false));
+    expect(viewerMap().headPosition).toBe(false);
+    // Asked on an earlier visit: no prompt.
+    expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+  });
+
+  it('asks for the camera on the first visit, and counts down once it is answered', async () => {
+    mockGetCameraAccess.mockResolvedValue('undetermined');
+    const answer = deferred<CameraAccess>();
+    mockRequestCameraAccess.mockReturnValue(answer.promise);
+    await openViewer();
+    await settle();
+
+    // Straight away, while the city loads and the phone is still in the hand.
+    expect(mockRequestCameraAccess).toHaveBeenCalledTimes(1);
+    expect(viewerMap().headPosition).toBe(false);
+
+    // The city draws behind the prompt, and the countdown waits for the answer.
+    finishLoading();
+    wait(5000);
+    expect(screen.queryAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(0);
+    expect(viewerMap().headTracking).toBe(false);
+
+    answer.resolve('granted');
+    await settle();
+    expect(viewerMap().headPosition).toBe(true);
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+    expect(screen.getAllByText('3', HIDDEN)).not.toHaveLength(0);
+    wait(3000);
+    expect(viewerMap()).toMatchObject({ headTracking: true, headPosition: true });
+    expect(mockRequestCameraAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks held upright too, and follows the phone meanwhile', async () => {
+    mockGetCameraAccess.mockResolvedValue('undetermined');
+    const answer = deferred<CameraAccess>();
+    mockRequestCameraAccess.mockReturnValue(answer.promise);
+    holdPhone('upright');
+    await openViewer();
+    await settle();
+    finishLoading();
+
+    expect(mockRequestCameraAccess).toHaveBeenCalledTimes(1);
+    expect(viewerMap()).toMatchObject({ mode: 'mono', headTracking: true, headPosition: false });
+
+    answer.resolve('granted');
+    await settle();
+    expect(viewerMap()).toMatchObject({ headTracking: true, headPosition: true });
+  });
+
+  it('turns lean off quietly when the camera is declined, and Settings says so', async () => {
+    mockGetCameraAccess.mockResolvedValue('undetermined');
+    mockRequestCameraAccess.mockImplementation(() => {
+      // iOS remembers the answer from now on.
+      mockGetCameraAccess.mockResolvedValue('denied');
+      return Promise.resolve('denied');
+    });
+    await openViewer();
+    await settle();
+    enterDiorama();
+
+    // Turning your head still works; nothing is said about it.
+    expect(viewerMap()).toMatchObject({ headTracking: true, headPosition: false });
+    expect(screen.queryAllByText(LOOK_AROUND, HIDDEN)).toHaveLength(0);
+    expect(mockRequestCameraAccess).toHaveBeenCalledTimes(1);
+
+    await holdToExit();
+    await landOnPreview();
+    act(() => appRouter.push('/settings'));
+    expect(await screen.findByRole('button', { name: CAMERA_OFF })).toBeOnTheScreen();
+    expect(mockRequestCameraAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<CameraAccess>(['granted', 'denied', 'unsupported'])(
+    'never asks when access is already %s',
+    async (access) => {
+      mockGetCameraAccess.mockResolvedValue(access);
+      await openViewer();
+      await settle();
+      enterDiorama();
+
+      expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+      expect(viewerMap().headPosition).toBe(access === 'granted');
+      expect(viewerMap().headTracking).toBe(true);
+    },
+  );
+
+  it('never asks, or even looks, with lean off', async () => {
+    act(() => setHeadPosition(false));
+    mockGetCameraAccess.mockResolvedValue('undetermined');
+    await openViewer();
+    await settle();
+    enterDiorama();
+
+    expect(mockGetCameraAccess).not.toHaveBeenCalled();
+    expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+    expect(viewerMap()).toMatchObject({ headTracking: true, headPosition: false });
+  });
+
+  it('never asks in the headset once the countdown has begun, only back in the hand', async () => {
+    const access = deferred<CameraAccess>();
+    mockGetCameraAccess.mockReturnValue(access.promise);
+    await openViewer();
+    finishLoading();
+    expect(screen.getAllByText(COUNTDOWN_TITLE, HIDDEN)).toHaveLength(2);
+
+    // Access comes back unanswered only now: too late, it's on the head.
+    access.resolve('undetermined');
+    await settle();
+    expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+    wait(3000);
+    expect(viewerMap()).toMatchObject({ headTracking: true, headPosition: false });
+    expect(mockRequestCameraAccess).not.toHaveBeenCalled();
+
+    // Taken off and held upright, it may ask.
+    holdPhone('upright');
+    await settle();
+    expect(mockRequestCameraAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('says "Look around the room to start" while the camera gets its bearings', async () => {
+    await enterUpright();
+    expect(hudIsUp()).toBe(false);
+
+    reportLean('starting');
+    expect(screen.getAllByText(LOOK_AROUND, HIDDEN)).toHaveLength(1);
+    expect(hudIsUp()).toBe(true);
+    wait(3000);
+    expect(hudIsUp()).toBe(true);
+
+    // Found: it fades.
+    reportLean('tracking');
+    wait(0);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('keeps a hint up long enough to read, even when tracking starts at once', async () => {
+    await enterUpright();
+
+    reportLean('starting');
+    wait(200);
+    reportLean('tracking');
+    wait(NOTICE_MIN_MS - 300);
+    expect(hudIsUp()).toBe(true);
+    wait(100);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('lets the hint go on its own if the camera never gets its bearings', async () => {
+    await enterUpright();
+
+    reportLean('starting');
+    wait(HUD_NOTICES.leanStarting.holdMs - 100);
+    expect(hudIsUp()).toBe(true);
+    wait(100);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('says "Hold still, finding your place" once lost for a few seconds, then fades', async () => {
+    await enterUpright();
+    reportLean('starting');
+    reportLean('tracking');
+    wait(NOTICE_MIN_MS);
+    expect(hudIsUp()).toBe(false);
+
+    reportLean('limited');
+    wait(LIMITED_HINT_DELAY_MS - 100);
+    expect(hudIsUp()).toBe(false);
+    expect(screen.queryAllByText(HOLD_STILL, HIDDEN)).toHaveLength(0);
+    wait(100);
+    expect(screen.getAllByText(HOLD_STILL, HIDDEN)).toHaveLength(1);
+    expect(hudIsUp()).toBe(true);
+
+    // Found its place again.
+    reportLean('tracking');
+    wait(NOTICE_MIN_MS);
+    expect(hudIsUp()).toBe(false);
+
+    // Still lost after its hold time, it doesn't stay up either.
+    reportLean('limited');
+    wait(LIMITED_HINT_DELAY_MS);
+    expect(hudIsUp()).toBe(true);
+    wait(HUD_NOTICES.leanLimited.holdMs);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('says nothing about a short loss', async () => {
+    await enterUpright();
+    reportLean('tracking');
+
+    reportLean('limited');
+    wait(LIMITED_HINT_DELAY_MS - 500);
+    reportLean('tracking');
+    wait(5000);
+
+    expect(screen.queryAllByText(HOLD_STILL, HIDDEN)).toHaveLength(0);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('leaves a recenter HUD alone when tracking starts under it', async () => {
+    await enterUpright();
+    reportLean('starting');
+    wait(2000);
+
+    await doubleTap();
+    reportLean('tracking');
+    wait(0);
+    // "Recentered" keeps its own time.
+    expect(screen.getAllByText(RECENTERED, HIDDEN)).toHaveLength(1);
+    expect(hudIsUp()).toBe(true);
+    wait(HUD_NOTICES.recentered.holdMs);
+    expect(hudIsUp()).toBe(false);
+  });
+
+  it('shows the hints once per eye in the headset, after the countdown', async () => {
+    await openViewer();
+    await settle();
+    enterDiorama();
+
+    reportLean('starting');
+
+    expect(screen.getAllByText(LOOK_AROUND, HIDDEN)).toHaveLength(2);
+    expect(screen.getByTestId('hud-eye-left', HIDDEN)).toHaveTextContent(LOOK_AROUND);
+    expect(screen.getByTestId('hud-eye-right', HIDDEN)).toHaveTextContent(LOOK_AROUND);
+  });
+});

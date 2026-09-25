@@ -47,8 +47,10 @@ export function ViewerScreen() {
           city={city}
           mode={viewer.mode}
           headTracking={viewer.headTracking}
+          headPosition={viewer.headPosition}
           onReady={viewer.onReady}
           onDegraded={viewer.onDegraded}
+          onHeadPositionState={viewer.onHeadPositionState}
         />
         <ViewerHud hud={viewer.hud} perEye={viewer.hudPerEye} />
       </ViewerGestures>

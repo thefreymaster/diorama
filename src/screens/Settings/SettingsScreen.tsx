@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { Screen } from '@/ui';
 
 import { DeveloperSection } from './DeveloperSection';
+import { LeanSection } from './LeanSection';
 import { MiniatureSection } from './MiniatureSection';
 import { ResetSection } from './ResetSection';
 import { SliderSection } from './SliderSection';
@@ -26,6 +27,8 @@ export function SettingsScreen() {
         <SliderSection setting="eyeSeparation" />
         <SliderSection setting="cameraHeight" />
         <SliderSection setting="trackingSensitivity" />
+        <LeanSection />
+        <SliderSection setting="leanGain" />
         <ViewerFitSection />
         <SuggestedPlacesSection />
         <DeveloperSection />

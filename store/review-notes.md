@@ -11,16 +11,16 @@ Mini Cities shows real places from Apple Maps as tiny 3D models. No headset or a
 
 Try it without a headset:
 1. On the first screen, tap New York under Featured.
-2. The preview shows the city slowly turning. Tap Enter Mini Cities.
+2. The preview shows the city slowly turning. The map button (top right) switches the map style (Satellite, Satellite with labels, Standard) and live traffic. Tap Enter Mini City.
 3. Hold the iPhone upright. The city fills the screen like a window: move the phone or drag with one finger to look around, and pinch to move closer. Tap once to show the close button (top left). Double-tap recenters the view. Touch and hold anywhere for a second to leave.
 4. Turn the iPhone sideways. After a 3-second "Put on your viewer" countdown, Mini Cities shows one round picture per eye, side by side. This is for an optional phone VR viewer with two lenses, which the phone slides into. Without one you can still see both pictures and look around by moving the phone. Turn it upright again to return to the full-screen view.
 5. Tap the gear on the first screen for Settings: Miniature effect (the map at the top previews it), Model size (for the two-eye view), Camera height, Tracking sensitivity, Lean to move closer, and Viewer fit (to match a viewer's lenses). Turning off "Two-eye view in landscape" keeps one full-screen picture when the phone is sideways too.
 
-Other ways to pick a place: search for any city or address, the National parks section, "Choose on map" (move the map under the pin), and "Current location".
+Other ways to pick a place: search for any city or address, the National parks section (a park's preview has a Viewpoints list), "Choose on map" (move the map under the pin), and "Current location".
 
 Permissions (each asked only when needed, and the app keeps working if you decline):
 - Location, "While Using the App": only when you tap Current location. It centers the model on where you are and follows you while that view is open. Never in the background. If you decline, the row says so and a tap on it opens Settings; everything else works.
-- Camera: the first time you tap Enter Mini Cities with "Lean to move closer" on (it's on by default), iOS asks for the camera as the view opens (upright, before any headset countdown). ARKit uses the rear camera on the iPhone to track leaning in toward the city. Nothing is recorded, stored or sent. Declining turns leaning off; looking around still works, and Settings then shows "Camera access is off".
+- Camera: the first time you tap Enter Mini City with "Lean to move closer" on (it's on by default), iOS asks for the camera as the view opens (upright, before any headset countdown). ARKit uses the rear camera on the iPhone to track leaning in toward the city. Nothing is recorded, stored or sent. Declining turns leaning off; looking around still works, and Settings then shows "Camera access is off".
 - Motion: the view turns with the iPhone using the gyroscope and accelerometer, on the iPhone only.
 
 Maps: all map imagery, 3D buildings, search and place names come from Apple Maps through MapKit. The Apple Maps logo and Legal link are shown at the bottom of every map. Mini Cities has no server of its own and collects no data.

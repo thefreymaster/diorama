@@ -53,12 +53,15 @@ Turn your iPhone sideways and slide it into a phone VR viewer with two lenses. M
 Go anywhere
 • Search for any city, address or landmark.
 • Start with featured cities that have 3D buildings, like New York, Paris, Tokyo and San Francisco.
-• Visit national parks: the Grand Canyon, Yellowstone, Yosemite and more.
-• Open the place where you're standing. While Mini Cities is open, the model follows you as you walk.
+• Visit national parks: the Grand Canyon, Yellowstone, Yosemite, Mount Everest and more, and jump to their scenic viewpoints.
+• Open the place where you're standing. While Mini Cities is open, the model follows you as you walk and lines up with the real world.
 • Or choose any spot by moving a map under a pin.
 
+Change the map
+Switch between Satellite, Satellite with labels and the Standard map, and turn on live traffic to see busy streets.
+
 Make it yours
-Set the model size, the camera height, how far the view turns with your head, and how strong the miniature blur is. Match the two pictures to your viewer's lenses, or turn off the two-eye view to keep one full-screen picture sideways too.
+Set the model size, the camera height, how far the view turns with your head, how strong the miniature blur is, and whether leaning moves you up and down. Match the two pictures to your viewer's lenses, or turn off the two-eye view to keep one full-screen picture sideways too.
 
 Private by design
 No account, no ads, no tracking. Maps and search come from Apple Maps. Your recent places and settings stay on your iPhone. Lean to move closer uses the camera on your iPhone to follow your head; nothing is recorded or sent.
@@ -92,12 +95,12 @@ App Store Connect adds the © itself.
 
 ### Screenshots
 
-iPhone 6.9-inch display only: App Store Connect scales these down for every smaller iPhone, and asks for 6.5-inch only when there are no 6.9-inch ones. Taken on the iPhone 18 Pro Max Simulator (iOS 27), light mode, 9:41 status bar, PNG without alpha. Upload them in this order:
+iPhone 6.9-inch set, plus the same shots at 6.5-inch size (1284 × 2778, in `screenshots/iphone-6.5/`) for App Store Connect pages that show the 6.5" slot first. Use one set: App Store Connect scales it for every other iPhone. Taken on the iPhone 18 Pro Max Simulator (iOS 27), light mode, 9:41 status bar, PNG without alpha. Upload them in this order:
 
 | File | Size | Shows |
 |---|---|---|
 | `screenshots/iphone-6.9/01-picker.png` | 1320 × 2868 | The picker: Current location, Choose on map, featured cities, search |
-| `screenshots/iphone-6.9/02-preview.png` | 1320 × 2868 | New York preview, orbiting, with Enter Mini City |
+| `screenshots/iphone-6.9/02-preview.png` | 1320 × 2868 | New York preview, orbiting, with the map button and Enter Mini City |
 | `screenshots/iphone-6.9/03-viewer-upright.png` | 1320 × 2868 | The upright full-screen view, no headset |
 | `screenshots/iphone-6.9/04-viewer-stereo.png` | 2868 × 1320 | Sideways: one picture per eye for a phone VR viewer |
 | `screenshots/iphone-6.9/05-search.png` | 1320 × 2868 | Searching "grand canyon" |

@@ -102,6 +102,14 @@ describe('DioramaMapView', () => {
     expect(view.toJSON()).toMatchObject({ props: { mapStyle: 'hybrid', ...CAMERA } });
   });
 
+  it('keeps Apple’s logo at the bottom unless told a card covers it', () => {
+    const view = render(<DioramaMapView {...CAMERA} />);
+    expect(view.toJSON()).toMatchObject({ props: { attributionInset: 0 } });
+
+    view.rerender(<DioramaMapView {...CAMERA} attributionInset={236} />);
+    expect(view.toJSON()).toMatchObject({ props: { attributionInset: 236, ...CAMERA } });
+  });
+
   it('lists the map styles in menu order', () => {
     expect(MAP_STYLES).toEqual(['satellite', 'hybrid', 'standard']);
   });

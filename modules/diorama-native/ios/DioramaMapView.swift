@@ -108,6 +108,13 @@ final class DioramaMapView: ExpoView {
   // Apple Maps' live traffic on the roads (T63), in the hybrid and standard
   // styles (see MapLook). Applied in `propsDidUpdate()`, with `mapStyle`.
   var showsTraffic = false
+  // Points at the bottom of this view covered by something React draws on
+  // top (T67: the preview's glass card). In mono, MapKit's logo and Legal
+  // link, which Apple requires to stay visible, sit just above it (see
+  // `attributionSafeArea`). Stereo eyes keep theirs inside their windows.
+  var attributionInset: CGFloat = 0 {
+    didSet { if attributionInset != oldValue { setNeedsLayout() } }
+  }
 
   // Orbit speed: one full turn every two minutes.
   private static let orbitDegreesPerSecond = 3.0
@@ -429,7 +436,7 @@ final class DioramaMapView: ExpoView {
     let maxRoll = headTracker.isRunning || isZoomed ? Self.maxMonoRollDegrees : 0
     let profile = viewerProfile
     let changed = rig.layout(
-      in: bounds, safeArea: safeAreaInsets, maxRoll: maxRoll, profile: profile)
+      in: bounds, safeArea: attributionSafeArea, maxRoll: maxRoll, profile: profile)
     // The eye's window through the headset lens (a circle's diameter tall)
     // decides how far the camera turns per head degree. Mono is seen
     // through the same lenses.
@@ -443,6 +450,23 @@ final class DioramaMapView: ExpoView {
     // distance and warps depend on the map sizes.
     rig.view.layoutIfNeeded()
     if appliedPose != nil { applyCamera(animated: false) }
+  }
+
+  // What MapKit's logo and Legal link keep clear of (StereoRig turns it
+  // into each eye's map margins): the safe area (notch, rounded corners,
+  // home indicator), and in mono a card covering the bottom too
+  // (`attributionInset`, T67), like a taller home indicator. The map's top
+  // margin grows as much as its bottom one (see EyeView.layoutMap), so the
+  // camera, and the orbit around it, stay in the middle of the view. Only
+  // so high, though: MapKit hides its logo once the room between the
+  // margins gets too small, so a card taller than about half the view (the
+  // largest text sizes) gets them as high as MapKit still shows them.
+  private var attributionSafeArea: UIEdgeInsets {
+    var safeArea = safeAreaInsets
+    guard !rig.isStereo, attributionInset > 0 else { return safeArea }
+    let highest = max(bounds.height / 2 - EyeView.minAttributionBox.height, 0)
+    safeArea.bottom = max(safeArea.bottom, min(attributionInset, highest))
+    return safeArea
   }
 
   // The headset, measured on this phone's screen.

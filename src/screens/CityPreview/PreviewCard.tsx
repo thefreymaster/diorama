@@ -17,6 +17,11 @@ type PreviewCardProps = {
   city: City;
   /** The map has drawn and found no 3D buildings here. */
   showTerrainNote: boolean;
+  /**
+   * Points the card covers at the bottom of the screen, gap included, each
+   * time its height changes (a note opening, a larger text size).
+   */
+  onCoverHeight: (height: number) => void;
 };
 
 /**
@@ -25,49 +30,56 @@ type PreviewCardProps = {
  * you. Around a national park or a natural place, a "Viewpoints" button
  * lists the scenic views nearby. Under the main button, how to get to the headset view (it's the sideways
  * one); with the two-eye view off in Settings there's no headset view, so
- * no word about one.
+ * no word about one. It tells the screen how much of the map it covers, so
+ * the map keeps Apple's logo and Legal link just above it.
  */
-export function PreviewCard({ city, showTerrainNote }: PreviewCardProps) {
-  const frame = useCardFrame();
+export function PreviewCard({ city, showTerrainNote, onCoverHeight }: PreviewCardProps) {
+  const { left, right, bottom, borderRadius, paddingBottom } = useCardFrame();
   const enterDiorama = useEnterDiorama(city.id);
   const twoEyeLandscape = useSetting('twoEyeLandscape');
   const following = useFollowsMe();
 
   return (
-    <GlassSurface style={[styles.card, frame]}>
-      <View>
-        <Text variant="title1" emphasized accessibilityRole="header">
-          {city.name}
-        </Text>
-        {city.country ? (
-          <Text variant="body" color="secondaryLabel">
-            {city.country}
+    <View
+      testID="preview-card"
+      style={[styles.position, { left, right, bottom }]}
+      onLayout={(event) => onCoverHeight(event.nativeEvent.layout.height + bottom)}
+    >
+      <GlassSurface style={[styles.card, { borderRadius, paddingBottom }]}>
+        <View>
+          <Text variant="title1" emphasized accessibilityRole="header">
+            {city.name}
           </Text>
-        ) : null}
-        {following ? <FollowingNote /> : null}
-        {showTerrainNote ? <TerrainNote /> : null}
-        <ViewpointsRow city={city} />
-      </View>
-      <View style={styles.action}>
-        <PrimaryButton
-          title="Enter Mini City"
-          symbol={ENTER_DIORAMA_SYMBOL}
-          onPress={enterDiorama}
-          accessibilityHint="Opens the city full screen."
-        />
-        {twoEyeLandscape ? (
-          <Text variant="footnote" color="secondaryLabel" style={styles.guidance}>
-            Turn your iPhone sideways and place it in your viewer.
-          </Text>
-        ) : null}
-      </View>
-    </GlassSurface>
+          {city.country ? (
+            <Text variant="body" color="secondaryLabel">
+              {city.country}
+            </Text>
+          ) : null}
+          {following ? <FollowingNote /> : null}
+          {showTerrainNote ? <TerrainNote /> : null}
+          <ViewpointsRow city={city} />
+        </View>
+        <View style={styles.action}>
+          <PrimaryButton
+            title="Enter Mini City"
+            symbol={ENTER_DIORAMA_SYMBOL}
+            onPress={enterDiorama}
+            accessibilityHint="Opens the city full screen."
+          />
+          {twoEyeLandscape ? (
+            <Text variant="footnote" color="secondaryLabel" style={styles.guidance}>
+              Turn your iPhone sideways and place it in your viewer.
+            </Text>
+          ) : null}
+        </View>
+      </GlassSurface>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  position: { position: 'absolute' },
   card: {
-    position: 'absolute',
     gap: spacing.xl,
     paddingTop: spacing.xxl,
     paddingHorizontal: spacing.xxl,

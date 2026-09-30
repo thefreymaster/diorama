@@ -15,6 +15,7 @@ import * as RootLayout from '../../../../app/_layout';
 import * as SettingsRoute from '../../../../app/settings';
 import * as ViewerRoute from '../../../../app/view/[cityId]';
 import { TERRAIN_NOTE } from '../TerrainNote';
+import { CARD_INSET } from '../useCardFrame';
 
 // The native map becomes a plain view that keeps its props, so tests can
 // read them and play MapKit's part by calling `onReady`.
@@ -125,6 +126,24 @@ describe('city preview', () => {
     });
     expect(mapProps().mode ?? 'mono').toBe('mono');
     expect(mapProps().headTracking).toBeFalsy();
+  });
+
+  // MapKit's terms need the Apple Maps logo and Legal link in view: the map
+  // lifts them over exactly the part of the screen the card covers.
+  it('keeps Apple’s logo and Legal link just above the card, as it grows', async () => {
+    renderRouter(routes, { initialUrl: '/city/paris' });
+    await screen.findByTestId('city-preview-screen');
+    const layout = (height: number) => ({
+      nativeEvent: { layout: { x: CARD_INSET, y: 874 - CARD_INSET - height, width: 386, height } },
+    });
+
+    fireEvent(screen.getByTestId('preview-card'), 'layout', layout(228));
+    expect(mapProps().attributionInset).toBe(228 + CARD_INSET);
+
+    // A note opening, or a larger text size.
+    fireEvent(screen.getByTestId('preview-card'), 'layout', layout(262));
+    expect(mapProps().attributionInset).toBe(262 + CARD_INSET);
+    expect(mapProps().mode ?? 'mono').toBe('mono');
   });
 
   it('says the headset view is the sideways one, unless the two-eye view is off', async () => {

@@ -106,8 +106,9 @@ final class EyeView: UIView {
   // Half the smallest box (map points) left between the map's margins when
   // MapKit's logo and Legal link are lifted (see `attributionLift`). MapKit
   // hides its logo when that box is under 100 points tall or about 110 to
-  // 135 wide (measured, iOS 26).
-  private static let minAttributionBox = CGSize(width: 70, height: 52)
+  // 135 wide (measured, iOS 26). Also how high DioramaMapView lifts them
+  // over a card at most (`attributionInset`).
+  static let minAttributionBox = CGSize(width: 70, height: 52)
   // The middle of MapKit's logo and Legal link, in map points from the
   // bottom-left corner of the map's layout margins: this far in (x) and up
   // (y). iOS 26 sets them side by side there (measured). This is the point

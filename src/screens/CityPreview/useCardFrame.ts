@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { metrics, spacing } from '@/theme';
 
 /** Gap between the card and the screen's left, right and bottom edges. */
-const CARD_INSET = spacing.sm;
+export const CARD_INSET = spacing.sm;
 /**
  * Corner radius that sits roughly concentric with the rounded display
  * corners of Face ID iPhones (display radius minus the inset), the way

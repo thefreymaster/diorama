@@ -392,6 +392,17 @@ export type DioramaMapViewProps = ViewProps &
      */
     showsTraffic?: boolean;
     /**
+     * Mono only: points at the bottom of the view covered by something drawn
+     * over the map (a card). MapKit's Apple Maps logo and Legal link, which
+     * Apple requires to stay visible, sit just above it instead of behind
+     * it. The top gets the same margin, so the camera (and the orbit) stay
+     * in the middle of the view. A cover taller than about half the view
+     * (the largest text sizes) lifts them only as high as MapKit still
+     * shows its logo. The safe area (home indicator) is kept clear either
+     * way, and stereo eyes keep theirs inside their windows. Default 0.
+     */
+    attributionInset?: number;
+    /**
      * Fires once every eye has fully rendered: after the first render at each
      * `center`, and again after switching to stereo. Until then the view
      * stays black, in every mode, and it shows the city at this very moment

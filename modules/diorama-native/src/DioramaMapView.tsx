@@ -65,6 +65,7 @@ export function DioramaMapView({
   showsUserLocation = false,
   mapStyle = DEFAULT_MAP_STYLE,
   showsTraffic = false,
+  attributionInset = 0,
   ...props
 }: DioramaMapViewProps) {
   const nativeRef = useRef<DioramaMapViewRef>(null);
@@ -148,6 +149,7 @@ export function DioramaMapView({
       showsUserLocation={showsUserLocation}
       mapStyle={mapStyleShown(mapStyle, showsTraffic)}
       showsTraffic={showsTraffic}
+      attributionInset={attributionInset}
       onReady={handleReady}
       onDegraded={handleDegraded}
       onEyeLayout={handleEyeLayout}

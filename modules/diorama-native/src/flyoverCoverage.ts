@@ -61,6 +61,10 @@ export const FLYOVER_AREAS: readonly FlyoverArea[] = [
   { name: 'Pittsburgh', latitude: 40.4406, longitude: -79.9959, radiusKm: 20 },
   { name: 'Baltimore', latitude: 39.2904, longitude: -76.6122, radiusKm: 20 },
   { name: 'Orlando', latitude: 28.5383, longitude: -81.3792, radiusKm: 20 },
+  // 25 km southwest of downtown, past Orlando's circle: checked the Magic
+  // Kingdom, Epcot, Hollywood Studios, Animal Kingdom, Disney Springs, and
+  // 7–8 km out to the north, east, southwest and west (T67).
+  { name: 'Walt Disney World', latitude: 28.3852, longitude: -81.5639, radiusKm: 8 },
   { name: 'Toronto', latitude: 43.6532, longitude: -79.3832, radiusKm: 20 },
   { name: 'Vancouver', latitude: 49.2827, longitude: -123.1207, radiusKm: 20 },
   { name: 'Montreal', latitude: 45.5017, longitude: -73.5673, radiusKm: 20 },

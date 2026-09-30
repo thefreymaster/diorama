@@ -15,6 +15,8 @@ type PreviewMapProps = {
   city: City;
   isReady: boolean;
   onReady: (event: DioramaReadyEvent) => void;
+  /** Points the card covers at the bottom, so Apple's logo and Legal sit above it. */
+  attributionInset: number;
 };
 
 /**
@@ -23,9 +25,10 @@ type PreviewMapProps = {
  * style chosen from the header's map menu, with live traffic if it's on
  * there (both change in place: the orbit carries on). The orbit itself runs natively and only starts once the map
  * has drawn. In live mode the city glides along with you, around Apple's
- * blue dot.
+ * blue dot. Apple's logo and Legal link sit just above the card, with the
+ * orbit still in the middle of the screen.
  */
-export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
+export function PreviewMap({ city, isReady, onReady, attributionInset }: PreviewMapProps) {
   const mapRef = useRef<DioramaMapViewRef>(null);
   const altitude = useCameraAltitude(city.altitude);
   const orbit = usePreviewOrbit();
@@ -47,6 +50,7 @@ export function PreviewMap({ city, isReady, onReady }: PreviewMapProps) {
         mapStyle={mapStyle}
         showsTraffic={showsTraffic}
         showsUserLocation={following}
+        attributionInset={attributionInset}
         onReady={onReady}
         accessible
         accessibilityRole="image"

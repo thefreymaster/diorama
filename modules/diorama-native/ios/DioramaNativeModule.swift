@@ -132,6 +132,11 @@ public class DioramaNativeModule: Module {
       Prop("showsTraffic", false) { (view: DioramaMapView, shows: Bool) in
         view.showsTraffic = shows
       }
+      // T67: points at the bottom covered by a card (the preview's), so
+      // MapKit's logo and Legal link sit just above it. Mono only.
+      Prop("attributionInset", 0.0) { (view: DioramaMapView, inset: Double) in
+        view.attributionInset = inset.isFinite ? CGFloat(max(inset, 0)) : 0
+      }
 
       // Runs once after a batch of prop changes, so the camera moves once.
       OnViewDidUpdateProps { (view: DioramaMapView) in

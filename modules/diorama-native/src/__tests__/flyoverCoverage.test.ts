@@ -11,6 +11,15 @@ const SALINA_KS = { latitude: 38.8403, longitude: -97.6114 };
 const DUBAI = { latitude: 25.1972, longitude: 55.2744 };
 const MEXICO_CITY_ZOCALO = { latitude: 19.4326, longitude: -99.1332 };
 const REYKJAVIK = { latitude: 64.1466, longitude: -21.9426 };
+// Walt Disney World's parks (T66's store shots are of the Magic Kingdom).
+const MAGIC_KINGDOM = { latitude: 28.419, longitude: -81.5812 };
+const DISNEY_PARKS = [
+  ['the Magic Kingdom', MAGIC_KINGDOM],
+  ['Epcot', { latitude: 28.3747, longitude: -81.5494 }],
+  ['Hollywood Studios', { latitude: 28.3575, longitude: -81.5582 }],
+  ['Animal Kingdom', { latitude: 28.3553, longitude: -81.5901 }],
+  ['Disney Springs', { latitude: 28.3703, longitude: -81.5195 }],
+] as const;
 // The middle of the South Pacific, thousands of km from any listed area.
 const POINT_NEMO = { latitude: -48.8767, longitude: -123.3933 };
 
@@ -64,6 +73,18 @@ describe('flyoverCoverage', () => {
     expect(hasFlyover(MIDTOWN)).toBe(true);
     expect(hasFlyover(SALINA_KS)).toBe(false);
     expect(hasFlyover(DUBAI)).toBe(false);
+  });
+
+  // All five were checked in the Simulator (T67).
+  it.each(DISNEY_PARKS)('knows %s has 3D', (_name, park) => {
+    expect(flyoverCoverageAt(park)).toBe('yes');
+  });
+
+  // Why Walt Disney World needs a circle of its own.
+  it('finds the Magic Kingdom past the edge of Orlando’s circle', () => {
+    const orlando = FLYOVER_AREAS.find((area) => area.name === 'Orlando');
+    if (!orlando) throw new Error('Orlando is missing from the 3D areas');
+    expect(distanceKm(MAGIC_KINGDOM, orlando)).toBeGreaterThan(orlando.radiusKm);
   });
 
   it.each([

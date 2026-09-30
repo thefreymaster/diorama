@@ -12,7 +12,7 @@ Decide these before submitting. Each has a suggestion.
 4. **Support email.** The support page and the privacy policy need a contact address. The placeholder is `support@YOUR-SITE`.
 5. **Price and countries.** Suggestion: free, all countries. For the EU, App Store Connect asks for your Digital Services Act trader status: a trader must show an address, phone and email on the App Store; a non-trader can't sell in the EU. Answer it under Business in App Store Connect.
 6. **Mac and Apple Vision Pro.** App Store Connect offers iPhone apps on Apple silicon Macs and Apple Vision Pro by default. Mini Cities is built around a phone you hold or wear (motion, a sideways headset), so suggestion: turn both off under Pricing and Availability → "iPhone and iPad Apps on Apple Silicon Macs" and "Apple Vision Pro".
-7. **Map attribution under the miniature blur (T21, blocked on you).** At the default miniature strength the bottom blur band can soften Apple's Maps logo and "Legal" link. MapKit's terms require them to stay visible, so a reviewer could object. Decide T21 before submitting (a sharp strip for the attribution, or moving it above the band). See the risks in [review-notes.md](review-notes.md).
+7. **Map attribution under the miniature blur.** Answered (T21): the Miniature effect is off by default, so a fresh install shows Apple's Maps logo and "Legal" link sharp, as MapKit's terms require; the slider in Settings can still turn the blur up. See risk 1 in [review-notes.md](review-notes.md).
 8. **App Review contact.** App Store Connect needs a first name, last name, phone and email for the reviewer to reach you. They aren't shown on the store.
 
 ## App Information page
@@ -61,7 +61,7 @@ Change the map
 Switch between Satellite, Satellite with labels and the Standard map, and turn on live traffic to see busy streets.
 
 Make it yours
-Set the model size, the camera height, how far the view turns with your head, how strong the miniature blur is, and whether leaning moves you up and down. Match the two pictures to your viewer's lenses, or turn off the two-eye view to keep one full-screen picture sideways too.
+Set the model size, the camera height, how far the view turns with your head, and whether leaning moves you up and down. Add a tilt-shift blur for an even tinier look. Match the two pictures to your viewer's lenses, or turn off the two-eye view to keep one full-screen picture sideways too.
 
 Private by design
 No account, no ads, no tracking. Maps and search come from Apple Maps. Your recent places and settings stay on your iPhone. Lean to move closer uses the camera on your iPhone to follow your head; nothing is recorded or sent.

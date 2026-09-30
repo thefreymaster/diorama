@@ -522,7 +522,7 @@ describe('settings', () => {
 
   it('resets everything at once, with a light tap', async () => {
     await openSettings();
-    slideTo('miniatureIntensity', 0.1);
+    slideTo('miniatureIntensity', 0.7);
     slideTo('trackingSensitivity', 0.9);
     slideTo('eyeSeparation', 0.2);
     slideTo('cameraHeight', 0.9);
@@ -545,7 +545,7 @@ describe('settings', () => {
     expect(mockImpact).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
     expect(getSettings()).toEqual(DEFAULT_SETTINGS);
     expect(savedSettings()).toEqual(DEFAULT_SETTINGS);
-    expect(sliderPosition('miniatureIntensity')).toBeCloseTo(0.6);
+    expect(sliderPosition('miniatureIntensity')).toBe(0);
     expect(sliderPosition('trackingSensitivity')).toBeCloseTo(0.5);
     expect(screen.getByRole('switch', TWO_EYE)).toBeChecked();
     expect(screen.getByRole('switch', LEAN)).toBeChecked();
@@ -553,7 +553,7 @@ describe('settings', () => {
     expect(screen.getByRole('switch', LEAN_VERTICAL)).not.toBeDisabled();
     expect(sliderPosition('leanGain')).toBeCloseTo(0);
     expect(screen.getByRole('switch', { name: 'Look around by dragging' })).not.toBeChecked();
-    expect(previewMap().miniatureIntensity).toBe(0.6);
+    expect(previewMap().miniatureIntensity).toBe(0);
     expect(getSettings().cameraHeight).toBe(1);
     expect(savedSettings().cameraHeight).toBe(1);
     expect(sliderPosition('cameraHeight')).toBeCloseTo(0.45, 2);
@@ -788,13 +788,18 @@ describe('restore suggested places', () => {
 describe('settings preview', () => {
   it('shows the miniature look live, in one picture', async () => {
     await openSettings();
-    expect(previewMap().miniatureIntensity).toBe(0.6);
-
-    slideTo('miniatureIntensity', 0);
+    // Off to start, so Apple's Maps logo and Legal link are sharp.
     expect(previewMap().miniatureIntensity).toBe(0);
+    expect(sliderPosition('miniatureIntensity')).toBe(0);
 
     slideTo('miniatureIntensity', 1);
     expect(previewMap().miniatureIntensity).toBe(1);
+
+    slideTo('miniatureIntensity', 0.6);
+    expect(previewMap().miniatureIntensity).toBeCloseTo(0.6);
+
+    slideTo('miniatureIntensity', 0);
+    expect(previewMap().miniatureIntensity).toBe(0);
 
     expect(previewMap().mode ?? 'mono').toBe('mono');
     expect(previewMap().headTracking).toBeFalsy();

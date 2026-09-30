@@ -43,7 +43,7 @@ describe('settings store', () => {
       eyeSeparation: 1.0,
       cameraHeight: 1.0,
       trackingSensitivity: 1.0,
-      miniatureIntensity: 0.6,
+      miniatureIntensity: 0,
       twoEyeLandscape: true,
       headPosition: true,
       leanGain: 1,
@@ -212,7 +212,7 @@ describe('settings store', () => {
         mapStyle: 'satellite',
         showsTraffic: false,
       },
-      version: 1,
+      version: 2,
     });
 
     // And the launch after that reads it back the same.
@@ -302,7 +302,7 @@ describe('settings store', () => {
       const rewritten = JSON.parse(first.disk.getString('settings') ?? 'null');
       expect(rewritten.state).toMatchObject({ eyeSeparation: 2, twoEyeLandscape: false });
       expect(rewritten.state).not.toHaveProperty('mode');
-      expect(rewritten.version).toBe(1);
+      expect(rewritten.version).toBe(2);
 
       // And the launch after that reads it back the same.
       const second = launch(JSON.stringify(rewritten));
@@ -386,7 +386,7 @@ describe('settings store', () => {
     const saved = JSON.parse(disk.getString('settings') ?? 'null');
     expect(saved).toEqual({
       state: { ...store.DEFAULT_SETTINGS, twoEyeLandscape: false },
-      version: 1,
+      version: 2,
     });
   });
 
@@ -696,11 +696,112 @@ describe('settings store', () => {
     store.setLeanVertical(false);
     store.setMapStyle('standard');
     store.setShowsTraffic(true);
+    store.setMiniatureIntensity(0.6);
 
     store.resetSettings();
 
     expect(store.getSettings()).toEqual(store.DEFAULT_SETTINGS);
     expect(JSON.parse(disk.getString('settings') ?? 'null').state).toEqual(store.DEFAULT_SETTINGS);
+    // The miniature blur goes back to off, so Apple's logo and Legal are sharp.
+    expect(store.getSettings().miniatureIntensity).toBe(0);
+  });
+
+  describe('the miniature blur, off by default since version 2', () => {
+    /** What a version 1 build saved, with the Miniature effect at `miniatureIntensity`. */
+    function savedV1(miniatureIntensity: unknown) {
+      return JSON.stringify({
+        state: { eyeSeparation: 1.4, miniatureIntensity, twoEyeLandscape: false },
+        version: 1,
+      });
+    }
+
+    it('starts off on a fresh install', () => {
+      const { store } = launch();
+
+      expect(store.DEFAULT_SETTINGS.miniatureIntensity).toBe(0);
+      expect(store.getSettings().miniatureIntensity).toBe(0);
+    });
+
+    it('turns the old default (0.6) off once, keeping the rest, and saves it as version 2', () => {
+      const { store, disk } = launch(savedV1(0.6));
+
+      expect(store.getSettings()).toEqual({
+        ...store.DEFAULT_SETTINGS,
+        eyeSeparation: 1.4,
+        miniatureIntensity: 0,
+        twoEyeLandscape: false,
+      });
+      // Saved straight away, so the move happens only once.
+      const migrated = JSON.parse(disk.getString('settings') ?? 'null');
+      expect(migrated.version).toBe(2);
+      expect(migrated.state).toMatchObject({
+        eyeSeparation: 1.4,
+        miniatureIntensity: 0,
+        twoEyeLandscape: false,
+      });
+      expect(launch(JSON.stringify(migrated)).store.getSettings().miniatureIntensity).toBe(0);
+
+      // Turned back up to 0.6 later, it stays there on the next launch.
+      store.setMiniatureIntensity(0.6);
+      const chosen = disk.getString('settings');
+      expect(JSON.parse(chosen ?? 'null')).toMatchObject({
+        state: { miniatureIntensity: 0.6 },
+        version: 2,
+      });
+      expect(launch(chosen).store.getSettings().miniatureIntensity).toBe(0.6);
+    });
+
+    it.each([0, 0.2, 0.59, 0.61, 1])('keeps a Miniature effect of %p that was changed', (value) => {
+      const { store, disk } = launch(savedV1(value));
+
+      expect(store.getSettings()).toMatchObject({
+        eyeSeparation: 1.4,
+        miniatureIntensity: value,
+        twoEyeLandscape: false,
+      });
+      expect(JSON.parse(disk.getString('settings') ?? 'null')).toMatchObject({
+        state: { miniatureIntensity: value },
+        version: 2,
+      });
+    });
+
+    it('keeps 0.6 saved by this version: the person chose it', () => {
+      const saved = JSON.stringify({
+        state: { miniatureIntensity: 0.6, eyeSeparation: 2 },
+        version: 2,
+      });
+
+      expect(launch(saved).store.getSettings()).toMatchObject({
+        miniatureIntensity: 0.6,
+        eyeSeparation: 2,
+      });
+    });
+
+    it('checks an old save as before: out of range is clamped, nonsense is off', () => {
+      expect(launch(savedV1(7)).store.getSettings().miniatureIntensity).toBe(1);
+      expect(launch(savedV1(-1)).store.getSettings().miniatureIntensity).toBe(0);
+      expect(launch(savedV1('0.6')).store.getSettings().miniatureIntensity).toBe(0);
+      expect(launch(savedV1(null)).store.getSettings().miniatureIntensity).toBe(0);
+    });
+
+    it('carries the old Stereo switch over while moving the old default', () => {
+      const saved = JSON.stringify({
+        state: { miniatureIntensity: 0.6, mode: 'mono', debugLook: false },
+        version: 1,
+      });
+
+      const { store } = launch(saved);
+
+      expect(store.getSettings()).toMatchObject({ miniatureIntensity: 0, twoEyeLandscape: false });
+      expect(store.getSettings()).not.toHaveProperty('mode');
+    });
+
+    it('starts with the defaults when an old save holds no settings', () => {
+      for (const state of [null, 'mono', [0.6]]) {
+        const { store } = launch(JSON.stringify({ state, version: 1 }));
+        expect(store.getSettings()).toEqual(store.DEFAULT_SETTINGS);
+      }
+    });
   });
 
   // Uses the app's own module instance: an isolated copy would bring its own React.

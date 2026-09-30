@@ -14,7 +14,11 @@ export type Settings = {
   cameraHeight: number;
   /** How strongly head motion turns the camera. */
   trackingSensitivity: number;
-  /** Tilt-shift blur and saturation strength, 0 to 1. */
+  /**
+   * Tilt-shift blur and saturation strength, 0 to 1. Off (0) by default: the
+   * lower blur band covers Apple's Maps logo and Legal link, which must stay
+   * legible, so the blur is only there for someone who turns it up.
+   */
   miniatureIntensity: number;
   /**
    * The Viewer turned sideways shows a round picture for each eye, for a
@@ -78,7 +82,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   eyeSeparation: 1.0,
   cameraHeight: 1.0,
   trackingSensitivity: 1.0,
-  miniatureIntensity: 0.6,
+  miniatureIntensity: 0,
   twoEyeLandscape: true,
   headPosition: true,
   leanGain: 1,
@@ -148,18 +152,44 @@ function isMapStyle(value: unknown): value is DioramaMapStyle {
   return MAP_STYLES.some((style) => style === value);
 }
 
+/**
+ * The version saved with the settings. Version 2 (T21) turned the miniature
+ * blur off by default; see `migratePersisted`.
+ */
+const SETTINGS_VERSION = 2;
+
+/** The Miniature effect's default before version 2. */
+const MINIATURE_DEFAULT_BEFORE_V2 = 0.6;
+
+/**
+ * Brings a save from an older version up to this one, once: zustand calls it
+ * only when the saved version is older, then saves the result with the new
+ * version. A version 1 save still at the old Miniature effect default (0.6)
+ * was most likely never moved, so it follows the new default (off); any
+ * other value was the person's choice and stays. `merge` then checks the
+ * result like any other save.
+ */
+function migratePersisted(persisted: unknown, version: number): Settings {
+  const clean = sanitizePersisted(persisted);
+  if (version < 2 && clean.miniatureIntensity === MINIATURE_DEFAULT_BEFORE_V2) {
+    clean.miniatureIntensity = DEFAULT_SETTINGS.miniatureIntensity;
+  }
+  return { ...DEFAULT_SETTINGS, ...clean };
+}
+
 const useSettingsStore = create<Settings>()(
   persist(() => ({ ...DEFAULT_SETTINGS }), {
     name: 'settings',
-    // Still 1: new settings (like the viewer fit, camera height, lean, map
-    // style and traffic) are simply missing from older saves, and `merge` fills
-    // them in from the defaults, while settings that are gone (the old
-    // window width and height) are left out, and the old Stereo switch
-    // (`mode`) is carried over into `twoEyeLandscape` (see
-    // `sanitizePersisted`).
-    // Bump it only when a saved value changes meaning, with a `migrate` to
-    // convert it.
-    version: 1,
+    // New settings (like the viewer fit, camera height, lean, map style and
+    // traffic) are simply missing from older saves, and `merge` fills them in
+    // from the defaults, while settings that are gone (the old window width
+    // and height) are left out, and the old Stereo switch (`mode`) is carried
+    // over into `twoEyeLandscape` (see `sanitizePersisted`). None of that
+    // needs a new version.
+    // Bump it only when a saved value changes meaning, with a step in
+    // `migratePersisted` to convert it.
+    version: SETTINGS_VERSION,
+    migrate: migratePersisted,
     storage: createPersistStorage<Settings>(),
     merge: (persisted, current) => ({ ...current, ...sanitizePersisted(persisted) }),
   }),

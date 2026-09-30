@@ -246,6 +246,39 @@ describe('choose on map', () => {
     expect(getRecents()[0]).toMatchObject({ name: 'Eiffel Tower', altitude: 600 });
   });
 
+  it('opens a linked spot by itself for `open=1`, as a tap would (scripts can’t tap)', async () => {
+    const router = renderRouter(routes, { initialUrl: `${PICK_EIFFEL}&open=1` });
+
+    const id = 'eiffel-tower_48.858_2.295';
+    await waitFor(() => expect(router.getPathname()).toBe(`/city/${id}`));
+    expect(getRecents()).toEqual([
+      {
+        id,
+        name: 'Eiffel Tower',
+        country: 'Paris, France',
+        lat: 48.8584,
+        lon: 2.2945,
+        altitude: 600,
+      },
+    ]);
+    expect(await screen.findByTestId('city-preview-screen')).toBeOnTheScreen();
+    expect(router.getRouterState()?.routes[0]?.state?.routes.map(({ name }) => name)).toEqual([
+      'index',
+      'city/[cityId]',
+    ]);
+  });
+
+  it('waits for a tap without `open=1`, or without a linked spot', async () => {
+    const router = renderRouter(routes, { initialUrl: '/pick?open=1' });
+    await screen.findByTestId('place-picker-map');
+    act(() => appRouter.push(`${PICK_EIFFEL}&open=0`));
+    await screen.findByText('Eiffel Tower');
+
+    expect(router.getPathname()).toBe('/pick');
+    expect(getRecents()).toEqual([]);
+    expect(mockImpact).not.toHaveBeenCalled();
+  });
+
   it('starts at the newest place in Recent, framed as its diorama is', async () => {
     addRecent({
       id: 'rome',

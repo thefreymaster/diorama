@@ -6,6 +6,7 @@ import { spacing } from '@/theme';
 import { GlassSurface, PrimaryButton, Text } from '@/ui';
 
 import { CoverageNote } from './CoverageNote';
+import { useOpenLinkedSpot } from './useOpenLinkedSpot';
 import { useOpenSpot } from './useOpenSpot';
 import { useSpotPlace } from './useSpotPlace';
 
@@ -19,12 +20,13 @@ type SpotCardProps = {
 /**
  * The glass card floating over the bottom of the map, like the preview's:
  * the name of the spot under the pin, its town and country, whether it has
- * 3D buildings, and "Open Mini City".
+ * 3D buildings, and "Open Mini City" (which a link can tap: `open=1`).
  */
 export function SpotCard({ spot, onCoverHeight }: SpotCardProps) {
   const { left, right, bottom, borderRadius, paddingBottom } = useCardFrame();
   const place = useSpotPlace(spot);
   const { open, isOpening } = useOpenSpot();
+  useOpenLinkedSpot(open);
 
   return (
     <View

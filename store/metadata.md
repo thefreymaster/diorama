@@ -95,19 +95,19 @@ App Store Connect adds the © itself.
 
 ### Screenshots
 
-iPhone 6.9-inch set, plus the same shots at 6.5-inch size (1284 × 2778, in `screenshots/iphone-6.5/`) for App Store Connect pages that show the 6.5" slot first. Use one set: App Store Connect scales it for every other iPhone. Taken on the iPhone 18 Pro Max Simulator (iOS 27), light mode, 9:41 status bar, PNG without alpha. Upload them in this order:
+iPhone 6.9-inch set, plus the same shots at 6.5-inch size (1284 × 2778, in `screenshots/iphone-6.5/`, scaled from the 6.9-inch ones and cropped to the middle) for App Store Connect pages that show the 6.5" slot first. Use one set: App Store Connect scales it for every other iPhone. Taken on the iPhone 18 Pro Max Simulator (iOS 27), dark mode, 9:41 status bar, PNG without alpha. The place shots feature the Magic Kingdom at Walt Disney World (Apple Maps' 3D, named by Apple Maps "Magic Kingdom Park"); see risk 8 in [review-notes.md](review-notes.md) about showing a Disney park. Upload them in this order:
 
-| File | Size | Shows |
+| File | Size (6.9" / 6.5") | Shows |
 |---|---|---|
-| `screenshots/iphone-6.9/01-picker.png` | 1320 × 2868 | The picker: Current location, Choose on map, featured cities, search |
-| `screenshots/iphone-6.9/02-preview.png` | 1320 × 2868 | New York preview, orbiting, with the map button and Enter Mini City |
-| `screenshots/iphone-6.9/03-viewer-upright.png` | 1320 × 2868 | The upright full-screen view, no headset |
-| `screenshots/iphone-6.9/04-viewer-stereo.png` | 2868 × 1320 | Sideways: one picture per eye for a phone VR viewer |
-| `screenshots/iphone-6.9/05-search.png` | 1320 × 2868 | Searching "grand canyon" |
-| `screenshots/iphone-6.9/06-choose-on-map.png` | 1320 × 2868 | Choose on map, at the Eiffel Tower |
-| `screenshots/iphone-6.9/07-settings.png` | 1320 × 2868 | Settings, with the live Boston preview |
+| `01-picker.png` | 1320 × 2868 / 1284 × 2778 | The picker: Current location, Choose on map, featured cities, search |
+| `02-preview.png` | 1320 × 2868 / 1284 × 2778 | Magic Kingdom Park preview, orbiting: Cinderella Castle above the hub and Main Street U.S.A., with the map button and Enter Mini City |
+| `03-viewer-upright.png` | 1320 × 2868 / 1284 × 2778 | The upright full-screen view, no headset: up Main Street U.S.A. to Cinderella Castle |
+| `04-viewer-stereo.png` | 2868 × 1320 / 2778 × 1284 | Sideways: one picture of the Magic Kingdom per eye for a phone VR viewer |
+| `05-search.png` | 1320 × 2868 / 1284 × 2778 | Searching "grand canyon" |
+| `06-choose-on-map.png` | 1320 × 2868 / 1284 × 2778 | Choose on map, the pin on Cinderella Castle, the card reading Magic Kingdom Park |
+| `07-settings.png` | 1320 × 2868 / 1284 × 2778 | Settings, with the live Boston preview |
 
-One set can mix portrait and landscape. The upright view comes before the stereo one on purpose: the first screenshots show that Mini Cities works without a headset. Regenerate them with `bash scripts/screenshots.sh` (about 5 minutes; `--skip-build` reuses the last build).
+Each file is in both `screenshots/iphone-6.9/` and `screenshots/iphone-6.5/`. One set can mix portrait and landscape. The upright view comes before the stereo one on purpose: the first screenshots show that Mini Cities works without a headset. Regenerate both sets with `bash scripts/screenshots.sh` (about 5 minutes; `--skip-build` reuses the last build). It opens the Magic Kingdom the way a person would, from Choose on map (`diorama://pick?lat=28.4190&lon=-81.5812&span=1000&open=1`, where `open=1` taps Open Mini City), so it joins Recent under Apple Maps' name, then opens its preview and Viewer by that Recent id. If App Review objects to showing a Disney park, the fallback is a neutral city: point `PLACE_LAT`/`PLACE_LON` at the top of the script at one (or put back the New York links from before T66) and rerun it.
 
 ### Also on the version page
 

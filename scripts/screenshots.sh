@@ -11,12 +11,16 @@
 #   2. Boots its own 6.9-inch iPhone Simulator on iOS 27 ("Diorama Screenshots
 #      6.9", created the first time), so your other Simulators stay as they are.
 #   3. Installs the app fresh (default settings, no Recent), allows location
-#      (so no prompt covers the picker), sets light mode and a 9:41 status bar.
+#      (so no prompt covers the picker), sets dark mode and a 9:41 status bar.
 #   4. Starts the app fresh for each screen, opens it by deep link, waits for
 #      the maps to draw, and saves a PNG (whole screen, no alpha channel). The
 #      stereo view is shot with the Simulator turned sideways (2868 × 1320).
-#   5. Checks every file is an exact App Store 6.9-inch size, then shuts the
-#      Simulator down (also when something fails).
+#      The place shots show the Magic Kingdom (Walt Disney World), which isn't
+#      in the app's lists: before them the script opens it from Choose on map,
+#      as a person would, so Apple Maps names it and it joins Recent.
+#   5. Makes the 6.5-inch set from the 6.9-inch one (scaled, then cropped to
+#      the middle: 1284 × 2778), checks every file is an exact App Store size,
+#      then shuts the Simulator down (also when something fails).
 #
 # Every wait has a limit (macOS has no `timeout`, so `with_timeout` below does
 # it). Change a screen's wait in SHOTS if its map needs longer to draw.
@@ -25,6 +29,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT/store/screenshots/iphone-6.9"
+OUT_DIR_65="$ROOT/store/screenshots/iphone-6.5"
 LOG_DIR="$ROOT/ios/build/logs"
 BUNDLE_ID="canvas23studios.diorama"
 WORKSPACE="$ROOT/ios/Diorama.xcworkspace"
@@ -39,23 +44,37 @@ RUNTIME="${SCREENSHOT_RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-27-0}"
 # Where the Simulator stands for "Current location" (Times Square).
 SIM_LOCATION="40.7580,-73.9855"
 
-# The App Store's 6.9-inch sizes, portrait and landscape.
+# The App Store's sizes, portrait and landscape: 6.9-inch (what the Simulator
+# takes) and 6.5-inch (made from it, for App Store Connect's 6.5" slot).
 ACCEPTED_SIZES=" 1260x2736 1290x2796 1320x2868 2736x1260 2796x1290 2868x1320 "
+ACCEPTED_SIZES_65=" 1242x2688 1284x2778 2688x1242 2778x1284 "
+
+# The place in the store shots: the Magic Kingdom at Walt Disney World, just
+# south of Cinderella Castle, so the upright view looks up Main Street U.S.A.
+# at the castle (a picked spot faces north, 60° pitch, 600 m out). The
+# Choose-on-map link names the spot (Apple Maps calls it "Magic Kingdom
+# Park"), and with `open=1` it also taps "Open Mini City".
+PLACE_LAT=28.4190
+PLACE_LON=-81.5812
+PICK_LINK="diorama://pick?lat=$PLACE_LAT&lon=$PLACE_LON&span=1000"
 
 # Each screenshot: file name | deep link ("" for the picker) | seconds to wait
 # | orientation. The app starts fresh for each one, and the link then opens its
-# screen on top of the picker. Upright (full screen) comes before stereo on
-# purpose: the store shows first that no headset is needed.
+# screen on top of the picker. `{place}` in a link is the Magic Kingdom's id
+# in Recent (see open_place below). Upright (full screen) comes before stereo
+# on purpose: the store shows first that no headset is needed.
 SHOTS=(
   "01-picker||8|portrait"
-  "02-preview|diorama://city/new-york|20|portrait"
-  "03-viewer-upright|diorama://view/new-york|25|portrait"
+  # Short on purpose: the preview turns 3° a second once its map has drawn
+  # (already cached by then), and early on it still looks up Main Street.
+  "02-preview|diorama://city/{place}|6|portrait"
+  "03-viewer-upright|diorama://view/{place}|25|portrait"
   "05-search|diorama://?q=grand%20canyon|12|portrait"
-  "06-choose-on-map|diorama://pick?lat=48.8584&lon=2.2945&span=2000|15|portrait"
+  "06-choose-on-map|$PICK_LINK|15|portrait"
   "07-settings|diorama://settings|15|portrait"
   # Sideways last: turning the Simulator back upright can leave the Dynamic
   # Island drawn in the next screenshot. The numbers set the upload order.
-  "04-viewer-stereo|diorama://view/new-york|30|landscapeLeft"
+  "04-viewer-stereo|diorama://view/{place}|30|landscapeLeft"
 )
 
 SKIP_BUILD=0
@@ -149,7 +168,7 @@ with_timeout 600 xcrun simctl bootstatus "$UDID" >/dev/null || fail "the Simulat
 # Simulator.app to click it: approve the diorama:// scheme up front.
 xcrun simctl spawn "$UDID" defaults write com.apple.launchservices.schemeapproval \
   "com.apple.CoreSimulator.CoreSimulatorBridge-->diorama" -string "$BUNDLE_ID"
-with_timeout 30 xcrun simctl ui "$UDID" appearance light
+with_timeout 30 xcrun simctl ui "$UDID" appearance dark
 with_timeout 30 xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged \
   --batteryLevel 100 --cellularBars 4 --wifiBars 3
 with_timeout 30 xcrun simctl location "$UDID" set "$SIM_LOCATION" || true
@@ -171,13 +190,8 @@ orient() {
     echo "warning: couldn't turn the Simulator to $1" >&2
 }
 
-mkdir -p "$OUT_DIR"
-rm -f "$OUT_DIR"/*.png
-
-for shot in "${SHOTS[@]}"; do
-  IFS='|' read -r name url wait_seconds orientation <<<"$shot"
-  file="$OUT_DIR/$name.png"
-  step "$name: ${url:-(picker)}"
+# Starts the app fresh, upright, and opens $1 in it ("" opens nothing).
+launch_with_link() {
   orient portrait
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
   sleep 1
@@ -185,9 +199,50 @@ for shot in "${SHOTS[@]}"; do
   # into the Viewer can outlast `simctl openurl`'s own time limit.
   with_timeout 60 xcrun simctl launch "$UDID" "$BUNDLE_ID" >/dev/null || fail "couldn't launch Diorama"
   sleep 4
-  if [[ -n "$url" ]]; then
-    with_timeout 60 xcrun simctl openurl "$UDID" "$url" || fail "couldn't open $url"
+  if [[ -n "$1" ]]; then
+    with_timeout 60 xcrun simctl openurl "$UDID" "$1" || fail "couldn't open $1"
   fi
+}
+
+# Opens the Magic Kingdom from Choose on map, as a tap on "Open Mini City"
+# would: Apple Maps names it, it joins Recent, and its preview opens (which
+# also caches its map for the preview shot). Then reads its id back from the
+# app's saved Recent (react-native-mmkv keeps it as JSON text in
+# Documents/mmkv/diorama), so the Viewer links can open it by id.
+PLACE_ID=""
+open_place() {
+  step "Opening the Magic Kingdom from Choose on map (it joins Recent)"
+  launch_with_link "$PICK_LINK&open=1"
+  sleep 15
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+  local data saved lat lon
+  data="$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data)" || fail "can't find Diorama's data folder"
+  # A place's id ends in its coordinates to 3 places, e.g. _28.419_-81.581.
+  lat="$(printf '%.3f' "$PLACE_LAT")"
+  lon="$(printf '%.3f' "$PLACE_LON")"
+  saved="$(grep -aoE "\{\"id\":\"[a-z0-9-]+_${lat//./\.}_${lon//./\.}\",\"name\":\"[^\"]*\"" \
+    "$data/Documents/mmkv/diorama" 2>/dev/null | tail -1 || true)"
+  PLACE_ID="$(cut -d'"' -f4 <<<"$saved")"
+  local place_name
+  place_name="$(cut -d'"' -f8 <<<"$saved")"
+  [[ -n "$PLACE_ID" ]] || fail "the Magic Kingdom didn't join Recent (is Choose on map's open=1 still there?)"
+  # Named by its coordinates: Apple Maps didn't answer in time.
+  [[ "$place_name" != *°* ]] || fail "Apple Maps didn't name the spot ($place_name); check the network and run again"
+  echo "In Recent as \"$place_name\" ($PLACE_ID)"
+}
+
+mkdir -p "$OUT_DIR" "$OUT_DIR_65"
+rm -f "$OUT_DIR"/*.png "$OUT_DIR_65"/*.png
+
+for shot in "${SHOTS[@]}"; do
+  IFS='|' read -r name url wait_seconds orientation <<<"$shot"
+  if [[ "$url" == *"{place}"* ]]; then
+    [[ -n "$PLACE_ID" ]] || open_place
+    url="${url//\{place\}/$PLACE_ID}"
+  fi
+  file="$OUT_DIR/$name.png"
+  step "$name: ${url:-(picker)}"
+  launch_with_link "$url"
   if [[ "$orientation" != portrait ]]; then
     sleep 4 # Let the screen come up upright first, as a hand would turn it.
     orient "$orientation"
@@ -200,6 +255,23 @@ for shot in "${SHOTS[@]}"; do
   with_timeout 30 xcrun simctl io "$UDID" screenshot --type=png --mask=ignored "$file" >/dev/null 2>&1
 done
 orient portrait
+
+# The 6.5-inch set: each shot scaled so its short side is 1284 pixels, then
+# its long side cropped to the middle 2778 (from 1320 × 2868 that trims 6
+# pixels off each end).
+step "Making the 6.5-inch set"
+for file in "$OUT_DIR"/*.png; do
+  small="$OUT_DIR_65/$(basename "$file")"
+  width="$(sips -g pixelWidth "$file" | awk '/pixelWidth/ { print $2 }')"
+  height="$(sips -g pixelHeight "$file" | awk '/pixelHeight/ { print $2 }')"
+  if ((width < height)); then
+    sips --resampleWidth 1284 "$file" --out "$small" >/dev/null
+    sips -c 2778 1284 "$small" >/dev/null
+  else
+    sips --resampleHeight 1284 "$file" --out "$small" >/dev/null
+    sips -c 1284 2778 "$small" >/dev/null
+  fi
+done
 
 # The App Store refuses PNGs with an alpha channel, and the Simulator's have
 # one (fully opaque). This small Swift program redraws each PNG without it,
@@ -231,24 +303,30 @@ for path in CommandLine.arguments.dropFirst() {
   guard CGImageDestinationFinalize(destination) else { fatalError("Can't write \(path)") }
 }
 SWIFT
-with_timeout 300 xcrun swift "$OPAQUE_SWIFT" "$OUT_DIR"/*.png
+with_timeout 300 xcrun swift "$OPAQUE_SWIFT" "$OUT_DIR"/*.png "$OUT_DIR_65"/*.png
 rm -f "$OPAQUE_SWIFT"
 
 # ── 4. Check the sizes ───────────────────────────────────────────────────────
 
 step "Checking sizes"
 bad=0
-for file in "$OUT_DIR"/*.png; do
-  width="$(sips -g pixelWidth "$file" | awk '/pixelWidth/ { print $2 }')"
-  height="$(sips -g pixelHeight "$file" | awk '/pixelHeight/ { print $2 }')"
-  alpha="$(sips -g hasAlpha "$file" | awk '/hasAlpha/ { print $2 }')"
-  if [[ "$ACCEPTED_SIZES" == *" ${width}x${height} "* && "$alpha" == no ]]; then
-    echo "  ok   ${width} × ${height}  ${file#"$ROOT"/}"
-  else
-    echo "  BAD  ${width} × ${height}, alpha: $alpha  ${file#"$ROOT"/} (needs a 6.9-inch size, no alpha)"
-    bad=1
-  fi
-done
+# check_sizes <folder> <accepted sizes> <label>
+check_sizes() {
+  local file width height alpha
+  for file in "$1"/*.png; do
+    width="$(sips -g pixelWidth "$file" | awk '/pixelWidth/ { print $2 }')"
+    height="$(sips -g pixelHeight "$file" | awk '/pixelHeight/ { print $2 }')"
+    alpha="$(sips -g hasAlpha "$file" | awk '/hasAlpha/ { print $2 }')"
+    if [[ "$2" == *" ${width}x${height} "* && "$alpha" == no ]]; then
+      echo "  ok   ${width} × ${height}  ${file#"$ROOT"/}"
+    else
+      echo "  BAD  ${width} × ${height}, alpha: $alpha  ${file#"$ROOT"/} (needs a $3 size, no alpha)"
+      bad=1
+    fi
+  done
+}
+check_sizes "$OUT_DIR" "$ACCEPTED_SIZES" 6.9-inch
+check_sizes "$OUT_DIR_65" "$ACCEPTED_SIZES_65" 6.5-inch
 
 ((bad == 0)) || fail "some screenshots aren't an App Store size; pick another SCREENSHOT_DEVICE_TYPE"
-step "Done: $(ls "$OUT_DIR"/*.png | wc -l | tr -d ' ') screenshots in ${OUT_DIR#"$ROOT"/}"
+step "Done: $(ls "$OUT_DIR"/*.png | wc -l | tr -d ' ') screenshots in ${OUT_DIR#"$ROOT"/} and ${OUT_DIR_65#"$ROOT"/}"

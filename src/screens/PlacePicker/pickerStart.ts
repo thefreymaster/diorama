@@ -80,10 +80,11 @@ export function fallbackStart(): PickerStart {
 }
 
 /**
- * Where you are, only if location access was already given (the picker
- * never asks): the phone's last fix if it has one, else a fresh one.
+ * Where you are, only if location access was already given (this never
+ * asks): the phone's last fix if it has one, else a fresh one. The picker
+ * opens here, and "Show my location" (`useZoomToMe`) moves here.
  */
-async function whereYouAre(): Promise<Coordinate | null> {
+export async function whereYouAre(): Promise<Coordinate | null> {
   if ((await readLocationAccess()) !== 'granted') return null;
   const position =
     (await Location.getLastKnownPositionAsync()) ??

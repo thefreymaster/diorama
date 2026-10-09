@@ -1,8 +1,12 @@
 import { requireNativeView } from 'expo';
-import type { ComponentType } from 'react';
+import { useImperativeHandle, useRef, type ComponentType } from 'react';
 import type { NativeSyntheticEvent } from 'react-native';
 
-import type { PlacePickerMapViewProps, PlacePickerRegion } from './PlacePickerMapView.types';
+import type {
+  PlacePickerMapViewProps,
+  PlacePickerMapViewRef,
+  PlacePickerRegion,
+} from './PlacePickerMapView.types';
 
 /** Props exactly as the Swift view (PlacePickerMapView.swift) receives them. */
 type NativePlacePickerMapViewProps = Omit<PlacePickerMapViewProps, 'onRegionChangeEnd'> & {
@@ -21,15 +25,25 @@ export const DEFAULT_PICKER_SPAN = 2000;
 /**
  * An Apple map you move under a pin to pick a spot ("Choose on map"). All
  * the panning, pinching and tapping runs natively; JS hears only where the
- * map comes to rest (`onRegionChangeEnd`).
+ * map comes to rest (`onRegionChangeEnd`), and can glide it somewhere with
+ * the ref's `moveTo`.
  */
 export function PlacePickerMapView({
+  ref,
   span = DEFAULT_PICKER_SPAN,
   showsUserLocation = false,
   attributionInset = 0,
   onRegionChangeEnd,
   ...props
 }: PlacePickerMapViewProps) {
+  const nativeRef = useRef<PlacePickerMapViewRef>(null);
+
+  useImperativeHandle(ref, () => ({
+    moveTo: async ({ latitude, longitude }, spanMeters) => {
+      await nativeRef.current?.moveTo({ latitude, longitude }, spanMeters);
+    },
+  }));
+
   const handleRegionChangeEnd = ({ nativeEvent }: NativeSyntheticEvent<PlacePickerRegion>) => {
     const { latitude, longitude, spanMeters } = nativeEvent;
     onRegionChangeEnd?.({ latitude, longitude, spanMeters });
@@ -38,6 +52,7 @@ export function PlacePickerMapView({
   return (
     <NativePlacePickerMapView
       {...props}
+      ref={nativeRef}
       span={span}
       showsUserLocation={showsUserLocation}
       attributionInset={attributionInset}

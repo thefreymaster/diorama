@@ -206,6 +206,12 @@ public class DioramaNativeModule: Module {
       OnViewDidUpdateProps { (view: PlacePickerMapView) in
         view.propsDidUpdate()
       }
+
+      // `ref.moveTo(center, spanMeters)` in JS (T69): glide to a spot with
+      // that many meters across, even one the `center` prop already showed.
+      AsyncFunction("moveTo") { (view: PlacePickerMapView, center: Coordinate, spanMeters: Double) in
+        view.moveTo(center: center.clLocation, spanMeters: spanMeters)
+      }
     }
   }
 }

@@ -7,8 +7,8 @@ import UIKit
 // interactive Apple map that you move under a fixed pin, like Apple Maps'
 // "Move pin to location". Think of it as a small React component written in
 // UIKit: Expo sets the props below (see DioramaNativeModule.swift) and calls
-// `propsDidUpdate()` once per render. The pin and the card are drawn in
-// React, over the middle and the bottom of this view.
+// `propsDidUpdate()` once per render; JS can also call `moveTo` through a
+// ref. The pin, the card and the buttons are drawn in React, over this view.
 //
 // Pan and pinch move the map under the pin, a tap brings the tapped spot to
 // the pin, and each time the map comes to rest it fires `onRegionChangeEnd`
@@ -42,6 +42,11 @@ final class PlacePickerMapView: ExpoView, MKMapViewDelegate, UIGestureRecognizer
   // The start (center and span) last shown. A new one moves the map; the
   // same one again (JS re-rendering) never undoes the user's panning.
   private var shownStart: (center: CLLocationCoordinate2D, span: Double)?
+  // False until MapKit has framed the first start. It frames it only once
+  // the map is on screen, fitting it between the layout margins then, and a
+  // tall card (large text) can fill those entirely, which zooms the map far
+  // out. So the margins wait until the start is framed.
+  private var startFramed = false
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -91,6 +96,7 @@ final class PlacePickerMapView: ExpoView, MKMapViewDelegate, UIGestureRecognizer
   // MapKit's logo and Legal link sit inside the bottom margin; the top
   // margin matches it so the map's center stays this view's middle.
   private func applyMargins() {
+    guard startFramed else { return }
     let inset = max(attributionInset, 0)
     mapView.layoutMargins = UIEdgeInsets(top: inset, left: 0, bottom: inset, right: 0)
   }
@@ -113,13 +119,41 @@ final class PlacePickerMapView: ExpoView, MKMapViewDelegate, UIGestureRecognizer
     {
       return
     }
-    let animated = shownStart != nil
+    let first = shownStart == nil
     shownStart = (center, span)
-    // Asking for less north-south than east-west lets the width decide, so
-    // `span` meters fit across the view whatever its shape.
-    let region = MKCoordinateRegion(
-      center: center, latitudinalMeters: span / 4, longitudinalMeters: span)
-    mapView.setRegion(region, animated: animated)
+    if first {
+      // Asking for less north-south than east-west lets the width decide, so
+      // `span` meters fit across the view whatever its shape.
+      let region = MKCoordinateRegion(
+        center: center, latitudinalMeters: span / 4, longitudinalMeters: span)
+      mapView.setRegion(region, animated: false)
+    } else {
+      moveTo(center: center, spanMeters: span)
+    }
+  }
+
+  // `ref.moveTo(center, spanMeters)` in JS (T69, "Show my location"): glides
+  // the map so `center` is under the pin with `spanMeters` across the view.
+  // Unlike the `center` prop, which ignores a value it has already shown,
+  // this moves every time it's called, e.g. tapping the button again after
+  // panning away. When the glide ends, `onRegionChangeEnd` fires as usual.
+  func moveTo(center: CLLocationCoordinate2D, spanMeters: Double) {
+    guard CLLocationCoordinate2DIsValid(center), spanMeters.isFinite, spanMeters > 0 else {
+      return
+    }
+    // Not `setRegion`: it fits the region between the map's layout margins,
+    // and with a tall card (large text) the top and bottom margins leave no
+    // room at all, so MapKit zooms far out. Instead, scale the camera's
+    // height: looking straight down, the meters across the view grow in step
+    // with it. Meters across now = map points across the view ÷ map points
+    // per meter at the latitude of its middle.
+    let across =
+      mapView.visibleMapRect.width / MKMapPointsPerMeterAtLatitude(mapView.centerCoordinate.latitude)
+    let distance = mapView.camera.centerCoordinateDistance
+    guard across.isFinite, across > 0, distance.isFinite, distance > 0 else { return }
+    let camera = MKMapCamera(
+      lookingAtCenter: center, fromDistance: distance * spanMeters / across, pitch: 0, heading: 0)
+    mapView.setCamera(camera, animated: true)
   }
 
   @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -140,6 +174,10 @@ final class PlacePickerMapView: ExpoView, MKMapViewDelegate, UIGestureRecognizer
   // MKMapViewDelegate: the map stopped moving (finger lifted and the glide
   // done, or a programmatic move finished). Tells JS what's under the pin.
   func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+    if !startFramed, shownStart != nil {
+      startFramed = true
+      applyMargins()
+    }
     guard bounds.width > 0, bounds.height > 0 else { return }
     let middle = CGPoint(x: bounds.midX, y: bounds.midY)
     let spot = mapView.convert(middle, toCoordinateFrom: mapView)

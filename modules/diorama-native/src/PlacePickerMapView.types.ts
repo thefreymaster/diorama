@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import type { ViewProps } from 'react-native';
 
 import type { Coordinate } from './DioramaMapView.types';
@@ -11,6 +12,18 @@ export type PlacePickerRegion = Coordinate & {
   spanMeters: number;
 };
 
+/** Methods on a `ref` to `<PlacePickerMapView>`. */
+export type PlacePickerMapViewRef = {
+  /**
+   * Glides the map (MapKit's own animation) so `center` is under the pin,
+   * with `spanMeters` across the view. Unlike the `center` prop, which
+   * ignores a value it has already shown, it moves every time, even to the
+   * same spot again after the map was panned away. `onRegionChangeEnd`
+   * reports where it comes to rest, as for a pan.
+   */
+  moveTo: (center: Coordinate, spanMeters: number) => Promise<void>;
+};
+
 /**
  * An interactive, flat, north-up Apple map (satellite with roads, labels and
  * points of interest) that you move under a pin drawn over its middle: pan
@@ -20,7 +33,8 @@ export type PlacePickerRegion = Coordinate & {
 export type PlacePickerMapViewProps = ViewProps & {
   /**
    * Where the map starts: the spot in its middle. A new value moves the map
-   * there; the same value again (a re-render) leaves the user's panning alone.
+   * there; the same value again (a re-render) leaves the user's panning alone
+   * (the ref's `moveTo` goes back to a spot on purpose).
    */
   center: Coordinate;
   /** Meters across the view at the start. Default 2000. */
@@ -37,6 +51,10 @@ export type PlacePickerMapViewProps = ViewProps & {
    * of the view. Default 0.
    */
   attributionInset?: number;
-  /** The map came to rest after a pan, pinch or tap, and once it has shown the start. */
+  /**
+   * The map came to rest after a pan, pinch, tap or `moveTo`, and once it
+   * has shown the start.
+   */
   onRegionChangeEnd?: (region: PlacePickerRegion) => void;
+  ref?: Ref<PlacePickerMapViewRef>;
 };

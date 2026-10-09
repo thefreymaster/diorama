@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import type { Coordinate } from '@diorama/native';
 import { getCuratedCity } from '@/features/cities/curated';
 import { getRecents, type RecentCity } from '@/features/cities/recentsStore';
+import { clampSpan, getLastPickedSpot } from '@/features/location/lastPickedSpotStore';
 import { readLocationAccess } from '@/features/location/locateMe';
 
 import { spanForAltitude } from './pickedPlace';
@@ -23,9 +24,6 @@ export const NEARBY_SPAN_M = 3000;
 /** Start elsewhere if where you are isn't known within this long. */
 export const START_LOCATE_TIMEOUT_MS = 3000;
 
-/** A linked span outside this (meters) is clamped: a few houses to half the Earth. */
-const LINKED_SPAN_RANGE = { min: 100, max: 20_000_000 } as const;
-
 /** With nothing in Recent and no location access, the map opens on Midtown. */
 const FALLBACK_CITY_ID = 'new-york';
 
@@ -41,7 +39,8 @@ function numberParam(value: Param): number | null {
 
 /**
  * The start a link asks for (`/pick?lat=48.8584&lon=2.2945&span=2000`), or
- * `null` without a valid `lat` and `lon`. `span` is optional.
+ * `null` without a valid `lat` and `lon`. `span` is optional, and clamped to
+ * `SPOT_SPAN_RANGE` (a few houses to half the Earth).
  */
 export function startFromParams(params: {
   lat?: Param;
@@ -53,11 +52,18 @@ export function startFromParams(params: {
   if (latitude === null || longitude === null) return null;
   if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
   const span = numberParam(params.span);
-  const { min, max } = LINKED_SPAN_RANGE;
   return {
     center: { latitude, longitude },
-    span: span !== null && span > 0 ? Math.min(max, Math.max(min, span)) : NEARBY_SPAN_M,
+    span: span !== null && span > 0 ? clampSpan(span) : NEARBY_SPAN_M,
   };
+}
+
+/** Where the map last came to rest, saved as it moved (`saveLastPickedSpot`), or `null`. */
+function savedStart(): PickerStart | null {
+  const spot = getLastPickedSpot();
+  return spot
+    ? { center: { latitude: spot.latitude, longitude: spot.longitude }, span: spot.spanMeters }
+    : null;
 }
 
 /** A place as the map would frame it: the span its diorama shows. */
@@ -87,11 +93,14 @@ async function whereYouAre(): Promise<Coordinate | null> {
 }
 
 /**
- * Where the picker opens without a link: where you are if location access
- * is on (and a fix comes quickly), else the newest Recent place, else New
- * York. Never rejects.
+ * Where the picker opens without a link: where the map last came to rest
+ * (at once, as Apple Maps reopens: location isn't read), else where you are
+ * if location access is on (and a fix comes quickly), else the newest Recent
+ * place, else New York. Never rejects.
  */
 export async function findStart(): Promise<PickerStart> {
+  const saved = savedStart();
+  if (saved) return saved;
   const here = await withTimeout(whereYouAre(), START_LOCATE_TIMEOUT_MS).catch(() => null);
   return here ? { center: here, span: NEARBY_SPAN_M } : fallbackStart();
 }
